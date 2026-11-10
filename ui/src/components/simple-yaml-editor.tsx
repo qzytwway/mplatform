@@ -1,5 +1,3 @@
-import type { YamlEditorProps } from '@mplatform/plugin-sdk/ui'
-
 import { MonacoEditor } from '@/lib/monaco-loader'
 import {
   defineMonacoBackgroundThemes,
@@ -7,6 +5,13 @@ import {
 } from '@/lib/monaco-theme'
 
 import { useAppearance } from './appearance-provider'
+
+interface YamlEditorProps {
+  value: string
+  onChange: (value: string | undefined) => void
+  disabled?: boolean
+  height?: string
+}
 
 export function SimpleYamlEditor({
   value,

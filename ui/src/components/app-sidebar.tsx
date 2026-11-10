@@ -28,7 +28,6 @@ import {
 } from '@/components/ui/sidebar'
 
 import { ClusterSelector } from './cluster-selector'
-import { PluginIndicator } from './plugins/plugin-indicator'
 import { SidebarItemIcon } from './sidebar-item-icon'
 import { Collapsible, CollapsibleTrigger } from './ui/collapsible'
 import { VersionInfo } from './version-info'
@@ -198,7 +197,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <SidebarItemIcon item={item} className="opacity-70" />
                 <span className="truncate">{title}</span>
-                <PluginIndicator pluginId={item.pluginId} />
                 <ChevronRight className="ml-auto group-data-[state=open]/submenu:rotate-90" />
               </SidebarMenuButton>
             </CollapsibleTrigger>
@@ -224,7 +222,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           title={childTitle}
                         >
                           <span className="truncate">{childTitle}</span>
-                          <PluginIndicator pluginId={child.pluginId} />
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
@@ -248,7 +245,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <Link to={item.url} onClick={handleMenuItemClick}>
             <SidebarItemIcon item={item} className="opacity-70" />
             <span className="truncate">{title}</span>
-            <PluginIndicator pluginId={item.pluginId} />
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -380,7 +376,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         ? t(group.nameKey, { defaultValue: group.nameKey })
                         : ''}
                     </span>
-                    <PluginIndicator pluginId={group.pluginId} />
                   </span>
                   <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
                 </CollapsibleTrigger>

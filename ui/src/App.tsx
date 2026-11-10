@@ -52,8 +52,8 @@ function ClusterGate({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-// Settings and plugin management stay reachable so an admin can add the first cluster.
-const CLUSTER_FREE_PATHS = ['/settings', '/plugins']
+// Settings stay reachable so an admin can add the first cluster.
+const CLUSTER_FREE_PATHS = ['/settings']
 
 function NoCluster() {
   const { t } = useTranslation()

@@ -57,7 +57,6 @@ type GeneralSetting struct {
 	KubectlImage            string       `json:"kubectlImage" gorm:"column:kubectl_image;type:varchar(255);not null;default:'zzde/kubectl:latest'"`
 	NodeTerminalImage       string       `json:"nodeTerminalImage" gorm:"column:node_terminal_image;type:varchar(255);not null;default:'busybox:latest'"`
 	ClusterAgentImage       string       `json:"clusterAgentImage" gorm:"column:cluster_agent_image;type:varchar(255);not null;default:'ghcr.io/qzytwway/mplatform:latest'"`
-	PluginCatalogURL        string       `json:"pluginCatalogUrl" gorm:"column:plugin_catalog_url;type:varchar(2048)"`
 	EnableVersionCheck      bool         `json:"enableVersionCheck" gorm:"column:enable_version_check;type:boolean;not null;default:true"`
 	PasswordLoginDisabled   bool         `json:"passwordLoginDisabled" gorm:"column:password_login_disabled;type:boolean;not null;default:false"`
 	EnableMFA               bool         `json:"enableMFA" gorm:"column:enable_mfa;type:boolean;not null;default:true"`

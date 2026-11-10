@@ -836,11 +836,6 @@
         "image": "Image"
       }
     },
-    "pluginCatalog": {
-      "title": "Plugin catalog",
-      "description": "Catalog URL for browsing and installing plugins. Leave empty to use the official MPlatform catalog.",
-      "url": "Catalog URL"
-    },
     "runtime": {
       "title": "Runtime",
       "description": "Configure version checking behavior.",
@@ -1379,48 +1374,6 @@
     "placeholders": {
       "selectChart": "Select a chart..."
     }
-  },
-  "plugins": {
-    "providedBy": "Provided by {{name}} plugin",
-    "previewReadme": "Preview {{name}} README",
-    "loadingReadme": "Loading README…",
-    "readmeFailed": "Could not load README",
-    "noReadme": "This plugin has no README.",
-    "clearFilters": "Clear filters",
-    "title": "Plugin management",
-    "plugin": "Plugin",
-    "installed": "Installed plugins",
-    "catalog": "Plugin catalog",
-    "upload": "Install from file",
-    "emptyInstalled": "No plugins installed.",
-    "emptyCatalog": "No plugins are available in the catalog.",
-    "search": "Search plugins",
-    "alreadyInstalled": "Installed",
-    "enable": "Enable",
-    "disable": "Disable",
-    "enabled": "Enabled",
-    "disabled": "Disabled",
-    "uninstall": "Uninstall",
-    "saved": "Plugin configuration updated",
-    "adminOnly": "Only administrators can manage plugins.",
-    "trust": "Plugins run in your browser with your MPlatform access. Only install packages from authors you trust.",
-    "unavailable": "This plugin is not installed or is disabled.",
-    "notFound": "This plugin page does not exist.",
-    "loadFailed": "Plugin failed to load",
-    "back": "Back to overview",
-    "retry": "Retry",
-    "noResults": "No results.",
-    "requestFailed": "Failed to load resources.",
-    "refreshCatalog": "Refresh catalog",
-    "working": "Applying plugin changes…",
-    "noSearchResults": "No plugins match your search.",
-    "update": "Update",
-    "install": "Install",
-    "configure": "Configure",
-    "loadingPlugin": "Loading plugin…",
-    "browseCatalog": "Browse catalog",
-    "availableVersion": "Available update: {{version}}",
-    "configureCatalog": "Configure catalog"
   },
   "secret": {
     "showBase64": "Show Base64",

@@ -30,6 +30,10 @@ type StoredSidebarItem = {
 }
 type StoredSidebarConfig = Omit<SidebarConfig, 'groups'> & {
   groups: Array<Omit<SidebarGroup, 'items'> & { items: StoredSidebarItem[] }>
+  // Saved by the removed plugin system; its groups' items fold into "Other".
+  pluginPreferences?: {
+    groups: Record<string, { items?: StoredSidebarItem[] }>
+  }
 }
 type SidebarResource = CatalogResource & {
   sidebar: {
@@ -138,12 +142,18 @@ export function buildDefaultSidebarConfig(): SidebarConfig {
 export function migrateSidebarConfig(
   storedConfig: StoredSidebarConfig
 ): SidebarConfig {
+  const { pluginPreferences, ...config } = storedConfig
+  const pluginGroupItems = Object.values(
+    pluginPreferences?.groups ?? {}
+  ).flatMap((group) => group.items ?? [])
+  const storedGroups = config.groups.map((group) =>
+    group.id === 'sidebar-groups-other'
+      ? { ...group, items: [...group.items, ...pluginGroupItems] }
+      : group
+  )
   const removedItemIds = new Set(
-    [
-      ...storedConfig.groups,
-      ...Object.values(storedConfig.pluginPreferences?.groups ?? {}),
-    ].flatMap((group) =>
-      (group.items ?? [])
+    storedGroups.flatMap((group) =>
+      group.items
         .filter(
           (item) =>
             'url' in item &&
@@ -153,33 +163,11 @@ export function migrateSidebarConfig(
     )
   )
   return {
-    ...storedConfig,
+    ...config,
     version: SIDEBAR_CONFIG_VERSION,
-    hiddenItems: storedConfig.hiddenItems.filter(
-      (id) => !removedItemIds.has(id)
-    ),
-    pinnedItems: storedConfig.pinnedItems.filter(
-      (id) => !removedItemIds.has(id)
-    ),
-    pluginPreferences: storedConfig.pluginPreferences
-      ? {
-          ...storedConfig.pluginPreferences,
-          groups: Object.fromEntries(
-            Object.entries(storedConfig.pluginPreferences.groups).map(
-              ([id, group]) => [
-                id,
-                {
-                  ...group,
-                  items: group.items?.filter(
-                    (item) => !removedItemIds.has(item.id)
-                  ),
-                },
-              ]
-            )
-          ),
-        }
-      : undefined,
-    groups: storedConfig.groups.map((group) => ({
+    hiddenItems: config.hiddenItems.filter((id) => !removedItemIds.has(id)),
+    pinnedItems: config.pinnedItems.filter((id) => !removedItemIds.has(id)),
+    groups: storedGroups.map((group) => ({
       ...group,
       items: group.items
         .filter((item) => !removedItemIds.has(item.id))

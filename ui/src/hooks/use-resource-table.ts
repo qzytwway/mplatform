@@ -17,7 +17,6 @@ interface UseResourceTableOptions<T> {
   columns: TableOptions<T>['columns']
   state: ReturnType<typeof useResourceTableState>
   searchQueryFilter?: (item: T, query: string) => boolean
-  additionalSearchColumnIds?: string[]
   filterOnServer?: boolean
   getRowId?: TableOptions<T>['getRowId']
 }
@@ -27,7 +26,6 @@ export function useResourceTable<T>({
   columns,
   state,
   searchQueryFilter,
-  additionalSearchColumnIds = [],
   filterOnServer = false,
   getRowId,
 }: UseResourceTableOptions<T>) {
@@ -59,14 +57,7 @@ export function useResourceTable<T>({
     globalFilterFn: (row, _columnId, value) => {
       const query = String(value).toLowerCase()
       return searchQueryFilter
-        ? searchQueryFilter(row.original, query) ||
-            row.getVisibleCells().some(
-              (cell) =>
-                additionalSearchColumnIds.includes(cell.column.id) &&
-                String(cell.getValue() ?? '')
-                  .toLowerCase()
-                  .includes(query)
-            )
+        ? searchQueryFilter(row.original, query)
         : row.getVisibleCells().some((cell) =>
             String(cell.getValue() ?? '')
               .toLowerCase()

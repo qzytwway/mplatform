@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import type { NamespaceSelectorProps } from '@mplatform/plugin-sdk/ui'
 import { Namespace } from 'kubernetes-types/core/v1'
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
 
@@ -20,6 +19,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+
+interface NamespaceSelectorProps {
+  value?: string
+  onChange: (namespace: string) => void
+  showAll?: boolean
+  disabled?: boolean
+  triggerClassName?: string
+  multiple?: boolean
+  modal?: boolean
+}
 
 export function NamespaceSelector({
   value,

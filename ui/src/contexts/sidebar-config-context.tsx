@@ -4,14 +4,10 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useState,
 } from 'react'
 import * as React from 'react'
-import { usePlugins } from '@/plugins/plugin-context'
-import { mergePluginMenus, persistPluginPreferences } from '@/plugins/sidebar'
 import { type Icon, type IconProps } from '@tabler/icons-react'
-import { useTranslation } from 'react-i18next'
 
 import { SidebarConfig, SidebarGroup, SidebarItem } from '@/types/sidebar'
 import { withSubPath } from '@/lib/subpath'
@@ -90,16 +86,7 @@ interface SidebarConfigProviderProps {
 export const SidebarConfigProvider: React.FC<SidebarConfigProviderProps> = ({
   children,
 }) => {
-  const [storedConfig, setStoredConfig] = useState<SidebarConfig | null>(null)
-  const { plugins } = usePlugins()
-  const { i18n } = useTranslation()
-  const config = useMemo(
-    () =>
-      storedConfig
-        ? mergePluginMenus(storedConfig, plugins, i18n.language)
-        : null,
-    [storedConfig, plugins, i18n.language]
-  )
+  const [config, setConfig] = useState<SidebarConfig | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasUpdate, setHasUpdate] = useState(false)
   const { user } = useAuth()
@@ -109,23 +96,23 @@ export const SidebarConfigProvider: React.FC<SidebarConfigProviderProps> = ({
       const storedConfig = JSON.parse(user.sidebar_preference)
       setHasUpdate((storedConfig.version || 0) < SIDEBAR_CONFIG_VERSION)
       const userConfig = migrateSidebarConfig(storedConfig)
-      setStoredConfig(userConfig)
+      setConfig(userConfig)
       return
     }
     setHasUpdate(false)
-    setStoredConfig(buildDefaultSidebarConfig())
+    setConfig(buildDefaultSidebarConfig())
   }, [user])
 
   const saveConfig = useCallback(
     async (newConfig: SidebarConfig) => {
       if (!user) {
-        setStoredConfig(persistPluginPreferences(newConfig))
+        setConfig(newConfig)
         return
       }
 
       try {
         const configToSave = {
-          ...persistPluginPreferences(newConfig),
+          ...newConfig,
           lastUpdated: Date.now(),
           version: SIDEBAR_CONFIG_VERSION,
         }
@@ -145,7 +132,7 @@ export const SidebarConfigProvider: React.FC<SidebarConfigProviderProps> = ({
         )
 
         if (response.ok) {
-          setStoredConfig(configToSave)
+          setConfig(configToSave)
         } else {
           console.error('Failed to save sidebar config to server')
         }

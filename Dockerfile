@@ -3,7 +3,6 @@ FROM node:24-alpine AS frontend-builder
 WORKDIR /app/ui
 
 COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
-COPY ui/packages/plugin-sdk/package.json ./packages/plugin-sdk/
 
 RUN npm install -g pnpm && \
     pnpm install --frozen-lockfile

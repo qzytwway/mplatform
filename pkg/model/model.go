@@ -104,8 +104,6 @@ func InitDB() {
 		PendingSession{},
 		HelmRepository{},
 		ScheduledTask{},
-		Plugin{},
-		PluginSetting{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)

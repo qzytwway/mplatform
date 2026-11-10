@@ -11,7 +11,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/common"
 	"github.com/qzytwway/mplatform/pkg/middleware"
 	"github.com/qzytwway/mplatform/pkg/model"
-	"github.com/qzytwway/mplatform/pkg/plugins"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"github.com/qzytwway/mplatform/pkg/scheduler"
 	"github.com/qzytwway/mplatform/pkg/templates"
@@ -46,7 +45,6 @@ func initializeApp(ctx context.Context) (*cluster.ClusterManager, error) {
 		klog.Warningf("Failed to watch config file: %v", err)
 	}
 	scheduler.Start(ctx, cm)
-	plugins.Start(ctx)
 	return cm, nil
 }
 

@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { LogOut, Minus, Plus, Puzzle, UserCog, ZoomIn } from 'lucide-react'
+import { LogOut, Minus, Plus, UserCog, ZoomIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -122,15 +121,6 @@ export function UserMenu() {
           </div>
 
           <DropdownMenuSeparator />
-
-          {user.isAdmin() && (
-            <DropdownMenuItem asChild>
-              <Link to="/plugins">
-                <Puzzle className="size-4" />
-                <span>{t('plugins.title')}</span>
-              </Link>
-            </DropdownMenuItem>
-          )}
 
           {isPasswordUser && (
             <>

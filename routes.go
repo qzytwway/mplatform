@@ -15,7 +15,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/images"
 	"github.com/qzytwway/mplatform/pkg/metrics"
 	"github.com/qzytwway/mplatform/pkg/middleware"
-	"github.com/qzytwway/mplatform/pkg/plugins"
 	"github.com/qzytwway/mplatform/pkg/proxy"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"github.com/qzytwway/mplatform/pkg/resources"
@@ -34,8 +33,6 @@ func setupAPIRouter(r *gin.RouterGroup, cm *cluster.ClusterManager) {
 	helmChartsHandler := helm.NewHelmChartHandler()
 
 	registerBaseRoutes(r)
-	r.GET("/plugin-assets/:id/:version/:digest/*path", plugins.ServeAsset)
-	r.HEAD("/plugin-assets/:id/:version/:digest/*path", plugins.ServeAsset)
 	r.GET("/api/v1/bootstrap", authHandler.Bootstrap)
 	r.GET("/api/v1/cluster-agent/connect", cm.ConnectClusterAgent)
 	r.POST("/api/v1/cluster-agent/register", cm.RegisterClusterAgent)
@@ -90,12 +87,6 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 	adminAPI.Use(authHandler.RequireAuth(), authHandler.RequireAdmin())
 
 	adminAPI.GET("/audit-logs", audit.ListAuditLogs)
-	adminAPI.GET("/plugins", plugins.ListInstalled)
-	adminAPI.GET("/plugin-catalog", plugins.ListCatalog)
-	adminAPI.GET("/plugin-catalog/readme", plugins.GetCatalogReadme)
-	adminAPI.POST("/plugins", plugins.Install)
-	adminAPI.PATCH("/plugins/:id", plugins.Update)
-	adminAPI.DELETE("/plugins/:id", plugins.Delete)
 
 	oauthProviderAPI := adminAPI.Group("/oauth-providers")
 	oauthProviderAPI.GET("/", authHandler.ListOAuthProviders)
@@ -154,9 +145,6 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 func registerProtectedRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *cluster.ClusterManager, helmChartsHandler *helm.HelmChartHandler) {
 	api := r.Group("/api/v1")
 	api.GET("/clusters", authHandler.RequireAuth(), cm.GetClusters)
-	api.GET("/plugins", authHandler.RequireAuth(), plugins.ListActive)
-	api.GET("/plugins/:id/settings", authHandler.RequireAuth(), plugins.GetSetting)
-	api.PUT("/plugins/:id/settings", authHandler.RequireAuth(), authHandler.RequireAdmin(), plugins.UpdateSetting)
 	defaultAPI := api.Group("")
 	defaultAPI.Use(authHandler.RequireAuth(), middleware.ClusterMiddleware(cm))
 	registerClusterProtectedRoutes(defaultAPI, helmChartsHandler)

@@ -1,7 +1,9 @@
-import type { APIRequestOptions } from '@mplatform/plugin-sdk/api'
-
 import { appendCurrentClusterHeader } from './current-cluster'
 import { withSubPath } from './subpath'
+
+interface APIRequestOptions extends RequestInit {
+  retryOnUnauthorized?: boolean
+}
 
 class ApiClient {
   private baseUrl: string = ''

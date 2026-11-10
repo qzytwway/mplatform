@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ResourceYamlProps } from '@mplatform/plugin-sdk/ui'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IconCheck, IconEdit, IconLoader, IconX } from '@tabler/icons-react'
 import * as yaml from 'js-yaml'
 import type { editor as monacoEditor } from 'monaco-editor'
@@ -17,6 +16,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { useAppearance } from './appearance-provider'
 import { ErrorBoundary } from './error-boundary'
+
+interface ResourceYamlProps<T> {
+  value: T
+  onSave?: (value: T) => Promise<unknown>
+  title?: ReactNode
+  actions?: ReactNode
+  className?: string
+  fillHeight?: boolean
+}
 
 export function ResourceYaml<T>({
   value,

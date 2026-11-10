@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react'
-import { PluginResourceView } from '@/plugins/resource-view'
 import { createColumnHelper } from '@tanstack/react-table'
 import { CustomResourceDefinition } from 'kubernetes-types/apiextensions/v1'
 import { Eye } from 'lucide-react'
@@ -33,17 +32,6 @@ const searchQueryFilter = createSearchFilter<CustomResource>(
 const columnHelper = createColumnHelper<CustomResource>()
 
 export function CRListPage() {
-  const { crd } = useParams<{ crd: string }>()
-  return (
-    <PluginResourceView
-      view="list"
-      target={crd}
-      fallback={<CRListPageContent />}
-    />
-  )
-}
-
-function CRListPageContent() {
   const { t } = useTranslation()
   const [isYamlDialogOpen, setIsYamlDialogOpen] = useState(false)
   const [yamlResource, setYamlResource] = useState<CustomResourceDefinition>()
