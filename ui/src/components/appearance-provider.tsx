@@ -1,8 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo, type ReactNode } from 'react'
 
-import type { ColorTheme } from './color-theme-provider'
-import { ColorThemeProvider, useColorTheme } from './color-theme-provider'
 import { DisplayScaleProvider, useDisplayScale } from './display-scale-provider'
 import { FontProvider, useFont } from './font-provider'
 import { ThemeProvider, useTheme } from './theme-provider'
@@ -12,9 +10,6 @@ type AppearanceProviderProps = {
   // Theme
   defaultTheme?: 'dark' | 'light' | 'system'
   themeStorageKey?: string
-  // Color theme
-  defaultColorTheme?: ColorTheme
-  colorThemeStorageKey?: string
   // Font
   defaultFont?: 'system'
   fontStorageKey?: string
@@ -27,8 +22,6 @@ export function AppearanceProvider({
   children,
   defaultTheme = 'system',
   themeStorageKey = 'vite-ui-theme',
-  defaultColorTheme = 'default',
-  colorThemeStorageKey = 'vite-ui-color-theme',
   defaultFont = 'system',
   fontStorageKey = 'vite-ui-font',
   defaultDisplayScale = 95,
@@ -36,19 +29,14 @@ export function AppearanceProvider({
 }: AppearanceProviderProps) {
   return (
     <ThemeProvider defaultTheme={defaultTheme} storageKey={themeStorageKey}>
-      <ColorThemeProvider
-        defaultColorTheme={defaultColorTheme}
-        storageKey={colorThemeStorageKey}
+      <DisplayScaleProvider
+        defaultDisplayScale={defaultDisplayScale}
+        storageKey={displayScaleStorageKey}
       >
-        <DisplayScaleProvider
-          defaultDisplayScale={defaultDisplayScale}
-          storageKey={displayScaleStorageKey}
-        >
-          <FontProvider defaultFont={defaultFont} storageKey={fontStorageKey}>
-            {children}
-          </FontProvider>
-        </DisplayScaleProvider>
-      </ColorThemeProvider>
+        <FontProvider defaultFont={defaultFont} storageKey={fontStorageKey}>
+          {children}
+        </FontProvider>
+      </DisplayScaleProvider>
     </ThemeProvider>
   )
 }
@@ -58,7 +46,6 @@ export default AppearanceProvider
 // Unified hook for reading/updating all appearance settings in one place.
 export function useAppearance() {
   const { theme, actualTheme, setTheme } = useTheme()
-  const { colorTheme, setColorTheme, pluginThemes } = useColorTheme()
   const { displayScale, setDisplayScale } = useDisplayScale()
   const { font, setFont } = useFont()
 
@@ -67,25 +54,11 @@ export function useAppearance() {
       theme,
       actualTheme,
       setTheme,
-      colorTheme,
-      setColorTheme,
-      pluginThemes,
       displayScale,
       setDisplayScale,
       font,
       setFont,
     }),
-    [
-      theme,
-      actualTheme,
-      colorTheme,
-      pluginThemes,
-      displayScale,
-      font,
-      setTheme,
-      setColorTheme,
-      setDisplayScale,
-      setFont,
-    ]
+    [theme, actualTheme, displayScale, font, setTheme, setDisplayScale, setFont]
   )
 }

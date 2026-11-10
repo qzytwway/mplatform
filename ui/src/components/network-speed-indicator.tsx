@@ -31,7 +31,7 @@ export const NetworkSpeedIndicator: React.FC<NetworkSpeedIndicatorProps> = ({
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
       {uploadSpeed > 0 && (
         <div className="flex items-center gap-1">
-          <IconArrowUp className="h-3 w-3 text-blue-500" />
+          <IconArrowUp className="h-3 w-3 text-info" />
           <span>{formatSpeed(uploadSpeed)}</span>
         </div>
       )}

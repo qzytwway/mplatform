@@ -17,10 +17,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          error: '[&_svg]:!text-red-500',
+          error: '[&_svg]:!text-destructive',
           success: '[&_svg]:!text-green-500',
           warning: '[&_svg]:!text-amber-500',
-          info: '[&_svg]:!text-blue-500',
+          info: '[&_svg]:!text-info',
         },
       }}
       {...props}

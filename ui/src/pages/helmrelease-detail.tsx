@@ -1631,7 +1631,7 @@ export function HelmReleaseDetail(props: { namespace: string; name: string }) {
             onClick={() => setAutoUpgradeDialogOpen(true)}
           >
             {autoUpgradeLastError ? (
-              <IconExclamationCircle className="size-4 fill-red-500 dark:fill-red-400" />
+              <IconExclamationCircle className="size-4 fill-destructive" />
             ) : isAutoUpgradeEnabled ? (
               <IconCircleCheckFilled className="size-4 fill-green-500 dark:fill-green-400" />
             ) : null}

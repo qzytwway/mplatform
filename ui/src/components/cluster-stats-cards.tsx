@@ -49,8 +49,8 @@ export function ClusterStatsCards({
       value: stats.totalNodes,
       subValue: stats.readyNodes,
       icon: IconServer,
-      color: 'text-blue-600 dark:text-blue-400',
-      bgColor: 'bg-blue-50 dark:bg-blue-950/50',
+      color: 'text-info',
+      bgColor: 'bg-info/10',
       routePath: '/nodes',
     },
     {
@@ -115,7 +115,7 @@ export function ClusterStatsCards({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <IconAlertCircleFilled className="size-4 text-red-600 flex-shrink-0" />
+                          <IconAlertCircleFilled className="size-4 text-destructive flex-shrink-0" />
                           {stat.value - (stat.subValue || 0)} Not Ready
                         </div>
                       )}

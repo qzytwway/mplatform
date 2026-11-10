@@ -309,7 +309,7 @@ export function ContainerInfoCard({
                           {src.configMapRef && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-blue-50 dark:bg-blue-950"
+                              className="text-xs bg-info/10"
                             >
                               ConfigMap: {src.configMapRef.name}
                               {src.prefix && ` (prefix: ${src.prefix})`}
@@ -334,9 +334,7 @@ export function ContainerInfoCard({
                         key={i}
                         className="text-xs font-mono flex gap-1 flex-wrap"
                       >
-                        <span className="text-blue-600 dark:text-blue-400">
-                          {envVar.name}
-                        </span>
+                        <span className="text-info">{envVar.name}</span>
                         {envVar.value !== undefined && (
                           <>
                             <span className="text-muted-foreground">=</span>
@@ -437,7 +435,7 @@ export function ContainerInfoCard({
                     )}
                     {container.resources.limits && (
                       <div>
-                        <div className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
+                        <div className="text-xs font-medium text-destructive mb-1">
                           Limits
                         </div>
                         {container.resources.limits.cpu && (
@@ -480,7 +478,7 @@ export function ContainerInfoCard({
                     {
                       label: 'Readiness',
                       probe: container.readinessProbe,
-                      color: 'bg-blue-50 dark:bg-blue-950',
+                      color: 'bg-info/10',
                     },
                     {
                       label: 'Startup',

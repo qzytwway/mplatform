@@ -43,11 +43,11 @@ export function ErrorMessage({
         ) : isCRDMissing ? (
           <PackageX className="h-16 w-16 text-muted-foreground" />
         ) : (
-          <XCircle className="h-16 w-16 text-red-500" />
+          <XCircle className="h-16 w-16 text-destructive" />
         )}
       </div>
       <h3
-        className={`text-lg font-medium mb-1 ${isRBAC ? 'text-amber-600' : isCRDMissing ? 'text-muted-foreground' : 'text-red-500'}`}
+        className={`text-lg font-medium mb-1 ${isRBAC ? 'text-amber-600' : isCRDMissing ? 'text-muted-foreground' : 'text-destructive'}`}
       >
         {isCRDMissing
           ? t('errors.crdNotInstalledTitle')

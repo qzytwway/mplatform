@@ -33,17 +33,13 @@ export function ResourceYaml<T>({
   const [isSaving, setIsSaving] = useState(false)
   const [isValidYaml, setIsValidYaml] = useState(true)
   const [validationError, setValidationError] = useState<string>('')
-  const { actualTheme, colorTheme } = useAppearance()
+  const { actualTheme } = useAppearance()
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null)
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   )
   const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
-  const backgroundColor = useMonacoBackgroundColor(
-    '--card',
-    themeMode,
-    colorTheme
-  )
+  const backgroundColor = useMonacoBackgroundColor('--card', themeMode)
 
   useEffect(() => {
     setEditorValue(yamlValue)
@@ -181,13 +177,9 @@ export function ResourceYaml<T>({
             <ErrorBoundary>
               <MonacoEditor
                 height={fillHeight ? '100%' : undefined}
-                key={`yaml-editor-${colorTheme}-${actualTheme}-${backgroundColor}`}
+                key={`yaml-editor-${actualTheme}-${backgroundColor}`}
                 language="yaml"
-                theme={
-                  actualTheme === 'dark'
-                    ? `custom-dark-${colorTheme}`
-                    : `custom-vs-${colorTheme}`
-                }
+                theme={actualTheme === 'dark' ? 'custom-dark' : 'custom-vs'}
                 value={editorValue}
                 loading={
                   <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -196,8 +188,8 @@ export function ResourceYaml<T>({
                 }
                 beforeMount={(monaco) => {
                   defineMonacoBackgroundThemes(monaco, {
-                    darkThemeName: `custom-dark-${colorTheme}`,
-                    lightThemeName: `custom-vs-${colorTheme}`,
+                    darkThemeName: 'custom-dark',
+                    lightThemeName: 'custom-vs',
                     backgroundColor,
                   })
                 }}

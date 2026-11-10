@@ -109,18 +109,10 @@ export const PodStatusIcon = ({
           )
         }
         // Completed/Succeeded states
-        return (
-          <IconCircleCheckFilled
-            className={`fill-blue-500 dark:fill-blue-400 ${className}`}
-          />
-        )
+        return <IconCircleCheckFilled className={`fill-info ${className}`} />
 
       case 'error':
-        return (
-          <IconCircleXFilled
-            className={`fill-red-500 dark:fill-red-400 ${className}`}
-          />
-        )
+        return <IconCircleXFilled className={`fill-destructive ${className}`} />
 
       case 'terminating':
         return (
@@ -137,11 +129,7 @@ export const PodStatusIcon = ({
         )
 
       case 'pending':
-        return (
-          <IconLoader
-            className={`text-blue-500 dark:text-blue-400 ${className}`}
-          />
-        )
+        return <IconLoader className={`text-info ${className}`} />
 
       case 'loading':
         return (

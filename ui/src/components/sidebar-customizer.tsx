@@ -325,7 +325,7 @@ export function SidebarCustomizer({
             {t('common.actions.customizeSidebar', 'Customize Sidebar')}
           </span>
           {hasUpdate && (
-            <span className="ml-auto size-2 rounded-full bg-red-500" />
+            <span className="ml-auto size-2 rounded-full bg-destructive" />
           )}
         </DropdownMenuItem>
       </DialogTrigger>

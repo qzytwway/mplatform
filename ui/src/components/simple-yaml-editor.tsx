@@ -14,17 +14,13 @@ export function SimpleYamlEditor({
   disabled = false,
   height = '400px',
 }: YamlEditorProps) {
-  const { actualTheme, colorTheme } = useAppearance()
+  const { actualTheme } = useAppearance()
   const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
-  const backgroundColor = useMonacoBackgroundColor(
-    '--background',
-    themeMode,
-    colorTheme
-  )
+  const backgroundColor = useMonacoBackgroundColor('--background', themeMode)
   return (
     <div className="border rounded-md overflow-hidden">
       <MonacoEditor
-        key={`simple-yaml-editor-${colorTheme}-${actualTheme}-${backgroundColor}`}
+        key={`simple-yaml-editor-${actualTheme}-${backgroundColor}`}
         height={height}
         defaultLanguage="yaml"
         value={value}
@@ -39,16 +35,12 @@ export function SimpleYamlEditor({
         }
         beforeMount={(monaco) => {
           defineMonacoBackgroundThemes(monaco, {
-            darkThemeName: `custom-dark-${colorTheme}`,
-            lightThemeName: `custom-vs-${colorTheme}`,
+            darkThemeName: 'custom-dark',
+            lightThemeName: 'custom-vs',
             backgroundColor,
           })
         }}
-        theme={
-          actualTheme === 'dark'
-            ? `custom-dark-${colorTheme}`
-            : `custom-vs-${colorTheme}`
-        }
+        theme={actualTheme === 'dark' ? 'custom-dark' : 'custom-vs'}
         options={{
           minimap: { enabled: false },
           scrollBeyondLastLine: false,

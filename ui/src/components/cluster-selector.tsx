@@ -23,7 +23,7 @@ export function ClusterSelector() {
   if (isLoading || isSwitching) {
     return (
       <div className="flex items-center justify-center">
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
         {isSwitching && (
           <span className="ml-2 text-sm text-muted-foreground">
             Switching cluster...
@@ -41,7 +41,7 @@ export function ClusterSelector() {
         <Button
           variant="ghost"
           size="sm"
-          className="flex items-center gap-2 h-8 px-3 max-w-full focus-visible:ring-0 focus-visible:border-transparent"
+          className="flex w-full items-center justify-start gap-2 h-8 px-2 focus-visible:ring-0 focus-visible:border-transparent"
           disabled={isSwitching}
         >
           <IconServer className="h-4 w-4" />
@@ -50,7 +50,7 @@ export function ClusterSelector() {
               ? 'Switching...'
               : currentClusterData?.name || 'Select Cluster'}
           </span>
-          <IconChevronDown className="h-3 w-3 opacity-50" />
+          <IconChevronDown className="ml-auto h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
@@ -77,7 +77,7 @@ export function ClusterSelector() {
                 className={cn(
                   'text-xs truncate',
                   cluster.error
-                    ? 'text-red-500'
+                    ? 'text-destructive'
                     : 'text-muted-foreground font-mono'
                 )}
                 title={cluster.error}

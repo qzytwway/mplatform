@@ -44,11 +44,7 @@ export const NodeStatusIcon = ({
     case 'NotReady':
     case 'NotReady,SchedulingDisabled':
     case 'NetworkUnavailable':
-      return (
-        <IconCircleXFilled
-          className={`fill-red-500 dark:fill-red-400 ${className}`}
-        />
-      )
+      return <IconCircleXFilled className={`fill-destructive ${className}`} />
 
     case 'MemoryPressure':
     case 'DiskPressure':

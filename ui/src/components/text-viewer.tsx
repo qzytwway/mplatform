@@ -20,15 +20,11 @@ export function TextViewer({
   className,
   fillHeight = false,
 }: TextViewerProps) {
-  const { actualTheme, colorTheme } = useAppearance()
+  const { actualTheme } = useAppearance()
   const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
-  const backgroundColor = useMonacoBackgroundColor(
-    '--card',
-    themeMode,
-    colorTheme
-  )
-  const darkThemeName = `text-viewer-dark-${colorTheme}`
-  const lightThemeName = `text-viewer-light-${colorTheme}`
+  const backgroundColor = useMonacoBackgroundColor('--card', themeMode)
+  const darkThemeName = 'text-viewer-dark'
+  const lightThemeName = 'text-viewer-light'
 
   return (
     <Card className={cn(fillHeight && 'flex min-h-0 flex-col', className)}>
@@ -51,7 +47,7 @@ export function TextViewer({
             )}
           >
             <MonacoEditor
-              key={`text-viewer-${colorTheme}-${actualTheme}-${backgroundColor}`}
+              key={`text-viewer-${actualTheme}-${backgroundColor}`}
               height={fillHeight ? '100%' : undefined}
               language="yaml"
               theme={actualTheme === 'dark' ? darkThemeName : lightThemeName}

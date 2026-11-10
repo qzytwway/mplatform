@@ -16,12 +16,7 @@ if (command === 'dev') {
   )
   validateManifest(manifest)
 
-  const themeStyles = (manifest.themes ?? []).flatMap((theme) => theme.styles)
-  for (const path of [
-    manifest.entry,
-    ...(manifest.styles ?? []),
-    ...themeStyles,
-  ]) {
+  for (const path of [manifest.entry, ...(manifest.styles ?? [])]) {
     if (!(await lstat(resolve(root, path))).isFile()) {
       throw new Error(
         `Plugin asset must be a regular file inside dist: ${path}`

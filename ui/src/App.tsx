@@ -29,7 +29,7 @@ function ClusterGate({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="flex items-center space-x-2">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground" />
           <span>{t('cluster.loading')}</span>
         </div>
       </div>
@@ -39,7 +39,7 @@ function ClusterGate({ children }: { children: ReactNode }) {
   if (error) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="text-red-500">
+        <div className="text-destructive">
           <p>{t('cluster.error', { error: error.message })}</p>
         </div>
       </div>

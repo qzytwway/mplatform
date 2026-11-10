@@ -38,8 +38,7 @@ export function getMonacoBackgroundColor(
 
 export function useMonacoBackgroundColor(
   cssVariableName: '--background' | '--card',
-  actualTheme: 'dark' | 'light',
-  colorTheme?: string
+  actualTheme: 'dark' | 'light'
 ) {
   const [backgroundColor, setBackgroundColor] = useState(() =>
     getMonacoBackgroundColor(cssVariableName, actualTheme)
@@ -50,21 +49,9 @@ export function useMonacoBackgroundColor(
       setBackgroundColor(getMonacoBackgroundColor(cssVariableName, actualTheme))
     }
     const frame = requestAnimationFrame(updateBackground)
-    const onStylesheetLoad = (event: Event) => {
-      if (
-        event.target instanceof HTMLLinkElement &&
-        event.target.hasAttribute('data-mplatform-plugin-theme')
-      ) {
-        updateBackground()
-      }
-    }
-    document.head.addEventListener('load', onStylesheetLoad, true)
 
-    return () => {
-      cancelAnimationFrame(frame)
-      document.head.removeEventListener('load', onStylesheetLoad, true)
-    }
-  }, [cssVariableName, actualTheme, colorTheme])
+    return () => cancelAnimationFrame(frame)
+  }, [cssVariableName, actualTheme])
 
   return backgroundColor
 }

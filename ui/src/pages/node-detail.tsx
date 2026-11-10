@@ -565,7 +565,7 @@ function NodeOverview({
               {isReady ? (
                 <IconCircleCheckFilled className="size-4 shrink-0 fill-green-500" />
               ) : (
-                <IconExclamationCircle className="size-4 shrink-0 fill-red-500" />
+                <IconExclamationCircle className="size-4 shrink-0 fill-destructive" />
               )}
               <span className="truncate">
                 {isReady

@@ -280,15 +280,15 @@ export function LoginPage() {
             <CardContent className="space-y-4">
               {error && (
                 <div className="space-y-3">
-                  <Alert className="border-red-200 bg-red-50">
-                    <AlertDescription className="text-red-700">
+                  <Alert className="border-destructive/30 bg-destructive/10">
+                    <AlertDescription className="text-destructive">
                       <div className="space-y-2">
                         <div className="font-semibold">
                           {getErrorMessage(error)?.title}
                         </div>
                         <div>{getErrorMessage(error)?.message}</div>
                         {getErrorMessage(error)?.details && (
-                          <div className="text-sm text-red-600 mt-2">
+                          <div className="text-sm text-destructive mt-2">
                             {getErrorMessage(error)?.details}
                           </div>
                         )}

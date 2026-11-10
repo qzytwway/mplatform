@@ -34,18 +34,11 @@ type Manifest struct {
 	Routes        json.RawMessage `json:"routes"`
 	Menus         json.RawMessage `json:"menus"`
 	Resources     json.RawMessage `json:"resources"`
-	Themes        []Theme         `json:"themes,omitempty"`
 	Settings      *Settings       `json:"settings,omitempty"`
 }
 
 type Requirements struct {
 	MPlatform string `json:"mplatform"`
-}
-
-type Theme struct {
-	ID     string          `json:"id"`
-	Label  json.RawMessage `json:"label,omitempty"`
-	Styles []string        `json:"styles"`
 }
 
 type Settings struct {
@@ -70,20 +63,6 @@ func readManifest(dir string) (Manifest, error) {
 		return manifest, err
 	}
 	assets := append([]string{manifest.Entry}, manifest.Styles...)
-	themeIDs := make(map[string]struct{}, len(manifest.Themes))
-	for _, theme := range manifest.Themes {
-		if !validThemeID(theme.ID) {
-			return manifest, fmt.Errorf("invalid theme ID: %s", theme.ID)
-		}
-		if _, ok := themeIDs[theme.ID]; ok {
-			return manifest, fmt.Errorf("duplicate theme ID: %s", theme.ID)
-		}
-		themeIDs[theme.ID] = struct{}{}
-		if len(theme.Styles) == 0 {
-			return manifest, fmt.Errorf("theme %s must list at least one stylesheet", theme.ID)
-		}
-		assets = append(assets, theme.Styles...)
-	}
 	for _, asset := range assets {
 		if !validAssetPath(asset) {
 			return manifest, fmt.Errorf("invalid asset path: %s", asset)
@@ -140,21 +119,6 @@ func checkCompatibility(sdkVersion string, r Requirements) error {
 
 func validPluginID(name string) bool {
 	return pluginIDPattern.MatchString(name)
-}
-
-func validThemeID(id string) bool {
-	if id == "" {
-		return false
-	}
-	for i, r := range id {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-		case r == '-' && i > 0 && i < len(id)-1:
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func validAssetPath(name string) bool {

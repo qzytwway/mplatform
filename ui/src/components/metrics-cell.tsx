@@ -43,9 +43,9 @@ export function MetricCell({
         : 0
 
     const getProgressColor = () => {
-      if (percentage > 90) return 'bg-red-500'
+      if (percentage > 90) return 'bg-destructive'
       if (percentage > 60) return 'bg-yellow-500'
-      return 'bg-blue-500'
+      return 'bg-primary'
     }
 
     return (

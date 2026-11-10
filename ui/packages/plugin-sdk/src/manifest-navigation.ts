@@ -30,7 +30,7 @@ function labelMetadata(label: LocalizedLabel): LocalizedLabel {
 
 type NavigationInput = Pick<
   PluginManifest | PluginDefinition,
-  'routes' | 'menus' | 'resources' | 'themes' | 'settings'
+  'routes' | 'menus' | 'resources' | 'settings'
 >
 
 export function getPluginNavigation(definition: NavigationInput) {
@@ -73,11 +73,6 @@ export function getPluginNavigation(definition: NavigationInput) {
         })),
       })
     ),
-    themes: (definition.themes ?? []).map(({ id, label, styles }) => ({
-      id,
-      label: label === undefined ? undefined : labelMetadata(label),
-      styles: [...styles],
-    })),
     settings: definition.settings && {
       label:
         definition.settings.label === undefined

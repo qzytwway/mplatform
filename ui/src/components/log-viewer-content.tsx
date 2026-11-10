@@ -543,7 +543,7 @@ export function LogViewer({
                 />
                 {isLoading && <span>Loading...</span>}
                 {isReconnecting && (
-                  <span className="text-blue-600">Reconnecting...</span>
+                  <span className="text-info">Reconnecting...</span>
                 )}
               </div>
             </CardDescription>

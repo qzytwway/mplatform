@@ -14,7 +14,7 @@ import { resolvePluginRoute } from './route-path.js'
 type UnknownRecord = Record<string, unknown>
 type NavigationInput = Pick<
   PluginManifest | PluginDefinition,
-  'routes' | 'menus' | 'resources' | 'themes' | 'settings'
+  'routes' | 'menus' | 'resources' | 'settings'
 >
 
 export const coreMenuGroupIds = [
@@ -32,8 +32,6 @@ export const defaultMPlatformRange = '>=0.16.0'
 
 const coreMenuGroups = new Set<string>(coreMenuGroupIds)
 const idPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
-// Theme IDs also become Monaco theme names, which only accept letters, digits and hyphens.
-const themeIdPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
 const columnSortingFns = [
   'auto',
   'basic',
@@ -226,35 +224,6 @@ function validateResources(input: UnknownRecord): void {
   }
 }
 
-function validateThemes(input: UnknownRecord): void {
-  const themes = input.themes
-  if (themes === undefined) return
-  if (!Array.isArray(themes)) throw new Error('Plugin themes must be an array')
-  const themeIds = new Set<string>()
-  for (const theme of themes as unknown[]) {
-    if (!isRecord(theme)) throw new Error('Plugin themes must be objects')
-    if (
-      typeof theme.id !== 'string' ||
-      !themeIdPattern.test(theme.id) ||
-      themeIds.has(theme.id)
-    ) {
-      throw new Error(`Invalid or duplicate theme ID: ${String(theme.id)}`)
-    }
-    themeIds.add(theme.id)
-    if (theme.label !== undefined && !isLocalizedLabel(theme.label))
-      throw new Error(`Invalid label for theme: ${theme.id}`)
-    if (
-      !Array.isArray(theme.styles) ||
-      !theme.styles.length ||
-      !theme.styles.every(isAssetPath)
-    ) {
-      throw new Error(
-        `Theme ${theme.id} must list at least one relative stylesheet path`
-      )
-    }
-  }
-}
-
 function validateSettings(input: UnknownRecord): void {
   const settings = input.settings
   if (settings === undefined) return
@@ -275,7 +244,6 @@ export function validateNavigation(
     throw new Error('Plugin routes and menus must be arrays')
   }
   validateResources(input)
-  validateThemes(input)
   validateSettings(input)
 
   const routes = input.routes as unknown[]

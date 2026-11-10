@@ -360,9 +360,7 @@ function DaemonSetStatusIcon({
       )
     case 'Progressing':
       return (
-        <IconLoader
-          className={`animate-spin text-blue-500 dark:text-blue-400 ${className || ''}`}
-        />
+        <IconLoader className={`animate-spin text-info ${className || ''}`} />
       )
     case 'Terminating':
       return (

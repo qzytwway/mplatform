@@ -33,11 +33,7 @@ export const DeploymentStatusIcon = ({
 
     case 'Unknown':
     case 'Not Available':
-      return (
-        <IconCircleXFilled
-          className={`fill-red-500 dark:fill-red-400 ${className}`}
-        />
-      )
+      return <IconCircleXFilled className={`fill-destructive ${className}`} />
 
     case 'Terminating':
       return (
@@ -62,9 +58,7 @@ export const DeploymentStatusIcon = ({
 
     case 'Progressing':
       return (
-        <IconLoader
-          className={`${animationClass} text-blue-500 dark:text-blue-400 ${className}`}
-        />
+        <IconLoader className={`${animationClass} text-info ${className}`} />
       )
 
     default:

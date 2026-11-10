@@ -187,7 +187,7 @@ function statusClassName(status: NativeTreeStatus | null) {
     case 'deleted':
       return 'text-destructive'
     case 'modified':
-      return 'text-sky-600 dark:text-sky-400'
+      return 'text-info'
     default:
       return 'text-muted-foreground'
   }
@@ -423,15 +423,11 @@ export function YamlDiffPanel({
   fillHeight: boolean
 }) {
   const { t } = useTranslation()
-  const { actualTheme, colorTheme } = useAppearance()
+  const { actualTheme } = useAppearance()
   const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
-  const backgroundColor = useMonacoBackgroundColor(
-    '--card',
-    themeMode,
-    colorTheme
-  )
-  const darkThemeName = `yaml-diff-dark-${colorTheme}`
-  const lightThemeName = `yaml-diff-light-${colorTheme}`
+  const backgroundColor = useMonacoBackgroundColor('--card', themeMode)
+  const darkThemeName = 'yaml-diff-dark'
+  const lightThemeName = 'yaml-diff-light'
   const statusLabel = {
     added: t('helm.diff.added'),
     deleted: t('helm.diff.deleted'),
@@ -453,7 +449,7 @@ export function YamlDiffPanel({
           )}
         >
           <MonacoDiffEditor
-            key={`yaml-diff-${colorTheme}-${actualTheme}-${backgroundColor}`}
+            key={`yaml-diff-${actualTheme}-${backgroundColor}`}
             height={fillHeight ? '100%' : undefined}
             language="yaml"
             original={file.originalContent}

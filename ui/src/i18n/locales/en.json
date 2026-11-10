@@ -1415,15 +1415,6 @@
     "via": "via {{provider}}",
     "role": "Role: {{roles}}",
     "accountSettings": "Account Settings",
-    "colorTheme": "Color Theme",
-    "colorThemes": {
-      "default": "Default",
-      "eye-care": "Eye Care",
-      "darkmatter": "Dark Matter",
-      "notebook": "Notebook",
-      "clean-slate": "Clean Slate",
-      "claude": "Claude"
-    },
     "font": "Font",
     "fonts": {
       "system": "System"

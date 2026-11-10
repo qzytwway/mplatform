@@ -570,7 +570,7 @@ export function EnvironmentEditor({
               onClick={() => removeEnvVar(index)}
               size="sm"
               variant="ghost"
-              className="text-red-500 hover:text-red-700 mt-5"
+              className="text-destructive hover:text-destructive/80 mt-5"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -678,7 +678,7 @@ export function EnvironmentEditor({
               onClick={() => removeEnvFromSource(index)}
               size="sm"
               variant="ghost"
-              className="text-red-500 hover:text-red-700 mt-5"
+              className="text-destructive hover:text-destructive/80 mt-5"
             >
               <Trash2 className="h-4 w-4" />
             </Button>

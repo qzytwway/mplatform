@@ -65,7 +65,7 @@ function ToolCallMessage({
     }
     if (isConfirmed) return <CheckCircle2 className="h-3 w-3 text-green-500" />
     if (isDenied) return <XCircle className="h-3 w-3 text-muted-foreground" />
-    if (isError) return <XCircle className="h-3 w-3 text-red-500" />
+    if (isError) return <XCircle className="h-3 w-3 text-destructive" />
     if (message.toolResult) {
       return <CheckCircle2 className="h-3 w-3 text-green-500" />
     }

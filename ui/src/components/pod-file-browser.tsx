@@ -238,7 +238,7 @@ export function PodFileBrowser({
                   <TableRow key={file.name}>
                     <TableCell>
                       {file.isDir ? (
-                        <IconFolder className="w-4 h-4 text-blue-500" />
+                        <IconFolder className="w-4 h-4 text-info" />
                       ) : (
                         <IconFile className="w-4 h-4 text-gray-500" />
                       )}

@@ -85,12 +85,6 @@ export interface PluginResourceView<
   columns?: readonly PluginResourceColumn<T, any>[]
   tabs?: readonly PluginResourceTab[]
 }
-/** A color theme contributed by a plugin; each entry is a stylesheet with CSS variable overrides. */
-export interface PluginTheme {
-  id: string
-  label?: LocalizedLabel
-  styles: readonly string[]
-}
 /** Optional configuration page shown in MPlatform's plugin management page. */
 export interface PluginSettingsMetadata {
   label?: LocalizedLabel
@@ -111,7 +105,6 @@ export interface PluginManifest extends PluginMetadata {
   routes: readonly PluginRouteMetadata[]
   menus: readonly PluginMenuMetadata[]
   resources: readonly PluginResourceMetadata[]
-  themes?: readonly PluginTheme[]
   settings?: PluginSettingsMetadata
 }
 export interface PluginMenu<RouteId extends string = string> {
@@ -136,7 +129,6 @@ export interface PluginDefinition {
   menus: readonly PluginMenu[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- each view picks its own resource type
   resources: readonly PluginResourceView<any>[]
-  themes: readonly PluginTheme[]
   settings?: PluginSettings
 }
 export function definePlugin<
@@ -146,7 +138,6 @@ export function definePlugin<
   routes?: Routes
   menus?: readonly PluginMenu<NoInfer<Routes[number]['id']>>[]
   resources?: PluginDefinition['resources']
-  themes?: readonly PluginTheme[]
   settings?: PluginSettings
 }) {
   return {
@@ -154,7 +145,6 @@ export function definePlugin<
     routes: definition.routes ?? [],
     menus: definition.menus ?? [],
     resources: definition.resources ?? [],
-    themes: definition.themes ?? [],
     settings: definition.settings,
   }
 }

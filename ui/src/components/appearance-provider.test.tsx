@@ -28,26 +28,17 @@ vi.stubGlobal('localStorage', createStorage())
 vi.stubGlobal('sessionStorage', createStorage())
 
 function AppearanceConsumer() {
-  const {
-    theme,
-    actualTheme,
-    colorTheme,
-    font,
-    setTheme,
-    setColorTheme,
-    setFont,
-  } = useAppearance()
+  const { theme, actualTheme, font, setTheme, setFont } = useAppearance()
 
   return (
     <div>
       <span data-testid="state">
-        {theme}/{actualTheme}/{colorTheme}/{font}
+        {theme}/{actualTheme}/{font}
       </span>
       <button
         type="button"
         onClick={() => {
           setTheme('dark')
-          setColorTheme('claude')
           setFont('system')
         }}
       >
@@ -67,8 +58,6 @@ describe('AppearanceProvider', () => {
       <AppearanceProvider
         defaultTheme="light"
         themeStorageKey="appearance-theme"
-        defaultColorTheme="default"
-        colorThemeStorageKey="appearance-color"
         defaultFont="system"
         fontStorageKey="appearance-font"
       >
@@ -78,22 +67,18 @@ describe('AppearanceProvider', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('state')).toHaveTextContent(
-        'light/light/default/system'
+        'light/light/system'
       )
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'update' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('state')).toHaveTextContent(
-        'dark/dark/claude/system'
-      )
+      expect(screen.getByTestId('state')).toHaveTextContent('dark/dark/system')
     })
     expect(localStorage.getItem('appearance-theme')).toBe('dark')
-    expect(localStorage.getItem('appearance-color')).toBe('claude')
     expect(localStorage.getItem('appearance-font')).toBe('system')
     expect(document.documentElement).toHaveClass('dark')
-    expect(document.documentElement).toHaveClass('color-claude')
     expect(
       document.documentElement.style.getPropertyValue('--app-font-sans')
     ).toBe('var(--font-sans)')

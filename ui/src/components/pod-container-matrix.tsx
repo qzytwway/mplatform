@@ -247,7 +247,7 @@ function PodOverviewContainerRow({
           points={metrics?.memory || []}
           value={formatMemoryUsage(getLastMetricValue(metrics?.memory))}
           limit={container.resources?.limits?.memory}
-          colorClassName="text-sky-500"
+          colorClassName="text-info"
         />
       </TableCell>
     </TableRow>

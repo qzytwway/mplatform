@@ -1502,15 +1502,6 @@
     "via": "通过 {{provider}} 登录",
     "role": "角色：{{roles}}",
     "accountSettings": "账号设置",
-    "colorTheme": "颜色主题",
-    "colorThemes": {
-      "default": "默认",
-      "eye-care": "护眼",
-      "darkmatter": "暗物质",
-      "notebook": "笔记本",
-      "clean-slate": "简洁",
-      "claude": "Claude"
-    },
     "font": "字体",
     "fonts": {
       "system": "系统"

@@ -108,7 +108,7 @@ export function ClusterManagement() {
         return (
           <Badge
             variant="outline"
-            className="bg-blue-50 text-blue-700 border-blue-200"
+            className="bg-info/10 text-info border-info/30"
           >
             {t('clusterManagement.type.inCluster', 'In-Cluster')}
           </Badge>

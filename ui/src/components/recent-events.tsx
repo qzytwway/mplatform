@@ -35,9 +35,9 @@ export function RecentEvents() {
       case 'warning':
         return <IconAlertTriangle className="size-4 text-yellow-600" />
       case 'error':
-        return <IconX className="size-4 text-red-600" />
+        return <IconX className="size-4 text-destructive" />
       default:
-        return <IconInfoCircle className="size-4 text-blue-600" />
+        return <IconInfoCircle className="size-4 text-info" />
     }
   }
 

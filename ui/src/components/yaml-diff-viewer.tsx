@@ -60,13 +60,9 @@ export function YamlDiffViewer({
   height = 600,
 }: YamlDiffViewerProps) {
   const { t } = useTranslation()
-  const { actualTheme, colorTheme } = useAppearance()
+  const { actualTheme } = useAppearance()
   const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
-  const backgroundColor = useMonacoBackgroundColor(
-    '--background',
-    themeMode,
-    colorTheme
-  )
+  const backgroundColor = useMonacoBackgroundColor('--background', themeMode)
   const editorRef = useRef<monacoEditor.IStandaloneDiffEditor | null>(null)
   const [diffMode, setDiffMode] = useState<DiffMode>('previous-vs-modified')
 
@@ -202,7 +198,7 @@ export function YamlDiffViewer({
         </DialogHeader>
         <div className="flex-1 min-h-0">
           <MonacoDiffEditor
-            key={`yaml-diff-viewer-${colorTheme}-${actualTheme}-${backgroundColor}`}
+            key={`yaml-diff-viewer-${actualTheme}-${backgroundColor}`}
             height={height}
             language="yaml"
             loading={
@@ -215,16 +211,12 @@ export function YamlDiffViewer({
             }
             beforeMount={(monaco) => {
               defineMonacoBackgroundThemes(monaco, {
-                darkThemeName: `custom-dark-${colorTheme}`,
-                lightThemeName: `custom-vs-${colorTheme}`,
+                darkThemeName: 'custom-dark',
+                lightThemeName: 'custom-vs',
                 backgroundColor,
               })
             }}
-            theme={
-              actualTheme === 'dark'
-                ? `custom-dark-${colorTheme}`
-                : `custom-vs-${colorTheme}`
-            }
+            theme={actualTheme === 'dark' ? 'custom-dark' : 'custom-vs'}
             options={{
               readOnly: true,
               minimap: { enabled: true },

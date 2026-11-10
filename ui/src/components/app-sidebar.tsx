@@ -14,7 +14,6 @@ import { useResources, useVersionInfo } from '@/lib/api'
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -33,6 +32,9 @@ import { PluginIndicator } from './plugins/plugin-indicator'
 import { SidebarItemIcon } from './sidebar-item-icon'
 import { Collapsible, CollapsibleTrigger } from './ui/collapsible'
 import { VersionInfo } from './version-info'
+
+const leafItemClass =
+  'h-7 data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:hover:bg-sidebar-primary data-[active=true]:hover:text-sidebar-primary-foreground'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { t } = useTranslation()
@@ -188,8 +190,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         >
           <SidebarMenuItem>
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton tooltip={title} isActive={hasActiveChild}>
-                <SidebarItemIcon item={item} className="text-sidebar-primary" />
+              <SidebarMenuButton
+                tooltip={title}
+                isActive={hasActiveChild}
+                className="h-7"
+              >
+                <SidebarItemIcon item={item} className="opacity-70" />
                 <span className="truncate">{title}</span>
                 <PluginIndicator pluginId={item.pluginId} />
                 <ChevronRight className="ml-auto group-data-[state=open]/submenu:rotate-90" />
@@ -209,6 +215,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       <SidebarMenuSubButton
                         asChild
                         isActive={isActive(child.url)}
+                        className={leafItemClass}
                       >
                         <Link
                           to={child.url}
@@ -235,9 +242,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           tooltip={title}
           asChild
           isActive={isActive(item.url)}
+          className={leafItemClass}
         >
           <Link to={item.url} onClick={handleMenuItemClick}>
-            <SidebarItemIcon item={item} className="text-sidebar-primary" />
+            <SidebarItemIcon item={item} className="opacity-70" />
             <span className="truncate">{title}</span>
             <PluginIndicator pluginId={item.pluginId} />
           </Link>
@@ -281,16 +289,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5 hover:bg-accent/50 transition-colors"
+              className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
               <Link to="/" onClick={handleMenuItemClick}>
                 <div className="relative flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
                     <img src={Icon} alt="MPlatform Logo" className="h-8 w-8" />
                     <div className="flex flex-col">
-                      <span className="text-base font-semibold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                        MPlatform
-                      </span>
+                      <span className="text-base font-semibold">MPlatform</span>
                       <VersionInfo />
                     </div>
                   </div>
@@ -304,7 +310,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           window.open(versionInfo.releaseUrl, '_blank')
                         }
                       }}
-                      className="absolute right-0 top-0 mr-1 mt-1 rounded-sm bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-red-500 hover:bg-red-500/20"
+                      className="absolute right-0 top-0 mr-1 mt-1 rounded-sm bg-sidebar-primary px-1.5 py-0.5 text-[10px] font-medium text-sidebar-primary-foreground hover:bg-sidebar-primary/85"
                       title={t('sidebar.updateAvailable')}
                     >
                       New
@@ -315,6 +321,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="rounded-md border border-dashed border-sidebar-border">
+          <ClusterSelector />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -325,11 +334,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 tooltip={t('nav.overview')}
                 asChild
                 isActive={isActive('/')}
-                className="transition-all duration-200 hover:bg-accent/60 active:scale-95 data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:shadow-sm"
+                className={leafItemClass}
               >
                 <Link to="/" onClick={handleMenuItemClick}>
-                  <IconLayoutDashboard className="text-sidebar-primary" />
-                  <span className="font-medium">{t('nav.overview')}</span>
+                  <IconLayoutDashboard className="opacity-70" />
+                  <span>{t('nav.overview')}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -337,8 +346,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
 
         {pinnedItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          <SidebarGroup className="border-t border-sidebar-border py-1">
+            <SidebarGroupLabel className="text-xs font-normal text-muted-foreground">
               {t('sidebar.pinned', 'Pinned')}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -353,11 +362,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             defaultOpen={!group.collapsed}
             className="group/collapsible"
           >
-            <SidebarGroup>
+            <SidebarGroup className="border-t border-sidebar-border py-1">
               <SidebarGroupLabel asChild>
-                <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors group-data-[state=open]:text-foreground">
+                <CollapsibleTrigger className="flex items-center justify-between w-full text-xs font-normal text-muted-foreground hover:text-sidebar-foreground transition-colors">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate uppercase tracking-wide text-xs font-bold">
+                    <span className="truncate">
                       {group.nameKey
                         ? t(group.nameKey, { defaultValue: group.nameKey })
                         : ''}
@@ -368,7 +377,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </CollapsibleTrigger>
               </SidebarGroupLabel>
               <CollapsibleContent>
-                <SidebarGroupContent className="flex flex-col gap-2">
+                <SidebarGroupContent>
                   <SidebarMenu>
                     {group.items.map(renderSidebarItem)}
                   </SidebarMenu>
@@ -378,12 +387,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </Collapsible>
         ))}
       </SidebarContent>
-
-      <SidebarFooter>
-        <div className="flex items-center gap-2 rounded-md px-2 py-1.5 bg-gradient-to-r from-muted/40 to-muted/20 border border-border/60 backdrop-blur-sm">
-          <ClusterSelector />
-        </div>
-      </SidebarFooter>
     </Sidebar>
   )
 }
