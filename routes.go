@@ -16,6 +16,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/logging"
 	"github.com/qzytwway/mplatform/pkg/metrics"
 	"github.com/qzytwway/mplatform/pkg/middleware"
+	"github.com/qzytwway/mplatform/pkg/modelserving"
 	"github.com/qzytwway/mplatform/pkg/proxy"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"github.com/qzytwway/mplatform/pkg/resources"
@@ -142,6 +143,7 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 
 	helmChartsHandler.RegisterAdminRoutes(adminAPI)
 	logging.NewHandler(cm).RegisterAdminRoutes(adminAPI)
+	modelserving.NewHandler(cm).RegisterAdminRoutes(adminAPI)
 }
 
 func registerProtectedRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *cluster.ClusterManager, helmChartsHandler *helm.HelmChartHandler) {

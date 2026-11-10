@@ -457,6 +457,10 @@
     "helmReleases": "Helm Release",
     "helmCharts": "App Catalog",
     "observability": "Observability",
+    "modelServing": "Model Serving",
+    "inferenceServices": "Inference Services",
+    "modelRegistry": "Model Registry",
+    "gpuResources": "GPU Resources",
     "metrics": "Prometheus Metrics",
     "logs": "Logs",
     "alerts": "Alerts"
@@ -1626,6 +1630,137 @@
       "count": "Logs",
       "empty": "No logs match in this time range.",
       "latest": "Latest {{count}} logs"
+    }
+  },
+  "modelServing": {
+    "modelTypes": {
+      "chat": "Chat",
+      "embedding": "Embedding"
+    },
+    "sourceTypes": {
+      "local": "Node local",
+      "s3": "Object storage"
+    },
+    "services": {
+      "title": "Inference Services",
+      "create": "Create Service",
+      "createTitle": "Create inference service",
+      "createDescription": "Deploys a LeaderWorkerSet workload and a ClusterIP Service in the current cluster that serve an OpenAI-compatible API.",
+      "resourceType": "Inference Service",
+      "empty": "No inference services",
+      "emptyHint": "Create a service to deploy a registered model in this cluster.",
+      "model": "Model",
+      "selectModel": "Select a model",
+      "noModels": "No models registered. Add one in the model registry first.",
+      "runtime": "Runtime",
+      "gpuCount": "GPUs per pod",
+      "endpoint": "Endpoint",
+      "anyNode": "Any node",
+      "nodeHint": "Optional. Node-local models must run on a node that has the model directory.",
+      "extraArgs": "Extra arguments",
+      "extraArgsHint": "Appended to the runtime start command, separated by spaces.",
+      "mode": "Mode",
+      "modes": {
+        "single": "Single node",
+        "multi": "Multi-node",
+        "pd": "PD disaggregation"
+      },
+      "modeHints": {
+        "single": "Each replica is one pod running the whole model.",
+        "multi": "Each replica is a group of pods on several nodes that run one model together.",
+        "pd": "Separate prefill and decode pods behind a router."
+      },
+      "modeBlockers": {
+        "pdNotInstalled": "DisaggregatedSet is not installed",
+        "pdRuntime": "requires the SGLang runtime",
+        "chatOnly": "requires a chat model"
+      },
+      "groups": "Groups",
+      "group": "Group",
+      "groupSize": "Group size (nodes per group)",
+      "prefillReplicas": "Prefill replicas",
+      "decodeReplicas": "Decode replicas",
+      "routerImage": "Router image",
+      "scaleTitle": "Scale inference service",
+      "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
+      "scaleDescriptionPD": "Set the prefill and decode replicas. The router is not scalable.",
+      "messages": {
+        "created": "Inference service created",
+        "deleted": "Inference service deleted",
+        "deleteNote": "The workload, router, Service, and storage credential Secret of this service will be deleted.",
+        "scaled": "Inference service scaled"
+      }
+    },
+    "models": {
+      "title": "Model Registry",
+      "registry": "Models",
+      "description": "Register offline models stored on node disks or in object storage.",
+      "create": "Add Model",
+      "createTitle": "Add model",
+      "editTitle": "Edit model",
+      "resourceType": "Model",
+      "empty": "No models registered",
+      "nameHint": "Also used as the served model name. Letters, digits, dots, underscores, and hyphens.",
+      "source": "Source",
+      "path": "Path",
+      "localPathHint": "Absolute directory of the model on the node.",
+      "s3PathHint": "Key prefix of the model inside the bucket.",
+      "storageRequired": "Object storage is not configured. Services cannot be created for object storage models until it is.",
+      "messages": {
+        "created": "Model added",
+        "updated": "Model updated",
+        "deleted": "Model deleted"
+      }
+    },
+    "storage": {
+      "title": "Object Storage",
+      "description": "One S3-compatible store for the whole platform, used to download models to nodes.",
+      "empty": "Object storage is not configured.",
+      "configure": "Configure",
+      "endpoint": "Endpoint",
+      "bucket": "Bucket",
+      "region": "Region",
+      "accessKey": "Access key",
+      "secretKey": "Secret key",
+      "secretKeyKeep": "Leave blank to keep the current key",
+      "downloaderImage": "Downloader image",
+      "downloaderImageHint": "Init container image that runs aws s3 sync.",
+      "messages": {
+        "saved": "Object storage saved",
+        "deleted": "Object storage configuration deleted",
+        "deleteNote": "Existing services keep running, but new services for object storage models cannot be created."
+      }
+    },
+    "gpus": {
+      "title": "GPU Resources",
+      "empty": "No GPU nodes",
+      "emptyHint": "No node in this cluster reports nvidia.com/gpu capacity.",
+      "product": "GPU model",
+      "allocated": "Allocated"
+    },
+    "roles": {
+      "default": "Default",
+      "leader": "Leader",
+      "worker": "Worker",
+      "prefill": "Prefill",
+      "decode": "Decode",
+      "router": "Router"
+    },
+    "lws": {
+      "title": "LeaderWorkerSet",
+      "description": "Inference services run on LeaderWorkerSet (LWS). Install it into this cluster before creating services.",
+      "chartHint": "The chart is read from the local chart directory. Offline clusters also need the image below; the cluster pulls it from <registry>/<image>:<tag> using its image registry setting.",
+      "chartMissing": "Not in the local chart directory",
+      "crdPresent": "This cluster already has the LeaderWorkerSet resource definitions, but not a release installed by this platform. If LWS runs here by other means, there is nothing to install.",
+      "install": "Install",
+      "installing": "Installing...",
+      "uninstall": "Uninstall",
+      "installed": "LeaderWorkerSet is installed",
+      "messages": {
+        "installed": "LeaderWorkerSet installed",
+        "uninstalled": "LeaderWorkerSet uninstalled",
+        "uninstallNote": "Delete every inference service in this cluster first."
+      }
     }
   }
 }

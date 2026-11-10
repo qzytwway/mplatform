@@ -8,8 +8,12 @@ import {
   IconBell,
   IconBox,
   IconChartLine,
+  IconCpu,
+  IconDatabase,
   IconFileText,
   IconLayoutDashboard,
+  IconRocket,
+  IconSparkles,
 } from '@tabler/icons-react'
 import { CustomResourceDefinition } from 'kubernetes-types/apiextensions/v1'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -48,6 +52,20 @@ const OBSERVABILITY_ITEMS = [
   { url: '/observability/alerts', titleKey: 'nav.alerts', Icon: IconBell },
 ]
 
+const MODEL_SERVING_ITEMS = [
+  {
+    url: '/model-serving/services',
+    titleKey: 'nav.inferenceServices',
+    Icon: IconRocket,
+  },
+  {
+    url: '/model-serving/models',
+    titleKey: 'nav.modelRegistry',
+    Icon: IconDatabase,
+  },
+  { url: '/model-serving/gpus', titleKey: 'nav.gpuResources', Icon: IconCpu },
+]
+
 const SIDEBAR_ALERTS_REFRESH_MS = 60000
 
 const leafItemClass =
@@ -58,7 +76,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const { config, isLoading } = useSidebarConfig()
-  const { logo } = useAuth()
+  const { logo, user } = useAuth()
   const { data: versionInfo } = useVersionInfo()
   const { data: alertRules } = useAlertRules({
     refetchInterval: SIDEBAR_ALERTS_REFRESH_MS,
@@ -488,6 +506,44 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </CollapsibleContent>
               </SidebarMenuItem>
             </Collapsible>
+            {user?.isAdmin() && (
+              <Collapsible defaultOpen asChild className="group/model-serving">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      tooltip={t('nav.modelServing')}
+                      className="h-8 font-medium"
+                    >
+                      <IconSparkles className="opacity-70" />
+                      <span className="truncate">{t('nav.modelServing')}</span>
+                      <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/model-serving:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub className="mr-0 pr-0">
+                      {MODEL_SERVING_ITEMS.map(({ url, titleKey, Icon }) => (
+                        <SidebarMenuItem key={url}>
+                          <SidebarMenuButton
+                            tooltip={t(titleKey)}
+                            asChild
+                            isActive={
+                              location.pathname === url ||
+                              location.pathname.startsWith(`${url}/`)
+                            }
+                            className={leafItemClass}
+                          >
+                            <Link to={url} onClick={handleMenuItemClick}>
+                              <Icon className="opacity-70" />
+                              <span className="truncate">{t(titleKey)}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            )}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

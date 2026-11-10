@@ -19,9 +19,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
-	releasecommon "helm.sh/helm/v4/pkg/release/common"
-	release "helm.sh/helm/v4/pkg/release/v1"
-	"helm.sh/helm/v4/pkg/storage/driver"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -42,7 +39,10 @@ const (
 var (
 	retentionPattern = regexp.MustCompile(`^[1-9][0-9]*[hdwy]$`)
 
-	errAlreadyInstalled = errors.New("already installed")
+	uninstallOptions = helmutil.UninstallReleaseOptions{
+		Timeout:     helmActionTimeout,
+		Description: "Uninstalled by MPlatform logging",
+	}
 )
 
 type Handler struct {
@@ -130,13 +130,7 @@ func releaseExists(cs *cluster.ClientSet, name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if _, err := helmutil.GetRelease(cfg, name); err != nil {
-		if errors.Is(err, driver.ErrReleaseNotFound) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	return helmutil.ReleaseExists(cfg, name)
 }
 
 func (h *Handler) InstallStorage(c *gin.Context) {
@@ -328,7 +322,7 @@ func (h *Handler) DisableCollector(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "log collection disabled"})
 }
 
-func installRelease(c *gin.Context, cs *cluster.ClientSet, name string, loadedChart *chart.Chart, values map[string]any, password string) (err error) {
+func installRelease(c *gin.Context, cs *cluster.ClientSet, name string, loadedChart *chart.Chart, values map[string]any, password string) error {
 	ctx := c.Request.Context()
 	if err := ensureNamespace(ctx, cs); err != nil {
 		return err
@@ -337,77 +331,34 @@ func installRelease(c *gin.Context, cs *cluster.ClientSet, name string, loadedCh
 	if err != nil {
 		return err
 	}
-	existing, err := helmutil.GetRelease(cfg, name)
-	switch {
-	case err == nil && (existing.Info == nil || existing.Info.Status != releasecommon.StatusFailed):
-		return fmt.Errorf("%s is %w", name, errAlreadyInstalled)
-	case err == nil:
-		// A failed earlier attempt still holds the release name.
-		if err := uninstallRelease(c, cs, name); err != nil {
-			return err
-		}
-	case !errors.Is(err, driver.ErrReleaseNotFound):
+	operatorID := c.MustGet("user").(model.User).ID
+	if err := helmutil.ClaimReleaseName(cfg, cs.Name, operatorID, name, Namespace, uninstallOptions); err != nil {
 		return err
 	}
 	if err := ensureAuthSecret(ctx, cs, password); err != nil {
 		return err
 	}
-	imageRegistry, err := helmutil.ClusterImageRegistry(cs.Name)
-	if err != nil {
-		return err
-	}
-
-	var rel *release.Release
-	defer func() {
-		recordHistory(c, cs, "install", name, nil, rel, err)
-	}()
-	rel, err = helmutil.InstallRelease(ctx, cfg, loadedChart, values, helmutil.InstallReleaseOptions{
-		ReleaseName:   name,
-		Namespace:     Namespace,
-		Timeout:       helmActionTimeout,
-		Description:   "Installed by MPlatform logging",
-		ImageRegistry: imageRegistry,
+	return helmutil.InstallPlatformRelease(ctx, cfg, cs.Name, operatorID, loadedChart, values, helmutil.InstallReleaseOptions{
+		ReleaseName: name,
+		Namespace:   Namespace,
+		Timeout:     helmActionTimeout,
+		Description: "Installed by MPlatform logging",
 	})
-	if err != nil {
-		// Remove the failed release so the install can be retried, e.g. with
-		// another NodePort.
-		if _, getErr := helmutil.GetRelease(cfg, name); getErr == nil {
-			if uninstallErr := helmutil.UninstallRelease(cfg, name, helmutil.UninstallReleaseOptions{Timeout: helmActionTimeout}); uninstallErr != nil {
-				klog.Warningf("Failed to remove failed release %s in cluster %s: %v", name, cs.Name, uninstallErr)
-			}
-		}
-	}
-	return err
 }
 
 func installErrorStatus(err error) int {
-	if errors.Is(err, errAlreadyInstalled) {
+	if errors.Is(err, helmutil.ErrReleaseAlreadyInstalled) {
 		return http.StatusConflict
 	}
 	return http.StatusInternalServerError
 }
 
-func uninstallRelease(c *gin.Context, cs *cluster.ClientSet, name string) (err error) {
+func uninstallRelease(c *gin.Context, cs *cluster.ClientSet, name string) error {
 	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, Namespace)
 	if err != nil {
 		return err
 	}
-	current, err := helmutil.GetRelease(cfg, name)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		recordHistory(c, cs, "delete", name, current, nil, err)
-	}()
-	return helmutil.UninstallRelease(cfg, name, helmutil.UninstallReleaseOptions{
-		Timeout:     helmActionTimeout,
-		Description: "Uninstalled by MPlatform logging",
-	})
-}
-
-func recordHistory(c *gin.Context, cs *cluster.ClientSet, opType, name string, prev, curr *release.Release, err error) {
-	user := c.MustGet("user").(model.User)
-	helmutil.RecordReleaseHistory(cs.Name, user.ID, "manual", opType, name, Namespace, prev, curr, err == nil, err)
+	return helmutil.UninstallPlatformRelease(cfg, cs.Name, c.MustGet("user").(model.User).ID, name, Namespace, uninstallOptions)
 }
 
 // ensureNamespace creates the logging namespace with the privileged Pod

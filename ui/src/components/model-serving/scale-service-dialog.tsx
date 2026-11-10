@@ -1,0 +1,165 @@
+import { useState, type FormEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import {
+  scaleInferenceService,
+  type InferenceService,
+} from '@/lib/api/model-serving'
+import { translateError } from '@/lib/utils'
+import { useCluster } from '@/hooks/use-cluster'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+interface ScaleServiceDialogProps {
+  service: InferenceService
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function ScaleServiceDialog({
+  service,
+  open,
+  onOpenChange,
+}: ScaleServiceDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <ScaleServiceDialogContent
+          service={service}
+          onClose={() => onOpenChange(false)}
+        />
+      ) : null}
+    </Dialog>
+  )
+}
+
+function ScaleServiceDialogContent({
+  service,
+  onClose,
+}: {
+  service: InferenceService
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const { currentCluster } = useCluster()
+  const isPD = service.mode === 'pd'
+  const roleReplicas = (name: string) =>
+    String(service.roles.find((role) => role.name === name)?.replicas ?? 1)
+  const [replicas, setReplicas] = useState(
+    String(service.roles[0]?.replicas ?? 1)
+  )
+  const [prefillReplicas, setPrefillReplicas] = useState(
+    roleReplicas('prefill')
+  )
+  const [decodeReplicas, setDecodeReplicas] = useState(roleReplicas('decode'))
+  const [isScaling, setIsScaling] = useState(false)
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!currentCluster) return
+    setIsScaling(true)
+    try {
+      await scaleInferenceService(
+        currentCluster,
+        service.namespace,
+        service.name,
+        isPD
+          ? {
+              prefillReplicas: Number(prefillReplicas),
+              decodeReplicas: Number(decodeReplicas),
+            }
+          : { replicas: Number(replicas) }
+      )
+      toast.success(t('modelServing.services.messages.scaled'))
+      await queryClient.invalidateQueries({
+        queryKey: ['model-serving-services'],
+      })
+      onClose()
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsScaling(false)
+    }
+  }
+
+  return (
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>{t('modelServing.services.scaleTitle')}</DialogTitle>
+        <DialogDescription>
+          {isPD
+            ? t('modelServing.services.scaleDescriptionPD')
+            : t('modelServing.services.scaleDescription')}
+        </DialogDescription>
+      </DialogHeader>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {isPD ? (
+          <div className="grid gap-4 grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="scale-prefill-replicas">
+                {t('modelServing.services.prefillReplicas')}
+              </Label>
+              <Input
+                id="scale-prefill-replicas"
+                type="number"
+                min={1}
+                value={prefillReplicas}
+                onChange={(event) => setPrefillReplicas(event.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="scale-decode-replicas">
+                {t('modelServing.services.decodeReplicas')}
+              </Label>
+              <Input
+                id="scale-decode-replicas"
+                type="number"
+                min={1}
+                value={decodeReplicas}
+                onChange={(event) => setDecodeReplicas(event.target.value)}
+                required
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="scale-replicas">
+              {service.mode === 'multi'
+                ? t('modelServing.services.groups')
+                : t('common.fields.replicas')}
+            </Label>
+            <Input
+              id="scale-replicas"
+              type="number"
+              min={1}
+              value={replicas}
+              onChange={(event) => setReplicas(event.target.value)}
+              required
+            />
+          </div>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t('common.actions.cancel')}
+          </Button>
+          <Button type="submit" disabled={isScaling}>
+            {isScaling ? t('common.actions.saving') : t('common.actions.scale')}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  )
+}

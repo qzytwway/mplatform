@@ -105,6 +105,8 @@ func InitDB() {
 		HelmRepository{},
 		ScheduledTask{},
 		LogStorage{},
+		ModelStorage{},
+		ServedModel{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)

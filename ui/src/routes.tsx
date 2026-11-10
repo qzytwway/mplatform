@@ -9,6 +9,10 @@ import { HelmChartDetailPage } from './pages/helm-chart-detail-page'
 import { HelmChartListPage } from './pages/helm-chart-list-page'
 import { InitializationPage } from './pages/initialization'
 import { LoginPage } from './pages/login'
+import { GPUsPage } from './pages/model-serving/gpus-page'
+import { ModelsPage } from './pages/model-serving/models-page'
+import { ServiceDetailPage } from './pages/model-serving/service-detail-page'
+import { ServicesPage } from './pages/model-serving/services-page'
 import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
 import { MetricsPage } from './pages/observability/metrics-page'
@@ -76,6 +80,22 @@ export const router = createBrowserRouter(
         {
           path: 'observability/alerts',
           element: <AlertsPage />,
+        },
+        {
+          path: 'model-serving/services',
+          element: <ServicesPage />,
+        },
+        {
+          path: 'model-serving/services/:namespace/:name',
+          element: <ServiceDetailPage />,
+        },
+        {
+          path: 'model-serving/models',
+          element: <ModelsPage />,
+        },
+        {
+          path: 'model-serving/gpus',
+          element: <GPUsPage />,
         },
         {
           path: 'crds/:crd',
