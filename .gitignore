@@ -50,3 +50,6 @@ mplatform
 
 # Local app store chart packages (CHART_DIR)
 chart-packages/
+
+# graphify knowledge graph output
+graphify-out/
