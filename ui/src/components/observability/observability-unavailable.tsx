@@ -45,11 +45,19 @@ export function ObservabilityUnavailable({
           ? t(`observability.unavailable.${kind}.description`)
           : error?.message}
       </p>
-      {notConfigured && kind !== 'logs' && isAdmin && (
+      {notConfigured && isAdmin && (
         <Button asChild variant="outline" size="sm">
-          <Link to="/settings?tab=clusters">
+          <Link
+            to={
+              kind === 'logs'
+                ? '/settings?tab=logging'
+                : '/settings?tab=clusters'
+            }
+          >
             <Settings />
-            {t('observability.unavailable.configure')}
+            {kind === 'logs'
+              ? t('observability.unavailable.configureLogs')
+              : t('observability.unavailable.configure')}
           </Link>
         </Button>
       )}

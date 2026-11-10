@@ -108,6 +108,13 @@ func newClientSet(name string, k8sConfig *rest.Config, prometheusURL string) (*C
 
 // serviceRoundTripper reaches in-cluster services through the API server proxy,
 // and everything else through the cluster agent tunnel when there is one.
+// ServiceTransport returns a transport that reaches serviceURL from cs: through
+// the Kubernetes API proxy for in-cluster URLs, the cluster agent tunnel for
+// agent clusters, or directly otherwise.
+func ServiceTransport(cs *ClientSet, service, serviceURL string) http.RoundTripper {
+	return serviceRoundTripper(cs.Name, service, cs.K8sClient.Configuration, serviceURL)
+}
+
 func serviceRoundTripper(clusterName, service string, k8sConfig *rest.Config, serviceURL string) http.RoundTripper {
 	if isClusterLocalURL(serviceURL) {
 		rt, err := createK8sProxyTransport(k8sConfig, serviceURL)

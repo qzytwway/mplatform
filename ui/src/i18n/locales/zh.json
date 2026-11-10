@@ -813,7 +813,8 @@
       "oauth": "认证",
       "rbac": "RBAC",
       "users": "用户",
-      "apikeys": "API 密钥"
+      "apikeys": "API 密钥",
+      "logging": "日志"
     }
   },
   "generalManagement": {
@@ -1517,11 +1518,12 @@
       },
       "logs": {
         "title": "日志存储未配置",
-        "description": "接入 VictoriaLogs 并为集群安装 Vector 采集组件后，即可在这里检索日志。"
+        "description": "在设置的日志页安装 VictoriaLogs，并为集群开启采集后，即可在这里检索日志。"
       },
       "forbidden": "你没有查看此内容的权限",
       "failed": "数据加载失败",
-      "configure": "前往集群设置"
+      "configure": "前往集群设置",
+      "configureLogs": "前往日志设置"
     },
     "metrics": {
       "title": "Prometheus 指标",
@@ -1634,6 +1636,58 @@
     },
     "logs": {
       "title": "日志"
+    }
+  },
+  "logging": {
+    "storage": {
+      "title": "日志存储",
+      "description": "在一个集群中安装 VictoriaLogs，集中存储所有集群的日志。它通过 NodePort 暴露，供其他集群的 Vector 和 MPlatform 访问，访问需要平台生成的密码。",
+      "cluster": "集群",
+      "selectCluster": "选择集群",
+      "namespace": "命名空间",
+      "writeURL": "写入地址",
+      "retention": "保留时长",
+      "nodeHost": "节点地址",
+      "storageSize": "存储大小",
+      "storageClass": "存储类",
+      "defaultStorageClass": "集群默认",
+      "nodeHostHint": "填写该集群中某个节点的 IP 或主机名，其他集群和 MPlatform 会通过 http://<节点地址>:<NodePort> 写入和查询日志。保留时长支持 h、d、w、y，如 7d。",
+      "imagesHint": "离线环境需要准备以下镜像。各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
+      "upgradeHint": "升级 MPlatform 不会自动升级已安装的日志组件。"
+    },
+    "collectors": {
+      "title": "日志采集",
+      "description": "开启采集后，会在该集群的每个节点上安装 Vector，把容器日志发送到日志存储。",
+      "storageRequired": "请先安装日志存储，再开启采集。",
+      "unavailable": "不可用",
+      "collecting": "采集中",
+      "notCollecting": "未开启",
+      "toggle": "{{cluster}} 的日志采集"
+    },
+    "actions": {
+      "installStorage": "安装",
+      "installing": "安装中...",
+      "uninstallStorage": "卸载"
+    },
+    "messages": {
+      "storageInstalled": "日志存储已安装",
+      "storageUninstalled": "日志存储已卸载",
+      "uninstallStorageNote": "请先关闭所有集群的日志采集。数据卷不会被删除，需要手动清理。",
+      "collectorEnabled": "已开启 {{cluster}} 的日志采集",
+      "collectorDisabled": "已关闭 {{cluster}} 的日志采集"
+    },
+    "search": {
+      "pod": "Pod",
+      "podPlaceholder": "Pod 名称前缀",
+      "container": "容器",
+      "containerPlaceholder": "容器",
+      "keyword": "关键词",
+      "keywordPlaceholder": "在日志内容中搜索短语",
+      "submit": "搜索",
+      "total": "共 {{count}} 条匹配日志",
+      "count": "日志数",
+      "empty": "该时间范围内没有匹配的日志。",
+      "latest": "最新 {{count}} 条"
     }
   }
 }

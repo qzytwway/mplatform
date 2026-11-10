@@ -13,6 +13,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/helm"
 	"github.com/qzytwway/mplatform/pkg/images"
+	"github.com/qzytwway/mplatform/pkg/logging"
 	"github.com/qzytwway/mplatform/pkg/metrics"
 	"github.com/qzytwway/mplatform/pkg/middleware"
 	"github.com/qzytwway/mplatform/pkg/proxy"
@@ -140,17 +141,22 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 	templateAPI.DELETE("/:id", templates.DeleteTemplate)
 
 	helmChartsHandler.RegisterAdminRoutes(adminAPI)
+	logging.NewHandler(cm).RegisterAdminRoutes(adminAPI)
 }
 
 func registerProtectedRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *cluster.ClusterManager, helmChartsHandler *helm.HelmChartHandler) {
 	api := r.Group("/api/v1")
 	api.GET("/clusters", authHandler.RequireAuth(), cm.GetClusters)
+	// Logging handlers check pod log permissions per namespace themselves.
+	loggingHandler := logging.NewHandler(cm)
 	defaultAPI := api.Group("")
 	defaultAPI.Use(authHandler.RequireAuth(), middleware.ClusterMiddleware(cm))
+	loggingHandler.RegisterRoutes(defaultAPI)
 	registerClusterProtectedRoutes(defaultAPI, helmChartsHandler)
 
 	clusterAPI := api.Group("/_clusters/:cluster")
 	clusterAPI.Use(authHandler.RequireAuth(), middleware.ClusterMiddleware(cm))
+	loggingHandler.RegisterRoutes(clusterAPI)
 	registerClusterProtectedRoutes(clusterAPI, helmChartsHandler)
 }
 

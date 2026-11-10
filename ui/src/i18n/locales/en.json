@@ -802,7 +802,8 @@
       "general": "General",
       "oauth": "Authentication",
       "rbac": "RBAC",
-      "users": "User"
+      "users": "User",
+      "logging": "Logging"
     }
   },
   "generalManagement": {
@@ -1430,11 +1431,12 @@
       },
       "logs": {
         "title": "Log storage is not configured",
-        "description": "Log search will be available once VictoriaLogs is connected and Vector collectors are installed on your clusters."
+        "description": "Install VictoriaLogs and turn on collection for this cluster in the logging settings to search logs here."
       },
       "forbidden": "You do not have permission to view this",
       "failed": "Could not load data",
-      "configure": "Open cluster settings"
+      "configure": "Open cluster settings",
+      "configureLogs": "Go to logging settings"
     },
     "metrics": {
       "title": "Prometheus Metrics",
@@ -1547,6 +1549,58 @@
     },
     "logs": {
       "title": "Logs"
+    }
+  },
+  "logging": {
+    "storage": {
+      "title": "Log storage",
+      "description": "Install VictoriaLogs into one cluster to store logs from every cluster. It is exposed through a NodePort so Vector agents in other clusters, and MPlatform itself, can reach it; access requires a generated password.",
+      "cluster": "Cluster",
+      "selectCluster": "Select a cluster",
+      "namespace": "Namespace",
+      "writeURL": "Write address",
+      "retention": "Retention",
+      "nodeHost": "Node address",
+      "storageSize": "Storage size",
+      "storageClass": "Storage class",
+      "defaultStorageClass": "Cluster default",
+      "nodeHostHint": "Enter an IP address or host name of a node in that cluster. Other clusters and MPlatform write to and query http://<node address>:<NodePort>. Retention accepts h, d, w or y, such as 7d.",
+      "imagesHint": "Offline clusters must provide these images. Each cluster pulls them from its image registry setting as <registry>/<image name>:<tag>.",
+      "upgradeHint": "Upgrading MPlatform does not upgrade installed log components."
+    },
+    "collectors": {
+      "title": "Log collection",
+      "description": "Turning collection on installs a Vector agent on every node of the cluster, which sends container logs to the log storage.",
+      "storageRequired": "Install log storage before turning on collection.",
+      "unavailable": "Unavailable",
+      "collecting": "Collecting",
+      "notCollecting": "Off",
+      "toggle": "Log collection for {{cluster}}"
+    },
+    "actions": {
+      "installStorage": "Install",
+      "installing": "Installing...",
+      "uninstallStorage": "Uninstall"
+    },
+    "messages": {
+      "storageInstalled": "Log storage installed",
+      "storageUninstalled": "Log storage uninstalled",
+      "uninstallStorageNote": "Turn off collection on every cluster first. The data volume is kept and must be deleted manually.",
+      "collectorEnabled": "Log collection turned on for {{cluster}}",
+      "collectorDisabled": "Log collection turned off for {{cluster}}"
+    },
+    "search": {
+      "pod": "Pod",
+      "podPlaceholder": "Pod name prefix",
+      "container": "Container",
+      "containerPlaceholder": "Container",
+      "keyword": "Keyword",
+      "keywordPlaceholder": "Search for a phrase in log messages",
+      "submit": "Search",
+      "total": "{{count}} matching logs",
+      "count": "Logs",
+      "empty": "No logs match in this time range.",
+      "latest": "Latest {{count}} logs"
     }
   }
 }
