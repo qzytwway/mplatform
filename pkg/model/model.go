@@ -107,6 +107,8 @@ func InitDB() {
 		LogStorage{},
 		ModelStorage{},
 		ServedModel{},
+		ModelGateway{},
+		ModelCaller{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)

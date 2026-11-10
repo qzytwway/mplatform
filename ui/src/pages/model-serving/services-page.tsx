@@ -85,6 +85,16 @@ export function ServicesPage() {
           }),
       },
       {
+        id: 'published',
+        header: t('modelServing.services.published'),
+        cell: ({ row: { original: service } }) =>
+          service.published ? (
+            <Badge variant="outline">{t('common.values.yes')}</Badge>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          ),
+      },
+      {
         id: 'ready',
         header: t('common.fields.ready'),
         cell: ({ row: { original: service } }) => (

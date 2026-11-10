@@ -29,6 +29,7 @@ import { ErrorMessage } from '@/components/error-message'
 import { ScaleServiceDialog } from '@/components/model-serving/scale-service-dialog'
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
+import { ServicePublishCard } from '@/components/model-serving/service-publish-card'
 
 const SERVICES_PATH = '/model-serving/services'
 
@@ -190,6 +191,8 @@ export function ServiceDetailPage() {
           </dl>
         </CardContent>
       </Card>
+
+      <ServicePublishCard service={service} />
 
       <Card>
         <CardHeader>

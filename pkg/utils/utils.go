@@ -3,10 +3,13 @@ package utils
 import (
 	"fmt"
 	"html"
+	"net"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 const mplatformBasePlaceholder = "__MPLATFORM_BASE__"
@@ -46,4 +49,22 @@ func GetImageRegistryAndRepo(image string) (string, string) {
 		return "", strings.Join(parts, "/")
 	}
 	return "", image
+}
+
+const (
+	minNodePort = 30000
+	maxNodePort = 32767
+)
+
+// NodeEndpoint validates the address of a node and a NodePort on it, and
+// joins them as host:port.
+func NodeEndpoint(host string, port int) (string, error) {
+	if port < minNodePort || port > maxNodePort {
+		return "", fmt.Errorf("node port must be between %d and %d", minNodePort, maxNodePort)
+	}
+	host = strings.TrimSpace(host)
+	if net.ParseIP(host) == nil && len(validation.IsDNS1123Subdomain(host)) > 0 {
+		return "", fmt.Errorf("node address must be an IP address or host name")
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port)), nil
 }

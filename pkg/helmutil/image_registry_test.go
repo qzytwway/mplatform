@@ -34,7 +34,7 @@ func TestRewriteImageRegistry(t *testing.T) {
 		{"Invalid Image", "Invalid Image"},
 	}
 	for _, tc := range testcases {
-		require.Equal(t, tc.want, rewriteImageRegistry(tc.image, registry), tc.image)
+		require.Equal(t, tc.want, RewriteImageRegistry(tc.image, registry), tc.image)
 	}
 }
 

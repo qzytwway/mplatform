@@ -459,6 +459,7 @@
     "observability": "Observability",
     "modelServing": "Model Serving",
     "inferenceServices": "Inference Services",
+    "gateway": "Gateway",
     "modelRegistry": "Model Registry",
     "gpuResources": "GPU Resources",
     "metrics": "Prometheus Metrics",
@@ -1684,11 +1685,21 @@
       "scaleTitle": "Scale inference service",
       "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
       "scaleDescriptionPD": "Set the prefill and decode replicas. The router is not scalable.",
+      "published": "Published",
+      "publish": "Publish to gateway",
+      "unpublish": "Unpublish",
+      "publishHint": "Publish this service so callers can reach its model through the gateway with an API key.",
+      "gatewayRequired": "The gateway is not installed in this cluster. Install it on the Gateway page before publishing.",
+      "gatewayModel": "Model name",
+      "unpublishTitle": "Unpublish from the gateway?",
+      "unpublishDescription": "Callers will no longer reach this model through the gateway. The service itself keeps running.",
       "messages": {
         "created": "Inference service created",
         "deleted": "Inference service deleted",
         "deleteNote": "The workload, router, Service, and storage credential Secret of this service will be deleted.",
-        "scaled": "Inference service scaled"
+        "scaled": "Inference service scaled",
+        "published": "Service published to the gateway",
+        "unpublished": "Service unpublished"
       }
     },
     "models": {
@@ -1760,6 +1771,63 @@
         "installed": "LeaderWorkerSet installed",
         "uninstalled": "LeaderWorkerSet uninstalled",
         "uninstallNote": "Delete every inference service in this cluster first."
+      }
+    },
+    "gateway": {
+      "title": "Gateway",
+      "installTitle": "Install gateway",
+      "description": "Install Higress into this cluster as the single entry point for published inference services. It routes each request by the model name in its body and checks the caller's API key. It is exposed through a NodePort.",
+      "nodeHost": "Node address",
+      "nodeHostHint": "Enter an IP address or host name of a node in this cluster. Callers reach the gateway at http://<node address>:<NodePort>.",
+      "hub": "Image registry",
+      "hubHint": "Higress images and plugins are pulled from this registry. Leave blank for the default (Hangzhou). Official mirrors: higress-registry.ap-southeast-7.cr.aliyuncs.com (Southeast Asia) and higress-registry.us-west-1.cr.aliyuncs.com (North America). For an offline registry, mirror the images and plugins listed below under the same paths.",
+      "hubInUse": "Image registry:",
+      "chartsHint": "The chart is read from the local chart directory. Offline clusters also need the images and plugins below; the cluster pulls them from its image registry setting.",
+      "chartMissing": "Not in the local chart directory",
+      "plugin": "Plugin",
+      "install": "Install",
+      "installing": "Installing...",
+      "uninstall": "Uninstall",
+      "address": "Access address",
+      "addressHint": "Published inference services are served at this address. Requests need a caller API key.",
+      "sync": "Resync",
+      "syncHint": "Re-applies all callers and published models to the gateway. Use it when a change reported a sync failure.",
+      "messages": {
+        "installed": "Gateway installed",
+        "uninstalled": "Gateway uninstalled",
+        "synced": "Gateway resynced",
+        "uninstallNote": "Unpublish every inference service in this cluster first. Callers are kept."
+      },
+      "usage": {
+        "title": "Usage examples",
+        "description": "Replace <API_KEY> with a caller key and <MODEL> with the model name of a published service.",
+        "chat": "Chat completions",
+        "embeddings": "Embeddings"
+      }
+    },
+    "callers": {
+      "title": "Callers",
+      "description": "Each caller has its own API key and a list of models it may access.",
+      "create": "Add Caller",
+      "createTitle": "Add caller",
+      "editTitle": "Edit caller",
+      "resourceType": "Caller",
+      "empty": "No callers. Published models reject every request until a caller is allowed to access them.",
+      "notInstalledHint": "The gateway is not installed. Callers are saved and take effect once it is installed.",
+      "nameHint": "Lowercase letters, digits, and hyphens. Cannot be changed later.",
+      "models": "Accessible models",
+      "allModels": "All models",
+      "modelsHint": "A caller without any model is rejected for every request.",
+      "toggle": "Enable caller {{name}}",
+      "resetKey": "Reset Key",
+      "resetKeyTitle": "Reset the key of {{name}}?",
+      "resetKeyDescription": "A new key is generated and the current key stops working immediately.",
+      "newKeyTitle": "API key of {{name}}",
+      "newKeyDescription": "Use it as Authorization: Bearer <key>. You can view it again from the callers table.",
+      "messages": {
+        "created": "Caller added",
+        "updated": "Caller updated",
+        "deleted": "Caller deleted"
       }
     }
   }

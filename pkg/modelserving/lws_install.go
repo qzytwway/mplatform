@@ -20,13 +20,15 @@ const (
 	lwsActionTimeout = 5 * time.Minute
 )
 
-// chartStatus reports whether the LeaderWorkerSet chart is in the local chart
-// repository, and the image an offline registry must provide for it before
-// the cluster image registry rewrite is applied.
+// chartStatus reports whether a chart model serving installs is in the local
+// chart repository, and the images an offline registry must provide for it
+// before the cluster image registry rewrite is applied. Images is only set
+// for charts that need more than one.
 type chartStatus struct {
-	Name    string `json:"name"`
-	Version string `json:"version,omitempty"`
-	Image   string `json:"image,omitempty"`
+	Name    string   `json:"name"`
+	Version string   `json:"version,omitempty"`
+	Image   string   `json:"image,omitempty"`
+	Images  []string `json:"images,omitempty"`
 }
 
 func lwsChartStatus() (chartStatus, error) {

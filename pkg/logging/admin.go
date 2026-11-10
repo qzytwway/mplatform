@@ -6,10 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +15,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
+	"github.com/qzytwway/mplatform/pkg/utils"
 	"gorm.io/gorm"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -32,8 +31,6 @@ const (
 	defaultStorageSize = "20Gi"
 	defaultRetention   = "7d"
 	defaultNodePort    = 30428
-	minNodePort        = 30000
-	maxNodePort        = 32767
 )
 
 var (
@@ -211,14 +208,11 @@ func parseInstallStorageRequest(req *installStorageRequest) (storageOptions, str
 	if !retentionPattern.MatchString(opts.Retention) {
 		return opts, "", fmt.Errorf("retention must be a number followed by h, d, w or y, such as 7d")
 	}
-	if opts.NodePort < minNodePort || opts.NodePort > maxNodePort {
-		return opts, "", fmt.Errorf("node port must be between %d and %d", minNodePort, maxNodePort)
+	endpoint, err := utils.NodeEndpoint(req.NodeHost, opts.NodePort)
+	if err != nil {
+		return opts, "", err
 	}
-	host := strings.TrimSpace(req.NodeHost)
-	if net.ParseIP(host) == nil && len(validation.IsDNS1123Subdomain(host)) > 0 {
-		return opts, "", fmt.Errorf("node address must be an IP address or host name")
-	}
-	return opts, "http://" + net.JoinHostPort(host, strconv.Itoa(opts.NodePort)), nil
+	return opts, "http://" + endpoint, nil
 }
 
 func (h *Handler) UninstallStorage(c *gin.Context) {

@@ -101,7 +101,7 @@ func (r imageRegistryPostRenderer) rewriteImages(node *yaml.Node) {
 
 func (r imageRegistryPostRenderer) rewriteContainerImage(container *yaml.Node) {
 	if image := mappingValue(container, "image"); image != nil && image.Kind == yaml.ScalarNode {
-		image.Value = rewriteImageRegistry(image.Value, r.imageRegistry)
+		image.Value = RewriteImageRegistry(image.Value, r.imageRegistry)
 	}
 	args := mappingValue(container, "args")
 	if args == nil || args.Kind != yaml.SequenceNode {
@@ -110,7 +110,7 @@ func (r imageRegistryPostRenderer) rewriteContainerImage(container *yaml.Node) {
 	for _, arg := range args.Content {
 		for _, prefix := range imageArgPrefixes {
 			if image, ok := strings.CutPrefix(arg.Value, prefix); ok && arg.Kind == yaml.ScalarNode {
-				arg.Value = prefix + rewriteImageRegistry(image, r.imageRegistry)
+				arg.Value = prefix + RewriteImageRegistry(image, r.imageRegistry)
 			}
 		}
 	}
@@ -126,7 +126,7 @@ func (r imageRegistryPostRenderer) rewriteMonitoringImage(document *yaml.Node) {
 		return
 	}
 	if image := mappingValue(mappingValue(resource, "spec"), "image"); image != nil && image.Kind == yaml.ScalarNode {
-		image.Value = rewriteImageRegistry(image.Value, r.imageRegistry)
+		image.Value = RewriteImageRegistry(image.Value, r.imageRegistry)
 	}
 }
 
@@ -142,9 +142,9 @@ func mappingValue(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// rewriteImageRegistry returns image under imageRegistry. Images already
+// RewriteImageRegistry returns image under imageRegistry. Images already
 // served by the registry's host, and unparsable references, are unchanged.
-func rewriteImageRegistry(image, imageRegistry string) string {
+func RewriteImageRegistry(image, imageRegistry string) string {
 	named, err := reference.ParseNormalizedNamed(image)
 	if err != nil {
 		return image

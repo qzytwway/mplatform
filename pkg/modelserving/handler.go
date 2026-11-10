@@ -32,5 +32,17 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g.GET("/clusters/:cluster/services/:namespace/:name", h.GetService)
 	g.PUT("/clusters/:cluster/services/:namespace/:name/scale", h.ScaleService)
 	g.DELETE("/clusters/:cluster/services/:namespace/:name", h.DeleteService)
+	g.PUT("/clusters/:cluster/services/:namespace/:name/publish", h.PublishService)
 	g.GET("/clusters/:cluster/gpus", h.ListGPUNodes)
+
+	g.GET("/clusters/:cluster/gateway", h.GetGateway)
+	g.POST("/clusters/:cluster/gateway", h.InstallGateway)
+	g.DELETE("/clusters/:cluster/gateway", h.UninstallGateway)
+	g.POST("/clusters/:cluster/gateway/sync", h.SyncGateway)
+	g.GET("/clusters/:cluster/callers", h.ListCallers)
+	g.POST("/clusters/:cluster/callers", h.CreateCaller)
+	g.PUT("/clusters/:cluster/callers/:id", h.UpdateCaller)
+	g.GET("/clusters/:cluster/callers/:id/key", h.GetCallerKey)
+	g.POST("/clusters/:cluster/callers/:id/reset-key", h.ResetCallerKey)
+	g.DELETE("/clusters/:cluster/callers/:id", h.DeleteCaller)
 }

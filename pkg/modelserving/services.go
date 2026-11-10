@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,7 +71,25 @@ func (h *Handler) ListServices(c *gin.Context) {
 }
 
 func listServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceService, error) {
-	items := []inferenceService{}
+	workloads, err := listWorkloads(ctx, cs)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]inferenceService, 0, len(workloads))
+	for i := range workloads {
+		service, err := describeWorkload(ctx, cs, &workloads[i])
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, service)
+	}
+	return items, nil
+}
+
+// listWorkloads returns the workloads of every inference service in the
+// cluster, skipping kinds whose CRD is not installed.
+func listWorkloads(ctx context.Context, cs *cluster.ClientSet) ([]unstructured.Unstructured, error) {
+	items := []unstructured.Unstructured{}
 	for _, kind := range workloadKinds {
 		installed, err := crdInstalled(ctx, cs, kind.crd)
 		if err != nil {
@@ -85,14 +104,9 @@ func listServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceServic
 			return nil, err
 		}
 		for i := range workloads.Items {
-			if !isService(&workloads.Items[i]) {
-				continue
+			if isService(&workloads.Items[i]) {
+				items = append(items, workloads.Items[i])
 			}
-			service, err := describeWorkload(ctx, cs, &workloads.Items[i])
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, service)
 		}
 	}
 	return items, nil
@@ -371,6 +385,9 @@ func (h *Handler) DeleteService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if isPublished(workload) && !syncGatewayIfInstalled(c, cs) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "inference service deleted"})
 }
 
@@ -387,6 +404,7 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 		{rbacv1.SchemeGroupVersion.WithKind("RoleBinding"), name + routerSuffix},
 		{rbacv1.SchemeGroupVersion.WithKind("Role"), name + routerSuffix},
 		{corev1.SchemeGroupVersion.WithKind("ServiceAccount"), name + routerSuffix},
+		{networkingv1.SchemeGroupVersion.WithKind("Ingress"), name + ingressSuffix},
 		{corev1.SchemeGroupVersion.WithKind("Service"), name},
 		{corev1.SchemeGroupVersion.WithKind("Secret"), name + storageSecretSuffix},
 	}

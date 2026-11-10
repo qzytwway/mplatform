@@ -13,6 +13,7 @@ import {
   IconFileText,
   IconLayoutDashboard,
   IconRocket,
+  IconRouteAltLeft,
   IconSparkles,
 } from '@tabler/icons-react'
 import { CustomResourceDefinition } from 'kubernetes-types/apiextensions/v1'
@@ -57,6 +58,11 @@ const MODEL_SERVING_ITEMS = [
     url: '/model-serving/services',
     titleKey: 'nav.inferenceServices',
     Icon: IconRocket,
+  },
+  {
+    url: '/model-serving/gateway',
+    titleKey: 'nav.gateway',
+    Icon: IconRouteAltLeft,
   },
   {
     url: '/model-serving/models',

@@ -36,6 +36,7 @@ type inferenceService struct {
 	GroupSize  int64         `json:"groupSize"`
 	Roles      []serviceRole `json:"roles"`
 	Ready      bool          `json:"ready"`
+	Published  bool          `json:"published"`
 	Endpoint   string        `json:"endpoint"`
 	CreatedAt  time.Time     `json:"createdAt"`
 }
@@ -68,6 +69,7 @@ func describeWorkload(ctx context.Context, cs *cluster.ClientSet, workload *unst
 		Runtime:    annotations[runtimeAnnotation],
 		SourceType: annotations[sourceTypeAnnotation],
 		Mode:       annotations[modeAnnotation],
+		Published:  isPublished(workload),
 		Endpoint:   fmt.Sprintf("http://%s.%s.svc:%d/v1", workload.GetName(), workload.GetNamespace(), servingPort),
 		CreatedAt:  workload.GetCreationTimestamp().Time,
 	}

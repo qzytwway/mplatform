@@ -9,6 +9,7 @@ import { HelmChartDetailPage } from './pages/helm-chart-detail-page'
 import { HelmChartListPage } from './pages/helm-chart-list-page'
 import { InitializationPage } from './pages/initialization'
 import { LoginPage } from './pages/login'
+import { GatewayPage } from './pages/model-serving/gateway-page'
 import { GPUsPage } from './pages/model-serving/gpus-page'
 import { ModelsPage } from './pages/model-serving/models-page'
 import { ServiceDetailPage } from './pages/model-serving/service-detail-page'
@@ -88,6 +89,10 @@ export const router = createBrowserRouter(
         {
           path: 'model-serving/services/:namespace/:name',
           element: <ServiceDetailPage />,
+        },
+        {
+          path: 'model-serving/gateway',
+          element: <GatewayPage />,
         },
         {
           path: 'model-serving/models',

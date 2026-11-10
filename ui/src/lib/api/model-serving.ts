@@ -61,6 +61,7 @@ export interface InferenceService {
   groupSize: number
   roles: InferenceServiceRole[]
   ready: boolean
+  published: boolean
   endpoint: string
   createdAt: string
 }
@@ -133,7 +134,7 @@ export interface GPUNode {
 const BASE = '/admin/model-serving'
 const SERVICES_REFRESH_MS = 10000
 
-function clusterPath(cluster: string | null, path: string) {
+export function clusterPath(cluster: string | null, path: string) {
   return `${BASE}/clusters/${encodeURIComponent(cluster ?? '')}${path}`
 }
 
@@ -233,6 +234,18 @@ export function scaleInferenceService(
   return apiClient.put<InferenceService>(
     `${servicePath(cluster, namespace, name)}/scale`,
     request
+  )
+}
+
+export function setInferenceServicePublished(
+  cluster: string,
+  namespace: string,
+  name: string,
+  published: boolean
+) {
+  return apiClient.put<InferenceService>(
+    `${servicePath(cluster, namespace, name)}/publish`,
+    { published }
   )
 }
 
