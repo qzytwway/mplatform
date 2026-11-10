@@ -124,12 +124,12 @@ export function SettingsHint({ onDismiss }: SettingsHintProps) {
             item.completed ? (
               <div
                 key={item.key}
-                className="group flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 transition-all dark:border-green-800 dark:bg-green-950/50"
+                className="group flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 transition-all"
               >
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-success/10 text-success">
                   <IconCheck className="h-3 w-3" />
                 </div>
-                <span className="text-sm font-medium text-green-900 dark:text-green-100">
+                <span className="text-sm font-medium text-foreground">
                   {item.title}
                 </span>
               </div>

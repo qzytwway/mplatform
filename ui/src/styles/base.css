@@ -57,6 +57,8 @@ samp {
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -110,22 +112,22 @@ body {
   100% {
     opacity: 0.5;
     transform: scale(1);
-    box-shadow: 0 0 2px rgba(74, 222, 128, 0.4);
+    box-shadow: 0 0 2px color-mix(in oklch, var(--success) 40%, transparent);
   }
   25% {
     opacity: 0.7;
     transform: scale(1.05);
-    box-shadow: 0 0 4px rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 4px color-mix(in oklch, var(--success) 60%, transparent);
   }
   50% {
     opacity: 1;
     transform: scale(1.1);
-    box-shadow: 0 0 8px rgba(74, 222, 128, 0.9);
+    box-shadow: 0 0 8px color-mix(in oklch, var(--success) 90%, transparent);
   }
   75% {
     opacity: 0.7;
     transform: scale(1.05);
-    box-shadow: 0 0 4px rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 4px color-mix(in oklch, var(--success) 60%, transparent);
   }
 }
 

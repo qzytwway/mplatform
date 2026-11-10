@@ -239,7 +239,7 @@ function PodOverviewContainerRow({
           points={metrics?.cpu || []}
           value={formatCpuUsage(getLastMetricValue(metrics?.cpu))}
           limit={container.resources?.limits?.cpu}
-          colorClassName="text-emerald-500"
+          colorClassName="text-success"
         />
       </TableCell>
       <TableCell className="px-1 text-center">
@@ -356,10 +356,10 @@ function MiniSparkline({
 
 function getStatusDotClassName(state: string) {
   if (state === 'Running' || state === 'Completed') {
-    return 'bg-emerald-500'
+    return 'bg-success'
   }
   if (state === 'Waiting' || state.startsWith('Init')) {
-    return 'bg-yellow-500'
+    return 'bg-warning'
   }
   return 'bg-destructive'
 }

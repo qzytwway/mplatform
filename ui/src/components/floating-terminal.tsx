@@ -108,7 +108,7 @@ export function FloatingTerminal() {
           className="flex items-center gap-2 text-sm font-semibold tracking-wide text-foreground hover:opacity-70 transition-opacity"
           onClick={handleMinimize}
         >
-          <span className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-sm" />
+          <span className="h-2.5 w-2.5 rounded-full bg-success shadow-sm" />
           Kubectl Terminal
         </button>
 

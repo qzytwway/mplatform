@@ -39,11 +39,11 @@ interface DiskIOUsageChartProps {
 const chartConfig = {
   diskWrite: {
     label: 'Write',
-    color: 'oklch(0.55 0.22 235)',
+    color: 'var(--chart-4)',
   },
   diskRead: {
     label: 'Read',
-    color: 'oklch(0.55 0.20 145)',
+    color: 'var(--chart-3)',
   },
 } satisfies ChartConfig
 
@@ -103,7 +103,11 @@ const DiskIOUsageChart = React.memo((prop: DiskIOUsageChartProps) => {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" />
-          <ReferenceLine y={0} stroke="#666" strokeDasharray="2 2" />
+          <ReferenceLine
+            y={0}
+            stroke="var(--muted-foreground)"
+            strokeDasharray="2 2"
+          />
           <XAxis
             dataKey="timestamp"
             tickLine={false}
@@ -131,7 +135,7 @@ const DiskIOUsageChart = React.memo((prop: DiskIOUsageChartProps) => {
                       style={{
                         backgroundColor:
                           chartConfig[name as keyof typeof chartConfig]
-                            ?.color || '#666',
+                            ?.color || 'var(--muted-foreground)',
                       }}
                     />
                     <span>

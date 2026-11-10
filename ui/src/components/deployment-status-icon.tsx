@@ -25,35 +25,21 @@ export const DeploymentStatusIcon = ({
 
   switch (status) {
     case 'Available':
-      return (
-        <IconCircleCheckFilled
-          className={`fill-green-500 dark:fill-green-400 ${className}`}
-        />
-      )
+      return <IconCircleCheckFilled className={`fill-success ${className}`} />
 
     case 'Unknown':
     case 'Not Available':
       return <IconCircleXFilled className={`fill-destructive ${className}`} />
 
     case 'Terminating':
-      return (
-        <IconTrash
-          className={`text-orange-500 dark:text-orange-400 ${className}`}
-        />
-      )
+      return <IconTrash className={`text-warning ${className}`} />
 
     case 'Paused':
-      return (
-        <IconPlayerPause
-          className={`fill-purple-500 dark:fill-purple-400 ${className}`}
-        />
-      )
+      return <IconPlayerPause className={`fill-info ${className}`} />
 
     case 'Scaled Down':
       return (
-        <IconTrendingDown
-          className={`text-gray-500 dark:text-gray-400 ${className}`}
-        />
+        <IconTrendingDown className={`text-muted-foreground ${className}`} />
       )
 
     case 'Progressing':
@@ -64,7 +50,7 @@ export const DeploymentStatusIcon = ({
     default:
       return (
         <IconExclamationCircle
-          className={`fill-gray-500 dark:fill-gray-400 ${className}`}
+          className={`fill-muted-foreground ${className}`}
         />
       )
   }

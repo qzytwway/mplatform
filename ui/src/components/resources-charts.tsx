@@ -118,7 +118,7 @@ export function ResourceCharts(props: ResourceChartsProps) {
                           requestIsHigh
                             ? 'bg-destructive'
                             : requestIsMedium
-                              ? 'bg-yellow-500'
+                              ? 'bg-warning'
                               : 'bg-primary'
                         }`}
                         style={{
@@ -133,9 +133,7 @@ export function ResourceCharts(props: ResourceChartsProps) {
 
                   <div>
                     <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span className="font-medium text-orange-600">
-                        Limits
-                      </span>
+                      <span className="font-medium text-warning">Limits</span>
                       <span className="font-mono">
                         {resource.limit.toFixed(1)} {resource.unit}
                       </span>
@@ -146,8 +144,8 @@ export function ResourceCharts(props: ResourceChartsProps) {
                           limitIsHigh
                             ? 'bg-destructive'
                             : limitIsMedium
-                              ? 'bg-yellow-500'
-                              : 'bg-orange-500'
+                              ? 'bg-warning'
+                              : 'bg-warning'
                         }`}
                         style={{
                           width: `${Math.min(resource.limitPercentage, 100)}%`,

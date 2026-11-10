@@ -37,11 +37,11 @@ const ResourceUtilizationChart = React.memo(
       },
       cpu: {
         label: t('common.fields.cpu'),
-        color: 'hsl(220, 70%, 50%)',
+        color: 'var(--chart-4)',
       },
       memory: {
         label: t('common.fields.memory'),
-        color: 'hsl(142, 70%, 50%)',
+        color: 'var(--chart-3)',
       },
     } satisfies ChartConfig
     const chartData = React.useMemo(() => {

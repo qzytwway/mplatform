@@ -52,10 +52,7 @@ const MemoryUsageChart = React.memo((prop: MemoryUsageChartProps) => {
     () => ({
       memory: {
         label: `Memory (${useGB ? 'GB' : 'MB'})`,
-        theme: {
-          light: 'hsl(142, 70%, 50%)',
-          dark: 'hsl(150, 80%, 60%)',
-        },
+        color: 'var(--chart-3)',
       },
     }),
     [useGB]

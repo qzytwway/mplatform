@@ -33,7 +33,7 @@ export function RecentEvents() {
   const getEventIcon = (type: string) => {
     switch (type.toLowerCase()) {
       case 'warning':
-        return <IconAlertTriangle className="size-4 text-yellow-600" />
+        return <IconAlertTriangle className="size-4 text-warning" />
       case 'error':
         return <IconX className="size-4 text-destructive" />
       default:

@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
 import { formatHex } from 'culori'
 
-import { TERMINAL_THEMES } from '@/types/themes'
-
 type MonacoModule = typeof import('monaco-editor')
 
 const definedThemeSignatures = new Map<string, string>()
 
 function getDefaultBackground(actualTheme: 'dark' | 'light') {
-  return actualTheme === 'dark' ? '#18181b' : '#ffffff'
+  return actualTheme === 'dark' ? '#191817' : '#ffffff'
 }
 
 function defineThemeIfNeeded(
@@ -95,26 +93,4 @@ export function defineMonacoBackgroundThemes(
       },
     }
   )
-}
-
-export function defineMonacoLogThemes(monaco: MonacoModule) {
-  for (const [themeKey, theme] of Object.entries(TERMINAL_THEMES)) {
-    defineThemeIfNeeded(
-      monaco,
-      `log-theme-${themeKey}`,
-      `log-theme-${themeKey}`,
-      {
-        base: themeKey === 'github' ? 'vs' : 'vs-dark',
-        inherit: true,
-        rules: [{ token: '', foreground: theme.foreground.replace('#', '') }],
-        colors: {
-          'editor.background': theme.background,
-          'editor.foreground': theme.foreground,
-          'editorCursor.foreground': theme.cursor,
-          'editor.selectionBackground': theme.selection,
-          'editor.lineHighlightBackground': theme.selection,
-        },
-      }
-    )
-  }
 }

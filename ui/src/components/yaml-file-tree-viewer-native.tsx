@@ -183,7 +183,7 @@ function flattenTree<T extends { path: string }>(
 function statusClassName(status: NativeTreeStatus | null) {
   switch (status) {
     case 'added':
-      return 'text-emerald-600 dark:text-emerald-400'
+      return 'text-success'
     case 'deleted':
       return 'text-destructive'
     case 'modified':

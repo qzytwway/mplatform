@@ -155,8 +155,8 @@ export function InitializationPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-background text-foreground [--primary:#6366f1] [--primary-foreground:#fff] [--ring:#6366f1] [font-family:var(--font-sans)] lg:grid lg:grid-cols-[20rem_1fr] xl:grid-cols-[24rem_1fr]">
-      <aside className="flex flex-col border-b bg-[#f7f8fc] px-6 py-6 dark:bg-muted/30 sm:px-8 lg:min-h-dvh lg:border-r lg:border-b-0 lg:py-8 xl:px-10">
+    <div className="min-h-dvh bg-background text-foreground [font-family:var(--font-sans)] lg:grid lg:grid-cols-[20rem_1fr] xl:grid-cols-[24rem_1fr]">
+      <aside className="flex flex-col border-b bg-muted/40 px-6 py-6 sm:px-8 lg:min-h-dvh lg:border-r lg:border-b-0 lg:py-8 xl:px-10">
         <div className="flex items-center gap-3">
           <img src={Logo} alt="" className="size-9" />
           <span className="font-mono text-2xl font-semibold tracking-tight">

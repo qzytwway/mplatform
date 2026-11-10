@@ -4,48 +4,46 @@
  * Supports basic color codes and formatting
  */
 
-// ANSI color codes mapping
+// ANSI color codes resolve to the theme's terminal palette
 const ANSI_COLORS = {
-  // Standard colors (30-37, 90-97)
-  30: '#000000', // black
-  31: '#cd3131', // red
-  32: '#0dbc79', // green
-  33: '#e5e510', // yellow
-  34: '#2472c8', // blue
-  35: '#bc3fbc', // magenta
-  36: '#11a8cd', // cyan
-  37: '#e5e5e5', // white
+  30: 'var(--ansi-black)',
+  31: 'var(--ansi-red)',
+  32: 'var(--ansi-green)',
+  33: 'var(--ansi-yellow)',
+  34: 'var(--ansi-blue)',
+  35: 'var(--ansi-magenta)',
+  36: 'var(--ansi-cyan)',
+  37: 'var(--ansi-white)',
 
-  // Bright colors (90-97)
-  90: '#666666', // bright black (gray)
-  91: '#f14c4c', // bright red
-  92: '#23d18b', // bright green
-  93: '#f5f543', // bright yellow
-  94: '#3b8eea', // bright blue
-  95: '#d670d6', // bright magenta
-  96: '#29b8db', // bright cyan
-  97: '#ffffff', // bright white
+  90: 'var(--ansi-bright-black)',
+  91: 'var(--ansi-bright-red)',
+  92: 'var(--ansi-bright-green)',
+  93: 'var(--ansi-bright-yellow)',
+  94: 'var(--ansi-bright-blue)',
+  95: 'var(--ansi-bright-magenta)',
+  96: 'var(--ansi-bright-cyan)',
+  97: 'var(--ansi-bright-white)',
 } as const
 
 // Background colors (40-47, 100-107)
 const ANSI_BG_COLORS = {
-  40: '#000000', // black
-  41: '#cd3131', // red
-  42: '#0dbc79', // green
-  43: '#e5e510', // yellow
-  44: '#2472c8', // blue
-  45: '#bc3fbc', // magenta
-  46: '#11a8cd', // cyan
-  47: '#e5e5e5', // white
+  40: 'var(--ansi-black)',
+  41: 'var(--ansi-red)',
+  42: 'var(--ansi-green)',
+  43: 'var(--ansi-yellow)',
+  44: 'var(--ansi-blue)',
+  45: 'var(--ansi-magenta)',
+  46: 'var(--ansi-cyan)',
+  47: 'var(--ansi-white)',
 
-  100: '#666666', // bright black
-  101: '#f14c4c', // bright red
-  102: '#23d18b', // bright green
-  103: '#f5f543', // bright yellow
-  104: '#3b8eea', // bright blue
-  105: '#d670d6', // bright magenta
-  106: '#29b8db', // bright cyan
-  107: '#ffffff', // bright white
+  100: 'var(--ansi-bright-black)',
+  101: 'var(--ansi-bright-red)',
+  102: 'var(--ansi-bright-green)',
+  103: 'var(--ansi-bright-yellow)',
+  104: 'var(--ansi-bright-blue)',
+  105: 'var(--ansi-bright-magenta)',
+  106: 'var(--ansi-bright-cyan)',
+  107: 'var(--ansi-bright-white)',
 } as const
 
 export interface AnsiState {

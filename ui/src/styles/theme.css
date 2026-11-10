@@ -1,4 +1,4 @@
-/* Default Theme: Graphite — warm neutral grays, ink as the only accent */
+/* Graphite: warm neutral grays, ink as the only accent; hue is reserved for status */
 :root {
   --background: oklch(0.99 0.002 70);
   --foreground: oklch(0.22 0.005 70);
@@ -16,6 +16,8 @@
   --accent-foreground: oklch(0.25 0.006 70);
   --destructive: oklch(0.55 0.11 45);
   --info: oklch(0.5 0.07 295);
+  --success: oklch(0.52 0.08 150);
+  --warning: oklch(0.56 0.11 70);
   --border: oklch(0.915 0.004 70);
   --input: oklch(0.9 0.004 70);
   --ring: oklch(0.55 0.006 70);
@@ -32,6 +34,22 @@
   --sidebar-accent-foreground: oklch(0.22 0.005 70);
   --sidebar-border: oklch(0.91 0.004 70);
   --sidebar-ring: oklch(0.55 0.006 70);
+  --ansi-black: oklch(0.27 0.006 70);
+  --ansi-red: var(--destructive);
+  --ansi-green: var(--success);
+  --ansi-yellow: var(--warning);
+  --ansi-blue: var(--info);
+  --ansi-magenta: oklch(0.52 0.07 330);
+  --ansi-cyan: oklch(0.52 0.045 190);
+  --ansi-white: oklch(0.55 0.006 70);
+  --ansi-bright-black: oklch(0.5 0.006 70);
+  --ansi-bright-red: oklch(0.56 0.12 45);
+  --ansi-bright-green: oklch(0.54 0.09 150);
+  --ansi-bright-yellow: oklch(0.56 0.12 75);
+  --ansi-bright-blue: oklch(0.56 0.08 295);
+  --ansi-bright-magenta: oklch(0.55 0.08 330);
+  --ansi-bright-cyan: oklch(0.54 0.05 190);
+  --ansi-bright-white: oklch(0.35 0.006 70);
 }
 
 .dark {
@@ -51,6 +69,8 @@
   --accent-foreground: oklch(0.93 0.003 70);
   --destructive: oklch(0.72 0.1 50);
   --info: oklch(0.76 0.06 295);
+  --success: oklch(0.76 0.08 150);
+  --warning: oklch(0.8 0.1 80);
   --border: oklch(1 0 0 / 9%);
   --input: oklch(1 0 0 / 14%);
   --ring: oklch(0.6 0.006 70);
@@ -67,4 +87,16 @@
   --sidebar-accent-foreground: oklch(0.93 0.003 70);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.6 0.006 70);
+  --ansi-black: oklch(0.32 0.004 70);
+  --ansi-magenta: oklch(0.76 0.07 330);
+  --ansi-cyan: oklch(0.78 0.045 190);
+  --ansi-white: oklch(0.85 0.004 70);
+  --ansi-bright-black: oklch(0.62 0.006 70);
+  --ansi-bright-red: oklch(0.8 0.1 50);
+  --ansi-bright-green: oklch(0.83 0.08 150);
+  --ansi-bright-yellow: oklch(0.87 0.1 85);
+  --ansi-bright-blue: oklch(0.84 0.06 295);
+  --ansi-bright-magenta: oklch(0.84 0.07 330);
+  --ansi-bright-cyan: oklch(0.86 0.045 190);
+  --ansi-bright-white: oklch(0.97 0.002 70);
 }

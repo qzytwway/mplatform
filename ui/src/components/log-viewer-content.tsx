@@ -5,7 +5,6 @@ import {
   IconDownload,
   IconMaximize,
   IconMinimize,
-  IconPalette,
   IconSearch,
   IconSettings,
   IconX,
@@ -14,7 +13,6 @@ import { Container, EphemeralContainer, Pod } from 'kubernetes-types/core/v1'
 import type { editor } from 'monaco-editor'
 import { useTranslation } from 'react-i18next'
 
-import { TERMINAL_THEMES, TerminalTheme } from '@/types/themes'
 import {
   AnsiState,
   generateAnsiCss,
@@ -24,7 +22,10 @@ import {
 import { useLogsWebSocket } from '@/lib/api'
 import { toSimpleContainer } from '@/lib/k8s'
 import { MonacoEditor } from '@/lib/monaco-loader'
-import { defineMonacoLogThemes } from '@/lib/monaco-theme'
+import {
+  defineMonacoBackgroundThemes,
+  useMonacoBackgroundColor,
+} from '@/lib/monaco-theme'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -49,6 +50,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { useAppearance } from './appearance-provider'
 import { ConnectionIndicator } from './connection-indicator'
 import { NetworkSpeedIndicator } from './network-speed-indicator'
 import { ContainerSelector } from './selector/container-selector'
@@ -69,10 +71,6 @@ export interface LogViewerProps {
 const ANSI_CSS = generateAnsiCss()
 // Monaco's NeverGrowsWhenTypingAtEdges value, kept numeric to avoid importing Monaco at runtime.
 const NEVER_GROWS_WHEN_TYPING_AT_EDGES: editor.TrackedRangeStickiness = 1
-const TERMINAL_THEME_KEYS = Object.keys(TERMINAL_THEMES) as TerminalTheme[]
-const TERMINAL_THEME_ENTRIES = Object.entries(TERMINAL_THEMES) as Array<
-  [TerminalTheme, (typeof TERMINAL_THEMES)[TerminalTheme]]
->
 
 export function LogViewer({
   namespace,
@@ -85,10 +83,11 @@ export function LogViewer({
   onClose,
   labelSelector,
 }: LogViewerProps) {
-  const [logTheme, setLogTheme] = useState<TerminalTheme>(() => {
-    const saved = localStorage.getItem('log-viewer-theme')
-    return (saved as TerminalTheme) || 'classic'
-  })
+  const { actualTheme } = useAppearance()
+  const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
+  const backgroundColor = useMonacoBackgroundColor('--card', themeMode)
+  const editorThemeName = `log-viewer-${themeMode}`
+  const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
   const containers = useMemo(() => {
     return toSimpleContainer(initContainers, _containers, ephemeralContainers)
   }, [_containers, initContainers, ephemeralContainers])
@@ -148,7 +147,6 @@ export function LogViewer({
         : 1
     )
   }, [pods])
-  const currentTheme = TERMINAL_THEMES[logTheme]
 
   const [selectPodName, setSelectPodName] = useState<string | undefined>(
     podName || pods?.[0]?.metadata?.name || undefined
@@ -199,12 +197,6 @@ export function LogViewer({
     })
   }, [containers, selectedContainerName])
 
-  // Handle theme change and persist to localStorage
-  const handleThemeChange = useCallback((theme: TerminalTheme) => {
-    setLogTheme(theme)
-    localStorage.setItem('log-viewer-theme', theme)
-  }, [])
-
   // Handle font size change and persist to localStorage
   const handleFontSizeChange = useCallback((size: number) => {
     setFontSize(size)
@@ -219,12 +211,16 @@ export function LogViewer({
     }
   }, [])
 
-  // Quick theme cycling function
-  const cycleTheme = useCallback(() => {
-    const currentIndex = TERMINAL_THEME_KEYS.indexOf(logTheme)
-    const nextIndex = (currentIndex + 1) % TERMINAL_THEME_KEYS.length
-    handleThemeChange(TERMINAL_THEME_KEYS[nextIndex])
-  }, [logTheme, handleThemeChange])
+  useEffect(() => {
+    const monaco = monacoRef.current
+    if (!monaco) return
+    defineMonacoBackgroundThemes(monaco, {
+      darkThemeName: 'log-viewer-dark',
+      lightThemeName: 'log-viewer-light',
+      backgroundColor,
+    })
+    monaco.editor.setTheme(editorThemeName)
+  }, [backgroundColor, editorThemeName])
 
   const writeLogToEditor = useCallback((log: string) => {
     if (!editorRef.current) {
@@ -579,23 +575,6 @@ export function LogViewer({
               />
             )}
 
-            {/* Quick Theme Toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={cycleTheme}
-              title={`Current theme: ${currentTheme.name}`}
-              className="relative"
-            >
-              <IconPalette className="h-4 w-4" />
-              <div
-                className="absolute -top-1 -right-1 w-3 h-3 rounded-full border border-gray-400"
-                style={{
-                  backgroundColor: currentTheme.background,
-                }}
-              ></div>
-            </Button>
-
             {/* Settings */}
             <Popover>
               <PopoverTrigger asChild>
@@ -662,30 +641,6 @@ export function LogViewer({
                       checked={showLineNumbers}
                       onCheckedChange={toggleShowLineNumbers}
                     />
-                  </div>
-
-                  {/* Log Theme Selector */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="log-theme">Log Theme</Label>
-                      <Select
-                        value={logTheme}
-                        onValueChange={handleThemeChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TERMINAL_THEME_ENTRIES.map(([key, theme]) => (
-                            <SelectItem key={key} value={key}>
-                              <div className="flex items-center gap-2">
-                                {theme.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
 
                   {/* Font Size Selector */}
@@ -815,14 +770,19 @@ export function LogViewer({
       <CardContent className="min-h-0 flex-1 p-0 relative">
         <MonacoEditor
           height="100%"
-          theme={`log-theme-${logTheme}`}
+          theme={editorThemeName}
           loading={
             <div className="flex h-full items-center justify-center">
               <div className="text-center opacity-60">Loading editor...</div>
             </div>
           }
           beforeMount={(monaco) => {
-            defineMonacoLogThemes(monaco)
+            monacoRef.current = monaco
+            defineMonacoBackgroundThemes(monaco, {
+              darkThemeName: 'log-viewer-dark',
+              lightThemeName: 'log-viewer-light',
+              backgroundColor,
+            })
           }}
           onMount={handleEditorMount}
           options={{
@@ -854,21 +814,11 @@ export function LogViewer({
           }}
         />
         {showScrollToBottom && (
-          <div
-            className={`absolute bottom-4 right-4 shadow-lg z-10  ml-auto w-fit animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${
-              logTheme === 'github'
-                ? 'bg-white/90 text-gray-600 border border-gray-200 shadow-sm'
-                : 'bg-gray-800/90 text-gray-300 border border-gray-600 shadow-sm'
-            } px-3 py-1.5 text-xs rounded-full backdrop-blur-sm`}
-          >
+          <div className="absolute bottom-4 right-4 z-10 ml-auto w-fit animate-in fade-in-0 slide-in-from-bottom-2 duration-300 bg-card/90 text-muted-foreground border border-border shadow-sm px-3 py-1.5 text-xs rounded-full backdrop-blur-sm">
             <Button
               size="sm"
               variant="ghost"
-              className={`h-auto p-0 text-xs font-normal ${
-                logTheme === 'github'
-                  ? 'text-gray-600 hover:text-gray-800 hover:bg-gray-100/70'
-                  : 'text-gray-300 hover:text-white hover:bg-gray-700/70'
-              }`}
+              className="h-auto p-0 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={scrollToBottom}
             >
               ↓ {t('common.actions.jumpToBottom', 'Jump to bottom')}

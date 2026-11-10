@@ -43,11 +43,11 @@ const NetworkUsageChart = React.memo((prop: NetworkUsageChartProps) => {
   const chartConfig = {
     networkIn: {
       label: t('monitoring.incoming'),
-      color: 'oklch(0.55 0.20 145)',
+      color: 'var(--chart-3)',
     },
     networkOut: {
       label: t('monitoring.outgoing'),
-      color: 'oklch(0.55 0.22 235)',
+      color: 'var(--chart-4)',
     },
   } satisfies ChartConfig
 
@@ -105,7 +105,11 @@ const NetworkUsageChart = React.memo((prop: NetworkUsageChartProps) => {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" />
-          <ReferenceLine y={0} stroke="#666" strokeDasharray="2 2" />
+          <ReferenceLine
+            y={0}
+            stroke="var(--muted-foreground)"
+            strokeDasharray="2 2"
+          />
           <XAxis
             dataKey="timestamp"
             tickLine={false}
@@ -133,7 +137,7 @@ const NetworkUsageChart = React.memo((prop: NetworkUsageChartProps) => {
                       style={{
                         backgroundColor:
                           chartConfig[name as keyof typeof chartConfig]
-                            ?.color || '#666',
+                            ?.color || 'var(--muted-foreground)',
                       }}
                     />
                     <span>

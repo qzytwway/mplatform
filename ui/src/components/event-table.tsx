@@ -153,10 +153,10 @@ function getEventSource(event: Event) {
 
 function getEventTypeClassName(type: string) {
   if (type === 'Normal') {
-    return 'text-emerald-600'
+    return 'text-success'
   }
   if (type === 'Warning') {
-    return 'text-yellow-600'
+    return 'text-warning'
   }
   return 'text-destructive'
 }

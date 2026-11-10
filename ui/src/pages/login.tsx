@@ -259,19 +259,21 @@ export function LoginPage() {
               <img src={Logo} className="h-10 w-10 dark:invert" />{' '}
               <h1 className="text-2xl font-bold">MPlatform</h1>
             </div>
-            <p className="text-gray-600">{t('login.kubernetesDashboard')}</p>
+            <p className="text-muted-foreground">
+              {t('login.kubernetesDashboard')}
+            </p>
           </div>
 
           <Card>
             <CardHeader className="text-center">
               <CardTitle className="text-xl">{t('login.signIn')}</CardTitle>
-              <CardDescription className="text-gray-600">
+              <CardDescription className="text-muted-foreground">
                 {t('login.subtitle')}
               </CardDescription>
               {loginPromptLines.map((line, index) => (
                 <p
                   key={`${index}-${line}`}
-                  className="text-sm text-gray-500 mt-2"
+                  className="text-sm text-muted-foreground mt-2"
                 >
                   {line}
                 </p>
@@ -309,7 +311,7 @@ export function LoginPage() {
                       >
                         {t('login.tryAgainDifferentAccount')}
                       </Button>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         {t('login.tryAgainHint')}
                       </p>
                     </div>
@@ -319,8 +321,10 @@ export function LoginPage() {
 
               {totalProviders === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-600">{t('login.noLoginMethods')}</p>
-                  <p className="text-sm text-gray-500 mt-2">
+                  <p className="text-muted-foreground">
+                    {t('login.noLoginMethods')}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">
                     {t('login.configureAuth')}
                   </p>
                 </div>

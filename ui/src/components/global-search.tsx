@@ -633,7 +633,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                         className="p-1 hover:bg-accent rounded transition-colors z-10 relative"
                       >
                         {isFav ? (
-                          <IconStarFilled className="h-3 w-3 text-yellow-500" />
+                          <IconStarFilled className="h-3 w-3 text-warning" />
                         ) : (
                           <IconStar className="h-3 w-3 text-muted-foreground opacity-50" />
                         )}

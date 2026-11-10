@@ -224,7 +224,7 @@ export function UserManagement() {
                       className="h-8 w-8 rounded-full object-cover"
                     />
                   ) : (
-                    <Avatar.Fallback className="h-8 w-8 rounded-full bg-muted-foreground text-white flex items-center justify-center">
+                    <Avatar.Fallback className="h-8 w-8 rounded-full bg-muted-foreground text-background flex items-center justify-center">
                       {row.original.username
                         .split(' ')
                         .map((part) => part[0])

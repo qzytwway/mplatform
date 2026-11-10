@@ -39,7 +39,7 @@ export function ErrorMessage({
     <div className="h-72 flex flex-col items-center justify-center">
       <div className="mb-4">
         {isRBAC ? (
-          <ShieldX className="h-16 w-16 text-amber-500" />
+          <ShieldX className="h-16 w-16 text-warning" />
         ) : isCRDMissing ? (
           <PackageX className="h-16 w-16 text-muted-foreground" />
         ) : (
@@ -47,7 +47,7 @@ export function ErrorMessage({
         )}
       </div>
       <h3
-        className={`text-lg font-medium mb-1 ${isRBAC ? 'text-amber-600' : isCRDMissing ? 'text-muted-foreground' : 'text-destructive'}`}
+        className={`text-lg font-medium mb-1 ${isRBAC ? 'text-warning' : isCRDMissing ? 'text-muted-foreground' : 'text-destructive'}`}
       >
         {isCRDMissing
           ? t('errors.crdNotInstalledTitle')

@@ -354,24 +354,18 @@ function DaemonSetStatusIcon({
   switch (status) {
     case 'Available':
       return (
-        <IconCircleCheckFilled
-          className={`fill-green-500 dark:fill-green-400 ${className || ''}`}
-        />
+        <IconCircleCheckFilled className={`fill-success ${className || ''}`} />
       )
     case 'Progressing':
       return (
         <IconLoader className={`animate-spin text-info ${className || ''}`} />
       )
     case 'Terminating':
-      return (
-        <IconTrash
-          className={`text-orange-500 dark:text-orange-400 ${className || ''}`}
-        />
-      )
+      return <IconTrash className={`text-warning ${className || ''}`} />
     default:
       return (
         <IconExclamationCircle
-          className={`fill-gray-500 dark:fill-gray-400 ${className || ''}`}
+          className={`fill-muted-foreground ${className || ''}`}
         />
       )
   }

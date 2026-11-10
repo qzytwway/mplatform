@@ -891,7 +891,7 @@ function HelmReleaseChartVersionDetail({
       {hasNewVersion ? (
         <Badge
           variant="outline"
-          className="shrink-0 border-amber-500/30 bg-amber-500/10 font-normal text-amber-700 dark:text-amber-300"
+          className="shrink-0 border-warning/30 bg-warning/10 font-normal text-warning"
         >
           {t('helm.messages.newVersionAvailable', {
             version: latestVersion,
@@ -1633,7 +1633,7 @@ export function HelmReleaseDetail(props: { namespace: string; name: string }) {
             {autoUpgradeLastError ? (
               <IconExclamationCircle className="size-4 fill-destructive" />
             ) : isAutoUpgradeEnabled ? (
-              <IconCircleCheckFilled className="size-4 fill-green-500 dark:fill-green-400" />
+              <IconCircleCheckFilled className="size-4 fill-success" />
             ) : null}
             {t('helm.actions.autoUpgrade')}
           </Button>

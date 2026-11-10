@@ -61,13 +61,13 @@ function ToolCallMessage({
 
   const statusIcon = () => {
     if (isPending) {
-      return <Loader2 className="h-3 w-3 animate-spin text-yellow-500" />
+      return <Loader2 className="h-3 w-3 animate-spin text-warning" />
     }
-    if (isConfirmed) return <CheckCircle2 className="h-3 w-3 text-green-500" />
+    if (isConfirmed) return <CheckCircle2 className="h-3 w-3 text-success" />
     if (isDenied) return <XCircle className="h-3 w-3 text-muted-foreground" />
     if (isError) return <XCircle className="h-3 w-3 text-destructive" />
     if (message.toolResult) {
-      return <CheckCircle2 className="h-3 w-3 text-green-500" />
+      return <CheckCircle2 className="h-3 w-3 text-success" />
     }
     return <Loader2 className="h-3 w-3 animate-spin" />
   }
@@ -297,7 +297,7 @@ function ToolCallMessage({
         </div>
       )}
       {isPending && message.pendingAction && (
-        <div className="mt-1.5 rounded border border-yellow-500/30 bg-yellow-500/5 p-2">
+        <div className="mt-1.5 rounded border border-warning/30 bg-warning/5 p-2">
           <p className="mb-1.5 text-xs font-medium text-foreground">
             {describeAction(
               message.pendingAction.tool,

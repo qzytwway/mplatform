@@ -3,7 +3,6 @@ import {
   IconClearAll,
   IconMaximize,
   IconMinimize,
-  IconPalette,
   IconSettings,
   IconTerminal,
 } from '@tabler/icons-react'
@@ -17,10 +16,10 @@ import '@xterm/xterm/css/xterm.css'
 
 import { useTranslation } from 'react-i18next'
 
-import { TERMINAL_THEMES, TerminalTheme } from '@/types/themes'
 import { appendCurrentClusterParam } from '@/lib/current-cluster'
 import { toSimpleContainer } from '@/lib/k8s'
 import { getWebSocketUrl } from '@/lib/subpath'
+import { getTerminalTheme } from '@/lib/terminal-theme'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
@@ -39,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { useAppearance } from './appearance-provider'
 import { ConnectionIndicator } from './connection-indicator'
 import { NetworkSpeedIndicator } from './network-speed-indicator'
 import { ContainerSelector } from './selector/container-selector'
@@ -82,13 +82,10 @@ export function Terminal({
     containers.some(
       (container) => container.name === selectedContainer && container.ephemeral
     )
+  const { actualTheme } = useAppearance()
   const [isConnected, setIsConnected] = useState(false)
   const [reconnectFlag, setReconnectFlag] = useState(false)
   const [networkSpeed, setNetworkSpeed] = useState({ upload: 0, download: 0 })
-  const [terminalTheme, setTerminalTheme] = useState<TerminalTheme>(() => {
-    const saved = localStorage.getItem('terminal-theme')
-    return (saved as TerminalTheme) || 'classic'
-  })
   const [fontSize, setFontSize] = useState(() => {
     const saved = localStorage.getItem('log-viewer-font-size')
     return saved ? parseInt(saved, 10) : 14
@@ -160,40 +157,6 @@ export function Terminal({
     })
   }, [containers, selectedContainerName])
 
-  // Handle theme change and persist to localStorage
-  const handleThemeChange = useCallback((theme: TerminalTheme) => {
-    setTerminalTheme(theme)
-    localStorage.setItem('terminal-theme', theme)
-    // Update terminal theme without recreating the instance
-    if (xtermRef.current) {
-      const currentTheme = TERMINAL_THEMES[theme]
-      xtermRef.current.options.theme = {
-        background: currentTheme.background,
-        foreground: currentTheme.foreground,
-        cursor: currentTheme.cursor,
-        selectionBackground: currentTheme.selection,
-        black: currentTheme.black,
-        red: currentTheme.red,
-        green: currentTheme.green,
-        yellow: currentTheme.yellow,
-        blue: currentTheme.blue,
-        magenta: currentTheme.magenta,
-        cyan: currentTheme.cyan,
-        white: currentTheme.white,
-        brightBlack: currentTheme.brightBlack,
-        brightRed: currentTheme.brightRed,
-        brightGreen: currentTheme.brightGreen,
-        brightYellow: currentTheme.brightYellow,
-        brightBlue: currentTheme.brightBlue,
-        brightMagenta: currentTheme.brightMagenta,
-        brightCyan: currentTheme.brightCyan,
-        brightWhite: currentTheme.brightWhite,
-      }
-      // Force refresh to apply the new theme
-      xtermRef.current.refresh(0, xtermRef.current.rows - 1)
-    }
-  }, [])
-
   // Handle font size change and persist to localStorage
   const handleFontSizeChange = useCallback((size: number) => {
     setFontSize(size)
@@ -220,14 +183,6 @@ export function Terminal({
     },
     []
   )
-
-  // Quick theme cycling function
-  const cycleTheme = useCallback(() => {
-    const themes = Object.keys(TERMINAL_THEMES) as TerminalTheme[]
-    const currentIndex = themes.indexOf(terminalTheme)
-    const nextIndex = (currentIndex + 1) % themes.length
-    handleThemeChange(themes[nextIndex])
-  }, [terminalTheme, handleThemeChange])
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((v) => !v)
@@ -275,32 +230,10 @@ export function Terminal({
     if (xtermRef.current) xtermRef.current.dispose()
     if (wsRef.current) wsRef.current.close()
 
-    const currentTheme = TERMINAL_THEMES[terminalTheme]
     const terminal = new XTerm({
       fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
       fontSize,
-      theme: {
-        background: currentTheme.background,
-        foreground: currentTheme.foreground,
-        cursor: currentTheme.cursor,
-        selectionBackground: currentTheme.selection,
-        black: currentTheme.black,
-        red: currentTheme.red,
-        green: currentTheme.green,
-        yellow: currentTheme.yellow,
-        blue: currentTheme.blue,
-        magenta: currentTheme.magenta,
-        cyan: currentTheme.cyan,
-        white: currentTheme.white,
-        brightBlack: currentTheme.brightBlack,
-        brightRed: currentTheme.brightRed,
-        brightGreen: currentTheme.brightGreen,
-        brightYellow: currentTheme.brightYellow,
-        brightBlue: currentTheme.brightBlue,
-        brightMagenta: currentTheme.brightMagenta,
-        brightCyan: currentTheme.brightCyan,
-        brightWhite: currentTheme.brightWhite,
-      },
+      theme: getTerminalTheme(),
       cursorBlink: true,
       allowTransparency: true,
       cursorStyle,
@@ -515,6 +448,17 @@ export function Terminal({
     reconnectFlag,
   ])
 
+  // The theme class is applied after this render, so read the tokens on the next frame.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const terminal = xtermRef.current
+      if (!terminal) return
+      terminal.options.theme = getTerminalTheme()
+      terminal.refresh(0, terminal.rows - 1)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [actualTheme])
+
   // Clear terminal
   const clearTerminal = useCallback(() => {
     if (xtermRef.current) {
@@ -588,23 +532,6 @@ export function Terminal({
               />
             )}
 
-            {/* Quick Theme Toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={cycleTheme}
-              title={`Current theme: ${TERMINAL_THEMES[terminalTheme].name} (Ctrl+T to cycle)`}
-              className="relative"
-            >
-              <IconPalette className="h-4 w-4" />
-              <div
-                className="absolute -top-1 -right-1 w-3 h-3 rounded-full border border-gray-400"
-                style={{
-                  backgroundColor: TERMINAL_THEMES[terminalTheme].background,
-                }}
-              ></div>
-            </Button>
-
             {/* Settings */}
             <Popover>
               <PopoverTrigger asChild>
@@ -614,75 +541,6 @@ export function Terminal({
               </PopoverTrigger>
               <PopoverContent className="w-80" align="end">
                 <div className="space-y-4">
-                  {/* Terminal Theme Selector */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="terminal-theme">Terminal Theme</Label>
-                      <Select
-                        value={terminalTheme}
-                        onValueChange={handleThemeChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(TERMINAL_THEMES).map(
-                            ([key, theme]) => (
-                              <SelectItem key={key} value={key}>
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="w-3 h-3 rounded-full border border-gray-400"
-                                    style={{
-                                      backgroundColor: theme.background,
-                                    }}
-                                  ></div>
-                                  <span className="text-sm">{theme.name}</span>
-                                </div>
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Theme Preview */}
-                    <div
-                      className="p-3 rounded space-y-1"
-                      style={{
-                        backgroundColor:
-                          TERMINAL_THEMES[terminalTheme].background,
-                        color: TERMINAL_THEMES[terminalTheme].foreground,
-                        fontSize: `${fontSize}px`,
-                      }}
-                    >
-                      <div>
-                        <span
-                          style={{
-                            color: TERMINAL_THEMES[terminalTheme].green,
-                          }}
-                        >
-                          user@pod:~$
-                        </span>{' '}
-                        ls -la
-                      </div>
-                      <div
-                        style={{ color: TERMINAL_THEMES[terminalTheme].blue }}
-                      >
-                        drwxr-xr-x 3 user user 4096 Dec 9 10:30 .
-                      </div>
-                      <div
-                        style={{ color: TERMINAL_THEMES[terminalTheme].yellow }}
-                      >
-                        -rw-r--r-- 1 user user 220 Dec 9 10:30 README.md
-                      </div>
-                      <div
-                        style={{ color: TERMINAL_THEMES[terminalTheme].red }}
-                      >
-                        -rwx------ 1 user user 1024 Dec 9 10:30 script.sh
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Font Size Selector */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">

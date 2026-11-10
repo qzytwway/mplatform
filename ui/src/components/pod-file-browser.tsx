@@ -240,7 +240,7 @@ export function PodFileBrowser({
                       {file.isDir ? (
                         <IconFolder className="w-4 h-4 text-info" />
                       ) : (
-                        <IconFile className="w-4 h-4 text-gray-500" />
+                        <IconFile className="w-4 h-4 text-muted-foreground" />
                       )}
                     </TableCell>
                     <TableCell>

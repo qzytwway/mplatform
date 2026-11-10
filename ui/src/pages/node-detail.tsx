@@ -563,7 +563,7 @@ function NodeOverview({
           value={
             <span className="inline-flex min-w-0 items-center gap-2">
               {isReady ? (
-                <IconCircleCheckFilled className="size-4 shrink-0 fill-green-500" />
+                <IconCircleCheckFilled className="size-4 shrink-0 fill-success" />
               ) : (
                 <IconExclamationCircle className="size-4 shrink-0 fill-destructive" />
               )}
@@ -762,11 +762,11 @@ function NodeOverview({
                       <span
                         className={cn(
                           'size-1.5 shrink-0 rounded-full',
-                          condition.health === 'True' && 'bg-emerald-500',
+                          condition.health === 'True' && 'bg-success',
                           condition.health === 'False' && 'bg-destructive',
                           condition.health !== 'True' &&
                             condition.health !== 'False' &&
-                            'bg-yellow-500'
+                            'bg-warning'
                         )}
                       />
                       <span className="truncate font-medium">

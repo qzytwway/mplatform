@@ -18,8 +18,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           error: '[&_svg]:!text-destructive',
-          success: '[&_svg]:!text-green-500',
-          warning: '[&_svg]:!text-amber-500',
+          success: '[&_svg]:!text-success',
+          warning: '[&_svg]:!text-warning',
           info: '[&_svg]:!text-info',
         },
       }}

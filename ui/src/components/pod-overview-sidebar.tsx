@@ -131,7 +131,7 @@ function CompactRelatedResourceRow({
         </span>
       </span>
       <span className="inline-flex min-w-0 items-center gap-1.5">
-        <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+        <span className="size-1.5 shrink-0 rounded-full bg-success" />
         <span className="truncate font-mono">{resource.name}</span>
       </span>
     </>
@@ -405,10 +405,10 @@ function getEventSource(event: KubernetesEvent) {
 
 function getEventTypeClassName(type?: string) {
   if (type === 'Normal') {
-    return 'text-emerald-600'
+    return 'text-success'
   }
   if (type === 'Warning') {
-    return 'text-yellow-600'
+    return 'text-warning'
   }
   return 'text-destructive'
 }

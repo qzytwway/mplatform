@@ -49,7 +49,7 @@ export function SiteHeader() {
                 aria-label="Toggle Kubectl Terminal"
                 className={`flex items-center justify-center rounded-sm p-1 transition-colors ${
                   isOpen
-                    ? 'text-green-500 hover:text-green-600'
+                    ? 'text-success hover:text-success/80'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >

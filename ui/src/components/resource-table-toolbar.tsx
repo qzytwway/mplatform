@@ -113,7 +113,7 @@ export function ResourceTableToolbar<T>({
               <span
                 className={cn(
                   'bg-muted-foreground/25 size-2 rounded-full',
-                  watch.enabled && watch.connected && 'bg-emerald-500',
+                  watch.enabled && watch.connected && 'bg-success',
                   watch.enabled && !watch.connected && 'bg-destructive'
                 )}
               />

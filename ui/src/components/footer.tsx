@@ -6,10 +6,10 @@ export function Footer() {
     <footer className="border-t">
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row justify-between items-center space-y-2 md:space-y-0">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             {t('login.footer', { year: new Date().getFullYear() })}
           </p>
-          <div className="flex space-x-6 text-sm text-gray-500">
+          <div className="flex space-x-6 text-sm text-muted-foreground">
             <a
               href="https://github.com/qzytwway/mplatform"
               target="_blank"

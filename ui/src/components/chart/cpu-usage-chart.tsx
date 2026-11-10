@@ -24,10 +24,7 @@ interface CpuUsageChartProps {
 const cpuChartConfig = {
   cpu: {
     label: 'CPU (cores)',
-    theme: {
-      light: 'hsl(220, 70%, 50%)',
-      dark: 'hsl(210, 80%, 60%)',
-    },
+    color: 'var(--chart-4)',
   },
 } satisfies ChartConfig
 

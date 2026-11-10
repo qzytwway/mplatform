@@ -220,10 +220,10 @@ function getPodStatusDotClassName(status: string) {
     status === 'Succeeded' ||
     status === 'Completed'
   ) {
-    return 'bg-emerald-500'
+    return 'bg-success'
   }
   if (status === 'Pending' || status === 'Unknown') {
-    return 'bg-yellow-500'
+    return 'bg-warning'
   }
   return 'bg-destructive'
 }

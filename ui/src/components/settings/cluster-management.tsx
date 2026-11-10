@@ -86,7 +86,7 @@ export function ClusterManagement() {
         const badge = (
           <Badge
             variant="outline"
-            className="bg-violet-50 text-violet-700 border-violet-200"
+            className="bg-info/10 text-info border-info/30"
           >
             {t('clusterManagement.type.clusterAgent', 'Cluster Agent')}
           </Badge>
@@ -117,7 +117,7 @@ export function ClusterManagement() {
       return (
         <Badge
           variant="outline"
-          className="bg-gray-50 text-gray-700 border-gray-200"
+          className="bg-muted text-foreground border-border"
         >
           {t('clusterManagement.type.external', 'External')}
         </Badge>

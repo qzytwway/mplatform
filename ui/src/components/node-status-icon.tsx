@@ -28,18 +28,10 @@ export const NodeStatusIcon = ({
 }: NodeStatusIconProps) => {
   switch (status) {
     case 'Ready':
-      return (
-        <IconCircleCheckFilled
-          className={`fill-green-500 dark:fill-green-400 ${className}`}
-        />
-      )
+      return <IconCircleCheckFilled className={`fill-success ${className}`} />
 
     case 'Ready,SchedulingDisabled':
-      return (
-        <IconPlayerPause
-          className={`fill-yellow-500 dark:fill-yellow-400 ${className}`}
-        />
-      )
+      return <IconPlayerPause className={`fill-warning ${className}`} />
 
     case 'NotReady':
     case 'NotReady,SchedulingDisabled':
@@ -49,16 +41,12 @@ export const NodeStatusIcon = ({
     case 'MemoryPressure':
     case 'DiskPressure':
     case 'PIDPressure':
-      return (
-        <IconAlertTriangle
-          className={`fill-yellow-500 dark:fill-yellow-400 ${className}`}
-        />
-      )
+      return <IconAlertTriangle className={`fill-warning ${className}`} />
 
     default:
       return (
         <IconExclamationCircle
-          className={`fill-gray-500 dark:fill-gray-400 ${className}`}
+          className={`fill-muted-foreground ${className}`}
         />
       )
   }
