@@ -1,15 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import {
-  CaseSensitive,
-  Check,
-  LogOut,
-  Minus,
-  Plus,
-  Puzzle,
-  UserCog,
-  ZoomIn,
-} from 'lucide-react'
+import { LogOut, Minus, Plus, Puzzle, UserCog, ZoomIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
@@ -38,7 +29,7 @@ const DISPLAY_SCALE_STEP = 5
 export function UserMenu() {
   const { t } = useTranslation()
   const { user, logout, hasGlobalSidebarPreference } = useAuth()
-  const { displayScale, setDisplayScale, font, setFont } = useAppearance()
+  const { displayScale, setDisplayScale } = useAppearance()
   const [open, setOpen] = useState(false)
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false)
   const [scaleInput, setScaleInput] = useState(String(displayScale))
@@ -155,28 +146,6 @@ export function UserMenu() {
               <DropdownMenuSeparator />
             </>
           )}
-
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <CaseSensitive className="mr-2 h-4 w-4" />
-              <span>{t('userMenu.font')}</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                onClick={() => setFont('system')}
-                role="menuitemradio"
-                aria-checked={font === 'system'}
-                className={`flex items-center justify-between gap-2 cursor-pointer ${
-                  font === 'system' ? 'font-medium text-foreground' : ''
-                }`}
-              >
-                <span>{t('userMenu.fonts.system')}</span>
-                {font === 'system' && (
-                  <Check className="h-4 w-4 text-primary" />
-                )}
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
 
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>

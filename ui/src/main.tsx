@@ -17,7 +17,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryProvider>
       <AuthProvider>
         <PluginRuntime>
-          <AppearanceProvider defaultTheme="system" defaultFont="system">
+          <AppearanceProvider defaultTheme="system">
             <SidebarConfigProvider>
               <RouterProvider router={router} />
             </SidebarConfigProvider>

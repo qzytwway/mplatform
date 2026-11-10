@@ -1420,10 +1420,6 @@
     "via": "via {{provider}}",
     "role": "Role: {{roles}}",
     "accountSettings": "Account Settings",
-    "font": "Font",
-    "fonts": {
-      "system": "System"
-    },
     "displayScale": "Display Scale",
     "decreaseDisplayScale": "Decrease display scale",
     "increaseDisplayScale": "Increase display scale",

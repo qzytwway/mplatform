@@ -4,7 +4,6 @@
   Font families
   - --font-sans holds the system UI font stack
   - --font-mono holds the system monospace font stack
-  - --app-font-sans controls the app's primary font
 */
 :root {
   --font-sans:
@@ -14,11 +13,10 @@
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
-  --app-font-sans: var(--font-sans);
 }
 
 body {
-  font-family: var(--app-font-sans);
+  font-family: var(--font-sans);
 }
 
 code,
@@ -28,9 +26,9 @@ samp {
   font-family: var(--font-mono);
 }
 
-/* Ensure Tailwind font utility classes respect current choice */
+/* Keep Tailwind font utilities on the same system stacks */
 .font-sans {
-  font-family: var(--app-font-sans) !important;
+  font-family: var(--font-sans) !important;
 }
 .font-mono {
   font-family: var(--font-mono) !important;
