@@ -859,6 +859,17 @@
         "enableVersionCheck": "启用版本检查"
       }
     },
+    "logo": {
+      "title": "Logo",
+      "description": "显示在侧边栏、登录页和初始化页。支持 PNG、JPEG、GIF、WebP、SVG，最大 512 KB。",
+      "upload": "上传图片",
+      "remove": "移除",
+      "errors": {
+        "type": "仅支持 PNG、JPEG、GIF、WebP 或 SVG 图片",
+        "size": "图片不能超过 512 KB",
+        "read": "读取图片失败"
+      }
+    },
     "loginPrompt": {
       "title": "登录提示",
       "description": "在登录页展示自定义提示。",

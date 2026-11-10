@@ -63,6 +63,7 @@ type GeneralSetting struct {
 	EnableMFA               bool         `json:"enableMFA" gorm:"column:enable_mfa;type:boolean;not null;default:true"`
 	EnablePasskeyLogin      bool         `json:"enablePasskeyLogin" gorm:"column:enable_passkey_login;type:boolean;not null;default:true"`
 	LoginPrompt             string       `json:"loginPrompt" gorm:"column:login_prompt;type:text"`
+	Logo                    string       `json:"logo" gorm:"column:logo;type:text"`
 	JWTSecret               SecretString `json:"-" gorm:"column:jwt_secret;type:text"`
 	GlobalSidebarPreference string       `json:"-" gorm:"column:global_sidebar_preference;type:text"`
 }

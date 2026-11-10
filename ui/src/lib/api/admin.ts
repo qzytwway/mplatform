@@ -376,6 +376,7 @@ export interface GeneralSetting {
   enableMFA: boolean
   enablePasskeyLogin: boolean
   loginPrompt: string
+  logo: string
 }
 
 export interface GeneralSettingUpdateRequest {
@@ -395,6 +396,7 @@ export interface GeneralSettingUpdateRequest {
   enableMFA?: boolean
   enablePasskeyLogin?: boolean
   loginPrompt?: string
+  logo?: string
 }
 
 export interface LDAPSetting {

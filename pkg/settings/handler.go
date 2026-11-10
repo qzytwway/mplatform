@@ -4,12 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/common"
 	"github.com/qzytwway/mplatform/pkg/model"
 )
+
+// 512 KB of image data, base64-encoded, plus the data URL prefix.
+const maxLogoDataURLLength = 512*1024*4/3 + 64
+
+var logoDataURLPattern = regexp.MustCompile(`^data:image/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$`)
 
 func HandleGetGeneralSetting(c *gin.Context) {
 	setting, err := model.GetGeneralSetting()
@@ -37,6 +43,7 @@ func HandleGetGeneralSetting(c *gin.Context) {
 		"enableMFA":             setting.EnableMFA,
 		"enablePasskeyLogin":    setting.EnablePasskeyLogin,
 		"loginPrompt":           setting.LoginPrompt,
+		"logo":                  setting.Logo,
 	})
 }
 
@@ -57,6 +64,7 @@ type UpdateGeneralSettingRequest struct {
 	EnableMFA             *bool   `json:"enableMFA"`
 	EnablePasskeyLogin    *bool   `json:"enablePasskeyLogin"`
 	LoginPrompt           *string `json:"loginPrompt"`
+	Logo                  *string `json:"logo"`
 }
 
 func HandleUpdateGeneralSetting(c *gin.Context) { //nolint:gocyclo
@@ -196,6 +204,14 @@ func HandleUpdateGeneralSetting(c *gin.Context) { //nolint:gocyclo
 	if req.LoginPrompt != nil {
 		updates["login_prompt"] = strings.TrimSpace(*req.LoginPrompt)
 	}
+	if req.Logo != nil {
+		logo := strings.TrimSpace(*req.Logo)
+		if logo != "" && (len(logo) > maxLogoDataURLLength || !logoDataURLPattern.MatchString(logo)) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "logo must be a base64 PNG, JPEG, GIF, WebP or SVG data URL of at most 512 KB"})
+			return
+		}
+		updates["logo"] = logo
+	}
 	if req.PasswordLoginDisabled != nil {
 		updates["password_login_disabled"] = *req.PasswordLoginDisabled
 	}
@@ -235,5 +251,6 @@ func HandleUpdateGeneralSetting(c *gin.Context) { //nolint:gocyclo
 		"enableMFA":             updated.EnableMFA,
 		"enablePasskeyLogin":    updated.EnablePasskeyLogin,
 		"loginPrompt":           updated.LoginPrompt,
+		"logo":                  updated.Logo,
 	})
 }

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useCallback, useMemo, useState } from 'react'
-import Icon from '@/assets/icon.svg'
+import { useAuth } from '@/contexts/auth-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
 import { CollapsibleContent } from '@radix-ui/react-collapsible'
 import { IconLayoutDashboard } from '@tabler/icons-react'
@@ -41,6 +41,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const { config, isLoading } = useSidebarConfig()
+  const { logo } = useAuth()
   const { data: versionInfo } = useVersionInfo()
   const [openAPIGroupItems, setOpenAPIGroupItems] = useState<
     Record<string, boolean>
@@ -262,11 +263,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
                 <Link to="/" onClick={handleMenuItemClick}>
-                  <img
-                    src={Icon}
-                    alt="MPlatform Logo"
-                    className="ml-1 h-8 w-8"
-                  />
+                  {logo && (
+                    <img
+                      src={logo}
+                      alt="MPlatform Logo"
+                      className="ml-1 h-8 w-8 object-contain"
+                    />
+                  )}
                   <span className="text-base font-semibold">MPlatform</span>
                 </Link>
               </SidebarMenuButton>
@@ -294,7 +297,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <Link to="/" onClick={handleMenuItemClick}>
                 <div className="relative flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
-                    <img src={Icon} alt="MPlatform Logo" className="h-8 w-8" />
+                    {logo && (
+                      <img
+                        src={logo}
+                        alt="MPlatform Logo"
+                        className="h-8 w-8 object-contain"
+                      />
+                    )}
                     <div className="flex flex-col">
                       <span className="text-base font-semibold">MPlatform</span>
                       <VersionInfo />

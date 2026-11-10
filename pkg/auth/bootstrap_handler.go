@@ -33,6 +33,7 @@ type bootstrapCapabilities struct {
 
 type bootstrapResponse struct {
 	MPlatformVersion           string                `json:"mplatformVersion"`
+	Logo                       string                `json:"logo"`
 	Setup                      bootstrapSetupState   `json:"setup"`
 	Auth                       bootstrapAuthOptions  `json:"auth"`
 	Capabilities               bootstrapCapabilities `json:"capabilities"`
@@ -63,6 +64,7 @@ func (h *AuthHandler) Bootstrap(c *gin.Context) {
 
 	c.JSON(http.StatusOK, bootstrapResponse{
 		MPlatformVersion: version.Version,
+		Logo:             setting.Logo,
 		Setup:            setup,
 		Auth:             h.bootstrapAuth(setting),
 		Capabilities: bootstrapCapabilities{

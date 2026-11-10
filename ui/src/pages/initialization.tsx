@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import Logo from '@/assets/icon.svg'
 import { useAuth } from '@/contexts/auth-context'
 import {
   IconArrowRight,
@@ -34,7 +33,7 @@ export function InitializationPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { data: initCheck, isLoading, refetch } = useInitCheck()
-  const { checkAuth, user, isLoading: isAuthLoading } = useAuth()
+  const { checkAuth, user, logo, isLoading: isAuthLoading } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -158,7 +157,7 @@ export function InitializationPage() {
     <div className="min-h-dvh bg-background text-foreground [font-family:var(--font-sans)] lg:grid lg:grid-cols-[20rem_1fr] xl:grid-cols-[24rem_1fr]">
       <aside className="flex flex-col border-b bg-muted/40 px-6 py-6 sm:px-8 lg:min-h-dvh lg:border-r lg:border-b-0 lg:py-8 xl:px-10">
         <div className="flex items-center gap-3">
-          <img src={Logo} alt="" className="size-9" />
+          {logo && <img src={logo} alt="" className="size-9 object-contain" />}
           <span className="font-mono text-2xl font-semibold tracking-tight">
             MPlatform
           </span>

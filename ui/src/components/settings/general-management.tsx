@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   IconLink,
   IconMessage,
+  IconPhoto,
   IconPuzzle,
   IconRobot,
   IconSettings,
@@ -36,6 +37,8 @@ const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5-5'
 const DEFAULT_KUBECTL_IMAGE = 'zzde/kubectl:latest'
 const DEFAULT_NODE_TERMINAL_IMAGE = 'busybox:latest'
 const DEFAULT_CLUSTER_AGENT_IMAGE = 'ghcr.io/qzytwway/mplatform:latest'
+const MAX_LOGO_BYTES = 512 * 1024
+const LOGO_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml'
 
 interface GeneralSettingsFormData {
   aiAgentEnabled: boolean
@@ -52,6 +55,7 @@ interface GeneralSettingsFormData {
   pluginCatalogUrl: string
   enableVersionCheck: boolean
   loginPrompt: string
+  logo: string
 }
 
 export function GeneralManagement() {
@@ -74,6 +78,7 @@ export function GeneralManagement() {
     pluginCatalogUrl: '',
     enableVersionCheck: true,
     loginPrompt: '',
+    logo: '',
   })
 
   useEffect(() => {
@@ -93,6 +98,7 @@ export function GeneralManagement() {
       pluginCatalogUrl: data.pluginCatalogUrl,
       enableVersionCheck: data.enableVersionCheck ?? true,
       loginPrompt: data.loginPrompt || '',
+      logo: data.logo || '',
     })
   }, [data])
 
@@ -118,6 +124,35 @@ export function GeneralManagement() {
       toast.error(translateError(error, t))
     },
   })
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!LOGO_ACCEPT.split(',').includes(file.type)) {
+      toast.error(
+        t(
+          'generalManagement.logo.errors.type',
+          'Only PNG, JPEG, GIF, WebP or SVG images are supported'
+        )
+      )
+      return
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast.error(
+        t('generalManagement.logo.errors.size', 'Image must be at most 512 KB')
+      )
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () =>
+      setFormData((prev) => ({ ...prev, logo: String(reader.result) }))
+    reader.onerror = () =>
+      toast.error(
+        t('generalManagement.logo.errors.read', 'Failed to read the image')
+      )
+    reader.readAsDataURL(file)
+  }
 
   const handleSave = () => {
     const defaultModel =
@@ -174,6 +209,7 @@ export function GeneralManagement() {
       pluginCatalogUrl: formData.pluginCatalogUrl.trim(),
       enableVersionCheck: formData.enableVersionCheck,
       loginPrompt: formData.loginPrompt.trim(),
+      logo: formData.logo,
     }
     if (!isAIManaged) {
       payload.aiAgentEnabled = formData.aiAgentEnabled
@@ -533,6 +569,56 @@ export function GeneralManagement() {
                 }))
               }
             />
+          </div>
+        </div>
+
+        <div className="rounded-lg border p-3">
+          <div className="space-y-1">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <IconPhoto className="h-4 w-4" />
+              {t('generalManagement.logo.title', 'Logo')}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                'generalManagement.logo.description',
+                'Shown in the sidebar, login page and setup page. PNG, JPEG, GIF, WebP or SVG, up to 512 KB.'
+              )}
+            </p>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+              {formData.logo ? (
+                <img
+                  src={formData.logo}
+                  alt=""
+                  className="size-10 object-contain"
+                />
+              ) : (
+                <IconPhoto className="size-5 text-muted-foreground" />
+              )}
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <label htmlFor="general-logo" className="cursor-pointer">
+                {t('generalManagement.logo.upload', 'Upload image')}
+              </label>
+            </Button>
+            <input
+              id="general-logo"
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              onChange={handleLogoChange}
+            />
+            {formData.logo && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFormData((prev) => ({ ...prev, logo: '' }))}
+              >
+                {t('generalManagement.logo.remove', 'Remove')}
+              </Button>
+            )}
           </div>
         </div>
 

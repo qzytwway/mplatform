@@ -848,6 +848,17 @@
         "enableVersionCheck": "Enable version check"
       }
     },
+    "logo": {
+      "title": "Logo",
+      "description": "Shown in the sidebar, login page and setup page. PNG, JPEG, GIF, WebP or SVG, up to 512 KB.",
+      "upload": "Upload image",
+      "remove": "Remove",
+      "errors": {
+        "type": "Only PNG, JPEG, GIF, WebP or SVG images are supported",
+        "size": "Image must be at most 512 KB",
+        "read": "Failed to read the image"
+      }
+    },
     "loginPrompt": {
       "title": "Login Prompt",
       "description": "Show a custom message on the login page.",

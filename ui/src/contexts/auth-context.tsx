@@ -27,6 +27,7 @@ interface User extends AuthUser {
 
 interface AuthContextType {
   mplatformVersion: string | undefined
+  logo: string
   user: User | null
   isLoading: boolean
   hasGlobalSidebarPreference: boolean
@@ -172,6 +173,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return {
       mplatformVersion: bootstrap?.mplatformVersion,
+      logo: bootstrap?.logo || '',
       user,
       isLoading,
       hasGlobalSidebarPreference,
@@ -190,6 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [
     bootstrap?.mplatformVersion,
+    bootstrap?.logo,
     user,
     isLoading,
     hasGlobalSidebarPreference,

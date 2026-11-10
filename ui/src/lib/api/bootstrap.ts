@@ -24,6 +24,7 @@ export interface AuthProviderCatalog {
 
 export interface BootstrapResponse {
   mplatformVersion: string
+  logo: string
   setup: BootstrapSetup
   auth: AuthProviderCatalog
   capabilities: BootstrapCapabilities
