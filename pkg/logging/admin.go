@@ -86,7 +86,7 @@ func loadStorage() (*model.LogStorage, error) {
 }
 
 func (h *Handler) GetStatus(c *gin.Context) {
-	images, err := requiredImages()
+	charts, err := chartStatuses()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -101,7 +101,7 @@ func (h *Handler) GetStatus(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"storage": storage, "images": images, "clusters": clusters})
+	c.JSON(http.StatusOK, gin.H{"storage": storage, "charts": charts, "clusters": clusters})
 }
 
 func (h *Handler) collectorStatuses() ([]clusterCollectorStatus, error) {
@@ -169,7 +169,7 @@ func (h *Handler) InstallStorage(c *gin.Context) {
 	}
 	loadedChart, err := loadVictoriaLogsChart()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(chartErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 	if err := installRelease(c, cs, victoriaLogsRelease, loadedChart, victoriaLogsValues(opts), password); err != nil {
@@ -292,7 +292,7 @@ func (h *Handler) EnableCollector(c *gin.Context) {
 	}
 	loadedChart, err := loadVectorChart()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(chartErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 	values := vectorValues(collectorOptions{ClusterName: cs.Name, WriteURL: writeURL})

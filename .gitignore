@@ -47,3 +47,6 @@ mplatform
 .gocache/
 
 /data/plugins/
+
+# Local app store chart packages (CHART_DIR)
+chart-packages/

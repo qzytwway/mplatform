@@ -29,11 +29,12 @@ type ClientSet struct {
 	PromClient         *prometheus.Client
 	AlertmanagerClient *alertmanager.Client
 
-	DiscoveredPrometheusURL string
-	config                  string
-	prometheusURL           string
-	alertmanagerURL         string
-	clusterAgentGeneration  uint64
+	DiscoveredPrometheusURL   string
+	DiscoveredAlertmanagerURL string
+	config                    string
+	prometheusURL             string
+	alertmanagerURL           string
+	clusterAgentGeneration    uint64
 }
 
 type ClusterManager struct {
@@ -90,11 +91,7 @@ func newClientSet(name string, k8sConfig *rest.Config, prometheusURL string) (*C
 		}
 	}
 	if prometheusURL != "" {
-		rt := serviceRoundTripper(name, "Prometheus", k8sConfig, prometheusURL)
-		cs.PromClient, err = prometheus.NewClientWithRoundTripper(prometheusURL, rt)
-		if err != nil {
-			klog.Warningf("Failed to create Prometheus client for cluster %s, some features may not work as expected, err: %v", name, err)
-		}
+		cs.PromClient = newPrometheusClient(name, k8sConfig, prometheusURL)
 	}
 	v, err := cs.K8sClient.ClientSet.Discovery().ServerVersion()
 	if err != nil {
@@ -135,18 +132,74 @@ func serviceRoundTripper(clusterName, service string, k8sConfig *rest.Config, se
 	return http.DefaultTransport
 }
 
+func newPrometheusClient(clusterName string, k8sConfig *rest.Config, prometheusURL string) *prometheus.Client {
+	rt := serviceRoundTripper(clusterName, "Prometheus", k8sConfig, prometheusURL)
+	client, err := prometheus.NewClientWithRoundTripper(prometheusURL, rt)
+	if err != nil {
+		klog.Warningf("Failed to create Prometheus client for cluster %s, some features may not work as expected, err: %v", clusterName, err)
+	}
+	return client
+}
+
 func (cs *ClientSet) configureAlertmanager(alertmanagerURL string) {
 	cs.alertmanagerURL = alertmanagerURL
 	if alertmanagerURL == "" {
+		alertmanagerURL = discoveryAlertmanagerURL(cs.K8sClient)
+		if alertmanagerURL != "" {
+			cs.DiscoveredAlertmanagerURL = alertmanagerURL
+			klog.Infof("Discovered Alertmanager URL for cluster %s: %s", cs.Name, alertmanagerURL)
+		}
+	}
+	if alertmanagerURL == "" {
 		return
 	}
-	rt := serviceRoundTripper(cs.Name, "Alertmanager", cs.K8sClient.Configuration, alertmanagerURL)
+	cs.AlertmanagerClient = newAlertmanagerClient(cs.Name, cs.K8sClient.Configuration, alertmanagerURL)
+}
+
+func newAlertmanagerClient(clusterName string, k8sConfig *rest.Config, alertmanagerURL string) *alertmanager.Client {
+	rt := serviceRoundTripper(clusterName, "Alertmanager", k8sConfig, alertmanagerURL)
 	client, err := alertmanager.NewClient(alertmanagerURL, rt)
 	if err != nil {
-		klog.Warningf("Failed to create Alertmanager client for cluster %s: %v", cs.Name, err)
-		return
+		klog.Warningf("Failed to create Alertmanager client for cluster %s: %v", clusterName, err)
+		return nil
 	}
-	cs.AlertmanagerClient = client
+	return client
+}
+
+// rediscoverMonitoring picks up Prometheus and Alertmanager installed or
+// removed after the cluster connected, for the ones without a configured URL.
+// It returns an updated copy of cs, or nil when nothing changed; cs itself is
+// left untouched because request handlers read it without locking.
+func rediscoverMonitoring(cs *ClientSet, cluster *model.Cluster) *ClientSet {
+	prometheusURL, alertmanagerURL := cs.DiscoveredPrometheusURL, cs.DiscoveredAlertmanagerURL
+	if cluster.PrometheusURL == "" {
+		prometheusURL = discoveryPrometheusURL(cs.K8sClient)
+	}
+	if cluster.AlertmanagerURL == "" {
+		alertmanagerURL = discoveryAlertmanagerURL(cs.K8sClient)
+	}
+	if prometheusURL == cs.DiscoveredPrometheusURL && alertmanagerURL == cs.DiscoveredAlertmanagerURL {
+		return nil
+	}
+
+	updated := *cs
+	if prometheusURL != cs.DiscoveredPrometheusURL {
+		klog.Infof("Discovered Prometheus URL for cluster %s changed: %q -> %q", cs.Name, cs.DiscoveredPrometheusURL, prometheusURL)
+		updated.DiscoveredPrometheusURL = prometheusURL
+		updated.PromClient = nil
+		if prometheusURL != "" {
+			updated.PromClient = newPrometheusClient(cs.Name, cs.K8sClient.Configuration, prometheusURL)
+		}
+	}
+	if alertmanagerURL != cs.DiscoveredAlertmanagerURL {
+		klog.Infof("Discovered Alertmanager URL for cluster %s changed: %q -> %q", cs.Name, cs.DiscoveredAlertmanagerURL, alertmanagerURL)
+		updated.DiscoveredAlertmanagerURL = alertmanagerURL
+		updated.AlertmanagerClient = nil
+		if alertmanagerURL != "" {
+			updated.AlertmanagerClient = newAlertmanagerClient(cs.Name, cs.K8sClient.Configuration, alertmanagerURL)
+		}
+	}
+	return &updated
 }
 
 func isClusterLocalURL(urlStr string) bool {
@@ -366,6 +419,12 @@ func syncClusters(cm *ClusterManager, readyCh chan<- struct{}) error {
 			} else {
 				cm.mu.Lock()
 				delete(cm.errors, cluster.Name)
+				cm.mu.Unlock()
+			}
+		} else if currentExist {
+			if updated := rediscoverMonitoring(current, cluster); updated != nil {
+				cm.mu.Lock()
+				cm.clusters[cluster.Name] = updated
 				cm.mu.Unlock()
 			}
 		}

@@ -19,6 +19,17 @@ var containerListKeys = map[string]bool{
 	"ephemeralContainers": true,
 }
 
+// imageArgPrefixes are container arguments that name images the container
+// starts later, such as the sidecars prometheus-operator injects.
+var imageArgPrefixes = []string{
+	"--prometheus-config-reloader=",
+	"--thanos-default-base-image=",
+}
+
+// monitoringAPIGroup resources (Prometheus, Alertmanager, ThanosRuler...)
+// carry the image of the pods the operator creates in spec.image.
+const monitoringAPIGroup = "monitoring.coreos.com/"
+
 // ValidateImageRegistry accepts a registry host with an optional path prefix,
 // such as harbor.example.com or harbor.example.com:8443/mirror.
 func ValidateImageRegistry(imageRegistry string) error {
@@ -40,8 +51,9 @@ func ClusterImageRegistry(clusterName string) (string, error) {
 	return cluster.ImageRegistry, nil
 }
 
-// imageRegistryPostRenderer moves every container image under imageRegistry,
-// keeping only the image name, tag and digest.
+// imageRegistryPostRenderer moves every container image, image argument and
+// prometheus-operator resource image under imageRegistry, keeping only the
+// image name, tag and digest.
 type imageRegistryPostRenderer struct {
 	imageRegistry string
 }
@@ -60,6 +72,7 @@ func (r imageRegistryPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.
 			return nil, fmt.Errorf("failed to parse rendered manifests: %w", err)
 		}
 		r.rewriteImages(&document)
+		r.rewriteMonitoringImage(&document)
 		if err := encoder.Encode(&document); err != nil {
 			return nil, fmt.Errorf("failed to write rendered manifests: %w", err)
 		}
@@ -87,14 +100,46 @@ func (r imageRegistryPostRenderer) rewriteImages(node *yaml.Node) {
 }
 
 func (r imageRegistryPostRenderer) rewriteContainerImage(container *yaml.Node) {
-	if container.Kind != yaml.MappingNode {
+	if image := mappingValue(container, "image"); image != nil && image.Kind == yaml.ScalarNode {
+		image.Value = rewriteImageRegistry(image.Value, r.imageRegistry)
+	}
+	args := mappingValue(container, "args")
+	if args == nil || args.Kind != yaml.SequenceNode {
 		return
 	}
-	for i := 0; i+1 < len(container.Content); i += 2 {
-		if container.Content[i].Value == "image" && container.Content[i+1].Kind == yaml.ScalarNode {
-			container.Content[i+1].Value = rewriteImageRegistry(container.Content[i+1].Value, r.imageRegistry)
+	for _, arg := range args.Content {
+		for _, prefix := range imageArgPrefixes {
+			if image, ok := strings.CutPrefix(arg.Value, prefix); ok && arg.Kind == yaml.ScalarNode {
+				arg.Value = prefix + rewriteImageRegistry(image, r.imageRegistry)
+			}
 		}
 	}
+}
+
+func (r imageRegistryPostRenderer) rewriteMonitoringImage(document *yaml.Node) {
+	if document.Kind != yaml.DocumentNode || len(document.Content) == 0 {
+		return
+	}
+	resource := document.Content[0]
+	apiVersion := mappingValue(resource, "apiVersion")
+	if apiVersion == nil || !strings.HasPrefix(apiVersion.Value, monitoringAPIGroup) {
+		return
+	}
+	if image := mappingValue(mappingValue(resource, "spec"), "image"); image != nil && image.Kind == yaml.ScalarNode {
+		image.Value = rewriteImageRegistry(image.Value, r.imageRegistry)
+	}
+}
+
+func mappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
 }
 
 // rewriteImageRegistry returns image under imageRegistry. Images already

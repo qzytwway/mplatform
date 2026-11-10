@@ -110,6 +110,8 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 
 		if clientSet, exists := clusterState[cluster.Name]; exists {
 			clusterInfo["version"] = clientSet.Version
+			clusterInfo["discoveredPrometheusURL"] = clientSet.DiscoveredPrometheusURL
+			clusterInfo["discoveredAlertmanagerURL"] = clientSet.DiscoveredAlertmanagerURL
 		}
 		if errMsg, exists := errorState[cluster.Name]; exists {
 			clusterInfo["error"] = errMsg

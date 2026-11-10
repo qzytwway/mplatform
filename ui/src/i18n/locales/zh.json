@@ -1042,7 +1042,9 @@
       "isDefault": "设为默认",
       "alertmanagerUrl": "Alertmanager 地址",
       "imageRegistry": "镜像仓库地址",
-      "imageRegistryHint": "在此集群安装或升级 Chart 时，容器镜像改从该地址拉取，只保留镜像名和标签（如 docker.io/bitnami/redis:7 改为 <地址>/redis:7）。留空则不改写。"
+      "imageRegistryHint": "在此集群安装或升级 Chart 时，容器镜像改从该地址拉取，只保留镜像名和标签（如 docker.io/bitnami/redis:7 改为 <地址>/redis:7）。留空则不改写。",
+      "discoveredUrl": "已自动发现：{{url}}，留空即使用该地址。",
+      "autoDiscoverHint": "留空则自动发现集群内的服务，例如安装 kube-prometheus-stack 后会自动连接。"
     }
   },
   "oauthManagement": {
@@ -1362,6 +1364,7 @@
     "actions": {
       "addRepository": "添加 Helm Repository",
       "deleteRepository": "删除 Helm Repository",
+      "uploadChart": "上传 Chart",
       "install": "安装"
     },
     "fields": {
@@ -1378,9 +1381,7 @@
     },
     "filters": {
       "allRepositories": "全部 Repository",
-      "artifactHub": "Artifact Hub",
-      "repositories": "Repository",
-      "verifiedPublisher": "Verified Publisher"
+      "repositories": "Repository"
     },
     "messages": {
       "addRepositoryDescription": "添加 Helm Repository 后，它的 Charts 会显示在列表中。支持传统仓库（https://）和 OCI 仓库（oci://，URL 需指向单个 Chart）。",
@@ -1389,13 +1390,14 @@
       "repositoryDeleted": "Repository 已删除",
       "deleteRepositoryDescription": "这里只会从 MPlatform 移除这个受管理的 Chart 来源，不会删除远端 Chart，也不会卸载已安装的 Helm Release。",
       "noCharts": "未找到 Chart",
+      "noChartsHint": "上传 Chart 包（.tgz）、将包复制到服务器的 chart 目录，或添加 Harbor 仓库。",
+      "chartUploaded": "已上传 {{name}} {{version}}",
       "noReadme": "未找到 README",
       "noValues": "未找到 Values",
       "noTemplates": "未找到模板",
       "noVersions": "未找到版本",
       "noChartUrl": "缺少 Chart 包 URL。",
       "invalidValues": "Values 必须是 YAML 对象。",
-      "artifactHubTrafficNotice": "从该来源搜索或查看 Chart 信息时，MPlatform 会访问 <artifactHub>Artifact Hub</artifactHub>。MPlatform 仅展示第三方数据，不对其中内容负责。",
       "installed": "Helm Release 已安装",
       "harborRepositoryHint": "填写 oci://<harbor>/<项目>，平台会通过 Harbor API 列出项目中的全部 Chart。凭据请使用在该项目有“列出仓库”“列出制品”“拉取仓库”权限的机器人账号；公开项目可留空。"
     },
@@ -1474,11 +1476,8 @@
       "rollbackStarted": "已发起回滚",
       "rollbackConfirmTitle": "确认回滚 Release？",
       "rollbackConfirmDescription": "将 {{namespace}}/{{name}} 回滚到 revision {{revision}}。",
-      "chartNotFound": "在已管理的 Helm Repository 和 Artifact Hub 中均未找到这个 Chart。",
+      "chartNotFound": "在已管理的 Helm 仓库中未找到这个 Chart。",
       "chartSourceManagedRepository": "当前使用已管理的 Chart Repository：{{repository}}。",
-      "chartSourceArtifactHubVerified": "当前使用 Artifact Hub Chart：{{repository}}（Verified Publisher）。",
-      "chartSourceArtifactHubVerifiedShort": "Artifact Hub（已验证）",
-      "chartSourceArtifactHub": "当前使用 Artifact Hub Chart：{{repository}}。",
       "chartDetailsLink": "Chart 详情",
       "chartSourceSelectChart": "请选择要使用的 Chart 包。默认使用当前 Chart。",
       "newVersionAvailable": "新版本 {{version}}",
@@ -1676,9 +1675,10 @@
       "storageSize": "存储大小",
       "storageClass": "存储类",
       "defaultStorageClass": "集群默认",
+      "chartsHint": "日志组件的 Chart 从应用商店的本地仓库（local）读取。离线环境还需要准备下列镜像，各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
+      "chartMissing": "未上传",
       "nodeHostHint": "填写该集群中某个节点的 IP 或主机名，其他集群和 MPlatform 会通过 http://<节点地址>:<NodePort> 写入和查询日志。保留时长支持 h、d、w、y，如 7d。",
-      "imagesHint": "离线环境需要准备以下镜像。各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
-      "upgradeHint": "升级 MPlatform 不会自动升级已安装的日志组件。"
+      "upgradeHint": "上传新版本 Chart 不会自动升级已安装的日志组件。"
     },
     "collectors": {
       "title": "日志采集",

@@ -16,3 +16,23 @@ spec:
   storageClassName: {{ .Values.db.sqlite.persistence.pvc.storageClass }}
   {{- end }}
 {{- end }}
+
+{{- if and .Values.chartStore.persistence.pvc.enabled (not .Values.chartStore.persistence.pvc.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mplatform.fullname" . }}-charts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mplatform.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.chartStore.persistence.pvc.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.chartStore.persistence.pvc.size }}
+  {{- if .Values.chartStore.persistence.pvc.storageClass }}
+  storageClassName: {{ .Values.chartStore.persistence.pvc.storageClass }}
+  {{- end }}
+{{- end }}

@@ -1,7 +1,6 @@
 package helm
 
 import (
-	"encoding/json"
 	"time"
 
 	chart "helm.sh/helm/v4/pkg/chart/v2"
@@ -40,7 +39,6 @@ type helmChart struct {
 	Description    string              `json:"description,omitempty"`
 	Icon           string              `json:"icon,omitempty"`
 	Home           string              `json:"home,omitempty"`
-	ArtifactHubURL string              `json:"artifactHubUrl,omitempty"`
 	ChartURL       string              `json:"chartUrl,omitempty"`
 	Sources        []string            `json:"sources,omitempty"`
 	Keywords       []string            `json:"keywords,omitempty"`
@@ -76,63 +74,4 @@ type helmChartContent struct {
 	Values    string
 	Templates []chartTemplate
 	Metadata  *chart.Metadata
-}
-
-type artifactHubSearchResponse struct {
-	Packages []artifactHubPackage `json:"packages"`
-}
-
-type artifactHubPackage struct {
-	Name        string                `json:"name"`
-	Version     string                `json:"version"`
-	AppVersion  string                `json:"app_version"`
-	Description string                `json:"description"`
-	LogoImageID string                `json:"logo_image_id"`
-	Deprecated  bool                  `json:"deprecated"`
-	TS          int64                 `json:"ts"`
-	Repository  artifactHubRepository `json:"repository"`
-}
-
-type artifactHubPackageDetail struct {
-	PackageID         string                `json:"package_id"`
-	Name              string                `json:"name"`
-	Version           string                `json:"version"`
-	AppVersion        string                `json:"app_version"`
-	Description       string                `json:"description"`
-	LogoImageID       string                `json:"logo_image_id"`
-	Deprecated        bool                  `json:"deprecated"`
-	TS                int64                 `json:"ts"`
-	HomeURL           string                `json:"home_url"`
-	ContentURL        string                `json:"content_url"`
-	Readme            string                `json:"readme"`
-	Data              json.RawMessage       `json:"data"`
-	Keywords          []string              `json:"keywords"`
-	Maintainers       []*chart.Maintainer   `json:"maintainers"`
-	AvailableVersions []artifactHubVersion  `json:"available_versions"`
-	Repository        artifactHubRepository `json:"repository"`
-}
-
-type artifactHubData struct {
-	KubeVersion string `json:"kubeVersion"`
-}
-
-type artifactHubVersion struct {
-	Version    string `json:"version"`
-	AppVersion string `json:"app_version"`
-	TS         int64  `json:"ts"`
-}
-
-type artifactHubTemplatesResponse struct {
-	Templates []artifactHubTemplate `json:"templates"`
-}
-
-type artifactHubTemplate struct {
-	Name string `json:"name"`
-	Data string `json:"data"`
-}
-
-type artifactHubRepository struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
-	Kind int    `json:"kind"`
 }

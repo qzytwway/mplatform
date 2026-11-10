@@ -69,6 +69,8 @@ spec:
             - name: DB_DSN
               value: {{ (printf "%s/%s?%s" .Values.db.sqlite.persistence.mountPath .Values.db.sqlite.persistence.filename .Values.db.sqlite.options) }}
             {{- end }}
+            - name: CHART_DIR
+              value: {{ .Values.chartStore.mountPath }}
             {{- if .Values.basePath }}
             - name: MPLATFORM_BASE
               value: {{ .Values.basePath }}
@@ -105,6 +107,8 @@ spec:
             - name: {{ include "mplatform.fullname" . }}-storage
               mountPath: {{ .Values.db.sqlite.persistence.mountPath }}
           {{- end }}
+            - name: {{ include "mplatform.fullname" . }}-charts
+              mountPath: {{ .Values.chartStore.mountPath }}
       volumes:
       {{- if .Values.config.enabled }}
         - name: mplatform-config
@@ -126,6 +130,17 @@ spec:
       {{- else }}
           emptyDir: {}
       {{- end }}
+      {{- end }}
+        - name: {{ include "mplatform.fullname" . }}-charts
+      {{- if .Values.chartStore.persistence.pvc.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.chartStore.persistence.pvc.existingClaim | default (printf "%s-charts" (include "mplatform.fullname" .)) }}
+      {{- else if .Values.chartStore.persistence.hostPath.enabled }}
+          hostPath:
+            path: {{ .Values.chartStore.persistence.hostPath.path }}
+            type: {{ .Values.chartStore.persistence.hostPath.type }}
+      {{- else }}
+          emptyDir: {}
       {{- end }}
       {{- with .Values.volumes }}
       {{- toYaml . | nindent 8 }}

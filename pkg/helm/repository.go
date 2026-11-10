@@ -2,6 +2,7 @@ package helm
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"helm.sh/helm/v4/pkg/registry"
 )
+
+const maxChartUploadBytes = 100 << 20
 
 func validateOCIRepositoryURL(repositoryURL *url.URL) error {
 	if _, err := helmutil.OCIChartName(repositoryURL.String()); err != nil {
@@ -144,6 +147,10 @@ func (h *HelmChartHandler) DeleteRepository(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "repository not found"})
 		return
 	}
+	if repository.Type == model.HelmRepositoryTypeLocal {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "the local chart repository cannot be deleted"})
+		return
+	}
 
 	if err := model.DB.Delete(&repository).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -166,4 +173,34 @@ func toHelmRepositoryResponse(repository model.HelmRepository) helmRepositoryRes
 		CreatedAt: repository.CreatedAt,
 		UpdatedAt: repository.UpdatedAt,
 	}
+}
+
+func (h *HelmChartHandler) UploadLocalChart(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxChartUploadBytes)
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "a chart package file is required"})
+		return
+	}
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer func() { _ = file.Close() }()
+	archive, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	metadata, err := helmutil.SaveLocalChart(archive)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if repository, err := helmutil.LocalRepository(); err == nil {
+		h.clearRepositoryCache(repository)
+	}
+	c.JSON(http.StatusCreated, gin.H{"name": metadata.Name, "version": metadata.Version})
 }

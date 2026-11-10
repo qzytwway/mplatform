@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Download, ExternalLink } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
@@ -25,16 +25,11 @@ import { SimpleTable } from '@/components/simple-table'
 import { TextViewer } from '@/components/text-viewer'
 import { YamlFileTreeViewerNative as YamlFileTreeViewer } from '@/components/yaml-file-tree-viewer-native'
 
-const artifactHubSource = 'artifacthub'
-
 function chartDetailPath(chart: HelmChartDetail, version: string) {
   const params = new URLSearchParams({
     version,
     tab: 'versions',
   })
-  if (chart.source === artifactHubSource) {
-    params.set('source', artifactHubSource)
-  }
   return `/charts/${encodeURIComponent(chart.repositoryName)}/${encodeURIComponent(chart.name)}?${params.toString()}`
 }
 
@@ -113,23 +108,7 @@ function ChartDetailsCard({ chart }: { chart: HelmChartDetail }) {
       <CardContent className="px-3 pb-3 pt-0 text-sm">
         <dl className="space-y-3">
           <DetailItem label={t('common.fields.source')}>
-            {chart.source === artifactHubSource ? (
-              chart.artifactHubUrl ? (
-                <a
-                  href={chart.artifactHubUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 app-link"
-                >
-                  Artifact Hub
-                  <ExternalLink className="size-3" />
-                </a>
-              ) : (
-                'Artifact Hub'
-              )
-            ) : (
-              t('helmCharts.filters.repositories')
-            )}
+            {t('helmCharts.filters.repositories')}
           </DetailItem>
           <DetailItem label={t('helmCharts.fields.repository')}>
             {chart.repositoryName}
@@ -275,7 +254,6 @@ function LazyChartTextTab({
   repository,
   name,
   version,
-  source,
   content,
   enabled,
   emptyMessage,
@@ -284,7 +262,6 @@ function LazyChartTextTab({
   repository?: string
   name?: string
   version?: string
-  source?: 'repository' | 'artifacthub'
   content: HelmChartContentType
   enabled: boolean
   emptyMessage: string
@@ -295,7 +272,6 @@ function LazyChartTextTab({
     name,
     content,
     version,
-    source,
     enabled
   )
 
@@ -390,10 +366,6 @@ export function HelmChartDetailPage() {
   const { t } = useTranslation()
   const [installDialogOpen, setInstallDialogOpen] = useState(false)
   const version = searchParams.get('version') || undefined
-  const source =
-    searchParams.get('source') === artifactHubSource
-      ? artifactHubSource
-      : undefined
   const isIframe = searchParams.get('iframe') === 'true'
   const tabParam = searchParams.get('tab')
   const activeTab =
@@ -403,8 +375,7 @@ export function HelmChartDetailPage() {
   const { data, isLoading, error, refetch } = useHelmChart(
     repository,
     name,
-    version,
-    source
+    version
   )
 
   usePageTitle(
@@ -429,7 +400,6 @@ export function HelmChartDetailPage() {
                   repository={repository}
                   name={name}
                   version={version}
-                  source={source}
                   content="values"
                   enabled={activeTab === 'values'}
                   emptyMessage={t('helmCharts.messages.noValues')}
@@ -445,7 +415,6 @@ export function HelmChartDetailPage() {
                   repository={repository}
                   name={name}
                   version={version}
-                  source={source}
                   content="templates"
                   enabled={activeTab === 'template'}
                   emptyMessage={t('helmCharts.messages.noTemplates')}
@@ -459,7 +428,7 @@ export function HelmChartDetailPage() {
             },
           ]
         : [],
-    [activeTab, data, name, repository, source, t, version]
+    [activeTab, data, name, repository, t, version]
   )
 
   if (isLoading) {
@@ -501,14 +470,6 @@ export function HelmChartDetailPage() {
                   <h1 className="truncate text-lg font-extrabold">
                     {data.name}
                   </h1>
-                  {data.source === artifactHubSource ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 font-normal text-muted-foreground"
-                    >
-                      Artifact Hub
-                    </Badge>
-                  ) : null}
                 </div>
                 <p className="text-pretty break-words text-sm text-muted-foreground">
                   {data.description || '-'}

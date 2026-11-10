@@ -70,6 +70,8 @@ func (h *HelmReleaseHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Connect the monitoring services the release may have added.
+	cluster.TriggerClusterSync()
 	result := helmutil.ToHelmRelease(rel, true)
 	c.JSON(http.StatusCreated, result)
 }
@@ -112,7 +114,7 @@ func (h *HelmReleaseHandler) runInstall(c *gin.Context, dryRun bool) (rel *relea
 		}()
 	}
 
-	repository, err := helmutil.ResolveChartRepository(req.RepositoryName, req.Source)
+	repository, err := helmutil.ResolveChartRepository(req.RepositoryName)
 	if err != nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("repository not found")
 	}
@@ -270,6 +272,7 @@ func (h *HelmReleaseHandler) Delete(c *gin.Context) {
 		klog.Errorf("Failed to delete helm release auto upgrade task: %v", err)
 	}
 	success = true
+	cluster.TriggerClusterSync()
 	c.JSON(http.StatusOK, gin.H{"message": "helm release deleted"})
 }
 
@@ -291,6 +294,7 @@ func (h *HelmReleaseHandler) Upgrade(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+	cluster.TriggerClusterSync()
 	c.JSON(http.StatusOK, gin.H{"message": "helm release upgraded"})
 }
 
@@ -334,10 +338,7 @@ func (h *HelmReleaseHandler) runUpgrade(c *gin.Context, dryRun bool) (result hel
 		}()
 	}
 
-	repository, err := helmutil.ResolveChartRepository(
-		strings.TrimSpace(req.RepositoryName),
-		strings.TrimSpace(req.Source),
-	)
+	repository, err := helmutil.ResolveChartRepository(strings.TrimSpace(req.RepositoryName))
 	if err != nil {
 		return helmReleaseRunResult{}, http.StatusBadRequest, fmt.Errorf("repository not found")
 	}
@@ -679,7 +680,7 @@ func normalizeHelmReleaseAutoUpgradeRequest(req *helmReleaseAutoUpgradeRequest) 
 }
 
 func validateHelmReleaseAutoUpgradeRequest(req helmReleaseAutoUpgradeRequest) error {
-	if req.Source != "" && req.Source != helmutil.ChartSourceRepository && req.Source != helmutil.ChartSourceArtifactHub {
+	if req.Source != "" && req.Source != helmutil.ChartSourceRepository {
 		return fmt.Errorf("unsupported chart source")
 	}
 	if req.ScheduleType != model.ScheduledTaskScheduleTypeInterval && req.ScheduleType != model.ScheduledTaskScheduleTypeDaily {

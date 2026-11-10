@@ -53,6 +53,9 @@ func LoadArchive(chartURL string, repository *model.HelmRepository) (*chart.Char
 	if err != nil || parsedURL.Scheme == "" {
 		return nil, fmt.Errorf("chartUrl must be an absolute URL")
 	}
+	if parsedURL.Scheme == "file" {
+		return loadLocalArchive(parsedURL.Path, repository)
+	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" && parsedURL.Scheme != registry.OCIScheme {
 		return nil, fmt.Errorf("unsupported chartUrl scheme")
 	}

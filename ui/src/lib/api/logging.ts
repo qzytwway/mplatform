@@ -18,9 +18,15 @@ export interface ClusterCollectorStatus {
   error?: string
 }
 
+export interface LoggingChart {
+  name: string
+  version?: string
+  image?: string
+}
+
 export interface LoggingStatus {
   storage: LogStorage | null
-  images: string[]
+  charts: LoggingChart[]
   clusters: ClusterCollectorStatus[]
 }
 

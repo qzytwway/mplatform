@@ -23,7 +23,6 @@ import {
   dryRunUpgradeHelmRelease,
   rollbackHelmRelease,
   upgradeHelmRelease,
-  useArtifactHubCharts,
   useHelmChart,
   useHelmChartContent,
   useHelmCharts,
@@ -860,25 +859,7 @@ function HelmReleaseChartVersionDetail({
       ),
     [chartName, chartsQuery.data?.items]
   )
-  const shouldSearchArtifactHub =
-    canCheck && !chartsQuery.isLoading && managedChartCandidates.length === 0
-  const artifactHubQuery = useArtifactHubCharts({
-    query: chartName,
-    verifiedPublisher: false,
-    limit: 20,
-    enabled: shouldSearchArtifactHub,
-  })
-  const artifactHubCandidates = useMemo(
-    () =>
-      (artifactHubQuery.data?.items || []).filter(
-        (chart) => chart.name === chartName
-      ),
-    [artifactHubQuery.data?.items, chartName]
-  )
-  const candidates =
-    managedChartCandidates.length > 0
-      ? managedChartCandidates
-      : artifactHubCandidates
+  const candidates = managedChartCandidates
   const latestVersion = candidates.length === 1 ? candidates[0].version : ''
   const hasNewVersion =
     latestVersion &&
@@ -984,17 +965,10 @@ function UpgradeHelmReleaseDialog({
     open: open && !!chartName,
     selectedRepository,
   })
-  const {
-    activeChart,
-    activeChartSource,
-    activeRepository,
-    currentVersionChart,
-  } = chartSelection
+  const { activeChart, activeRepository, currentVersionChart } = chartSelection
   const latestChartQuery = useHelmChart(
     activeRepository || undefined,
-    chartName,
-    undefined,
-    activeChartSource
+    chartName
   )
   const currentVersionOption = latestChartQuery.data?.versions?.find(
     (version) => isSameHelmVersion(version.version, currentVersion)
@@ -1010,15 +984,13 @@ function UpgradeHelmReleaseDialog({
   const selectedChartQuery = useHelmChart(
     activeRepository || undefined,
     chartName,
-    activeVersion || undefined,
-    activeChartSource
+    activeVersion || undefined
   )
   const defaultValuesQuery = useHelmChartContent(
     activeRepository || undefined,
     chartName,
     'values',
     activeVersion || undefined,
-    activeChartSource,
     open && !!activeChart && !!activeVersion
   )
   const versionOptions = useMemo<HelmChartVersion[]>(() => {

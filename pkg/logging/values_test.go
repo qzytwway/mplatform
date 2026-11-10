@@ -10,6 +10,7 @@ import (
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/common"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -59,7 +60,7 @@ func dryRunInstall(t *testing.T, loadedChart *chart.Chart, name string, values m
 }
 
 func TestVictoriaLogsChartRendersWithValues(t *testing.T) {
-	loadedChart, err := loadVictoriaLogsChart()
+	loadedChart, err := loader.LoadFile("testdata/victoria-logs-single-0.13.12.tgz")
 	require.NoError(t, err)
 
 	manifest := dryRunInstall(t, loadedChart, victoriaLogsRelease, victoriaLogsValues(storageOptions{
@@ -83,7 +84,7 @@ func TestVictoriaLogsChartRendersWithValues(t *testing.T) {
 }
 
 func TestVectorChartRendersWithValues(t *testing.T) {
-	loadedChart, err := loadVectorChart()
+	loadedChart, err := loader.LoadFile("testdata/vector-0.61.0.tgz")
 	require.NoError(t, err)
 
 	manifest := dryRunInstall(t, loadedChart, vectorRelease, vectorValues(collectorOptions{
@@ -100,13 +101,4 @@ func TestVectorChartRendersWithValues(t *testing.T) {
 	require.Contains(t, manifest, "name: VECTOR_SELF_NODE_NAME")
 	require.Contains(t, manifest, "name: "+authSecretName)
 	require.NotContains(t, manifest, "kind: Secret")
-}
-
-func TestRequiredImages(t *testing.T) {
-	images, err := requiredImages()
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		"victoriametrics/victoria-logs:v1.53.0",
-		"timberio/vector:0.61.0-distroless-libc",
-	}, images)
 }

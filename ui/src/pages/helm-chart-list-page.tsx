@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type SubmitEvent,
+} from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import {
   ColumnFiltersState,
@@ -18,9 +25,10 @@ import {
   Search,
   Settings2,
   Trash2,
+  Upload,
   XCircle,
 } from 'lucide-react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -28,7 +36,7 @@ import { HelmChart, HelmRepository } from '@/types/api'
 import {
   createHelmRepository,
   deleteHelmRepository,
-  useArtifactHubCharts,
+  uploadLocalChart,
   useHelmCharts,
   useHelmRepositories,
 } from '@/lib/api'
@@ -61,20 +69,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { ErrorMessage } from '@/components/error-message'
 import { HelmChartIcon } from '@/components/helm-chart-icon'
 import { ResourceTableView } from '@/components/resource-table-view'
 
 const allRepositories = 'all'
-const artifactHubSource = 'artifacthub'
-const repositoriesSource = 'repositories'
 const columnHelper = createColumnHelper<HelmChart>()
-type ChartSource = typeof artifactHubSource | typeof repositoriesSource
 type HelmChartListSessionState = {
-  chartSource?: ChartSource
-  verifiedPublisherOnly?: boolean
   searchQuery?: string
   repositoryFilter?: string
   pagination?: PaginationState
@@ -85,7 +87,6 @@ const defaultPagination: PaginationState = {
   pageIndex: 0,
   pageSize: 20,
 }
-const artifactHubPageSizeOptions = [10, 20, 50]
 
 function readHelmChartListSessionState(): HelmChartListSessionState {
   const value = sessionStorage.getItem(helmChartListSessionStorageKey)
@@ -98,15 +99,6 @@ function readHelmChartListSessionState(): HelmChartListSessionState {
     const pagination = state.pagination
 
     return {
-      chartSource:
-        state.chartSource === artifactHubSource ||
-        state.chartSource === repositoriesSource
-          ? state.chartSource
-          : undefined,
-      verifiedPublisherOnly:
-        typeof state.verifiedPublisherOnly === 'boolean'
-          ? state.verifiedPublisherOnly
-          : undefined,
       searchQuery:
         typeof state.searchQuery === 'string' ? state.searchQuery : undefined,
       repositoryFilter:
@@ -118,9 +110,7 @@ function readHelmChartListSessionState(): HelmChartListSessionState {
         Number.isInteger(pagination.pageIndex) &&
         pagination.pageIndex >= 0 &&
         Number.isInteger(pagination.pageSize) &&
-        pagination.pageSize > 0 &&
-        (state.chartSource === repositoriesSource ||
-          artifactHubPageSizeOptions.includes(pagination.pageSize))
+        pagination.pageSize > 0
           ? pagination
           : undefined,
     }
@@ -130,11 +120,7 @@ function readHelmChartListSessionState(): HelmChartListSessionState {
 }
 
 function chartDetailPath(chart: HelmChart) {
-  const path = `/charts/${encodeURIComponent(chart.repositoryName)}/${encodeURIComponent(chart.name)}`
-  if (chart.source !== artifactHubSource) {
-    return path
-  }
-  return `${path}?source=${artifactHubSource}`
+  return `/charts/${encodeURIComponent(chart.repositoryName)}/${encodeURIComponent(chart.name)}`
 }
 
 function ChartNameLink({ chart }: { chart: HelmChart }) {
@@ -358,12 +344,6 @@ export function HelmChartListPage() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const [initialSessionState] = useState(readHelmChartListSessionState)
-  const [chartSource, setChartSource] = useState<ChartSource>(
-    initialSessionState.chartSource ?? artifactHubSource
-  )
-  const [verifiedPublisherOnly, setVerifiedPublisherOnly] = useState(
-    initialSessionState.verifiedPublisherOnly ?? false
-  )
   const [searchQuery, setSearchQuery] = useState(
     initialSessionState.searchQuery ?? ''
   )
@@ -374,6 +354,8 @@ export function HelmChartListPage() {
   const [repositoryToDelete, setRepositoryToDelete] =
     useState<HelmRepository | null>(null)
   const [isDeletingRepository, setIsDeletingRepository] = useState(false)
+  const [isUploadingChart, setIsUploadingChart] = useState(false)
+  const chartFileInputRef = useRef<HTMLInputElement>(null)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [pagination, setPagination] = useState<PaginationState>(
@@ -381,7 +363,6 @@ export function HelmChartListPage() {
   )
   const selectedRepository =
     repositoryFilter === allRepositories ? undefined : repositoryFilter
-  const isArtifactHubSource = chartSource === artifactHubSource
   const canManageRepositories = user?.isAdmin() ?? false
 
   usePageTitle(t('nav.helmCharts'))
@@ -390,40 +371,19 @@ export function HelmChartListPage() {
     sessionStorage.setItem(
       helmChartListSessionStorageKey,
       JSON.stringify({
-        chartSource,
-        verifiedPublisherOnly,
         searchQuery,
         repositoryFilter,
         pagination,
       })
     )
-  }, [
-    chartSource,
-    verifiedPublisherOnly,
-    searchQuery,
-    repositoryFilter,
-    pagination,
-  ])
+  }, [searchQuery, repositoryFilter, pagination])
 
   const { data: repositories = [], refetch: refetchRepositories } =
     useHelmRepositories()
   const selectedRepositoryItem = repositories.find(
     (repository) => repository.name === selectedRepository
   )
-  const localChartsQuery = useHelmCharts({
-    repository: selectedRepository,
-    enabled: !isArtifactHubSource,
-  })
-  const artifactHubChartsQuery = useArtifactHubCharts({
-    query: searchQuery,
-    verifiedPublisher: verifiedPublisherOnly,
-    limit: pagination.pageSize,
-    offset: pagination.pageIndex * pagination.pageSize,
-    enabled: isArtifactHubSource,
-  })
-  const activeChartsQuery = isArtifactHubSource
-    ? artifactHubChartsQuery
-    : localChartsQuery
+  const chartsQuery = useHelmCharts({ repository: selectedRepository })
   const {
     data,
     isLoading,
@@ -431,11 +391,9 @@ export function HelmChartListPage() {
     isError,
     error,
     refetch: refetchCharts,
-  } = activeChartsQuery
+  } = chartsQuery
   const charts = data?.items || []
-  const totalRowCount = isArtifactHubSource
-    ? (data?.total ?? charts.length)
-    : charts.length
+  const totalRowCount = charts.length
 
   const columns = useMemo(
     () => [
@@ -500,17 +458,12 @@ export function HelmChartListPage() {
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
     enableSorting: false,
-    manualPagination: isArtifactHubSource,
-    pageCount: isArtifactHubSource
-      ? Math.ceil(totalRowCount / pagination.pageSize) || 0
-      : undefined,
-    getRowId: (chart) =>
-      `${chart.source || repositoriesSource}/${chart.repositoryUrl}/${chart.name}`,
+    getRowId: (chart) => `${chart.repositoryUrl}/${chart.name}`,
     globalFilterFn: (row, _columnId, value) =>
       chartMatchesSearch(row.original, String(value)),
     state: {
       columnFilters,
-      globalFilter: isArtifactHubSource ? '' : searchQuery,
+      globalFilter: searchQuery,
       columnVisibility,
       pagination,
     },
@@ -518,7 +471,32 @@ export function HelmChartListPage() {
   })
 
   const handleCreated = async () => {
-    await Promise.all([refetchRepositories(), localChartsQuery.refetch()])
+    await Promise.all([refetchRepositories(), chartsQuery.refetch()])
+  }
+
+  const handleChartFileSelected = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+    setIsUploadingChart(true)
+    try {
+      const uploaded = await uploadLocalChart(file)
+      toast.success(
+        t('helmCharts.messages.chartUploaded', {
+          name: uploaded.name,
+          version: uploaded.version,
+        })
+      )
+      await chartsQuery.refetch()
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsUploadingChart(false)
+    }
   }
 
   const handleDeleteRepository = async () => {
@@ -531,7 +509,7 @@ export function HelmChartListPage() {
       toast.success(t('helmCharts.messages.repositoryDeleted'))
       setRepositoryFilter(allRepositories)
       setRepositoryToDelete(null)
-      await Promise.all([refetchRepositories(), localChartsQuery.refetch()])
+      await Promise.all([refetchRepositories(), chartsQuery.refetch()])
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
@@ -539,29 +517,8 @@ export function HelmChartListPage() {
     }
   }
 
-  const updateChartSource = (value: string) => {
-    if (!value) {
-      return
-    }
-    setChartSource(value as ChartSource)
-    setPagination((prev) => ({
-      ...prev,
-      pageIndex: 0,
-      pageSize:
-        value === artifactHubSource &&
-        !artifactHubPageSizeOptions.includes(prev.pageSize)
-          ? defaultPagination.pageSize
-          : prev.pageSize,
-    }))
-  }
-
   const updateSearchQuery = (value: string) => {
     setSearchQuery(value)
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-  }
-
-  const updateVerifiedPublisherOnly = (value: boolean) => {
-    setVerifiedPublisherOnly(value)
     setPagination((prev) => ({ ...prev, pageIndex: 0 }))
   }
 
@@ -570,9 +527,7 @@ export function HelmChartListPage() {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }))
   }
 
-  const filteredRowCount = isArtifactHubSource
-    ? charts.length
-    : table.getFilteredRowModel().rows.length
+  const filteredRowCount = table.getFilteredRowModel().rows.length
   const emptyState = (() => {
     if (isLoading && charts.length === 0) {
       return (
@@ -606,15 +561,10 @@ export function HelmChartListPage() {
           <h3 className="mb-1 text-lg font-medium">
             {t('helmCharts.messages.noCharts')}
           </h3>
-          {!isArtifactHubSource && canManageRepositories ? (
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => setDialogOpen(true)}
-            >
-              <Plus className="size-4" />
-              {t('helmCharts.actions.addRepository')}
-            </Button>
+          {canManageRepositories ? (
+            <p className="mt-2 max-w-md text-center text-sm text-muted-foreground">
+              {t('helmCharts.messages.noChartsHint')}
+            </p>
           ) : null}
         </div>
       )
@@ -628,69 +578,38 @@ export function HelmChartListPage() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={chartSource}
-              onValueChange={updateChartSource}
-              aria-label={t('common.fields.source')}
-            >
-              <ToggleGroupItem value={artifactHubSource} className="px-3">
-                {t('helmCharts.filters.artifactHub')}
-              </ToggleGroupItem>
-              <ToggleGroupItem value={repositoriesSource} className="px-3">
-                {t('helmCharts.filters.repositories')}
-              </ToggleGroupItem>
-            </ToggleGroup>
-            {!isArtifactHubSource ? (
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <Select
-                  value={repositoryFilter}
-                  onValueChange={updateRepositoryFilter}
-                >
-                  <SelectTrigger className="w-full sm:w-[220px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={allRepositories}>
-                      {t('helmCharts.filters.allRepositories')}
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Select
+                value={repositoryFilter}
+                onValueChange={updateRepositoryFilter}
+              >
+                <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={allRepositories}>
+                    {t('helmCharts.filters.allRepositories')}
+                  </SelectItem>
+                  {repositories.map((repository) => (
+                    <SelectItem key={repository.id} value={repository.name}>
+                      {repository.name}
                     </SelectItem>
-                    {repositories.map((repository) => (
-                      <SelectItem key={repository.id} value={repository.name}>
-                        {repository.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedRepositoryItem && canManageRepositories ? (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    aria-label={t('helmCharts.actions.deleteRepository')}
-                    onClick={() =>
-                      setRepositoryToDelete(selectedRepositoryItem)
-                    }
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {isArtifactHubSource ? (
-              <div className="flex h-9 items-center gap-2 rounded-md border px-3">
-                <Switch
-                  id="artifacthub-verified-publisher"
-                  checked={verifiedPublisherOnly}
-                  onCheckedChange={updateVerifiedPublisherOnly}
-                />
-                <Label
-                  htmlFor="artifacthub-verified-publisher"
-                  className="whitespace-nowrap text-sm font-normal"
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedRepositoryItem &&
+              selectedRepositoryItem.type !== 'local' &&
+              canManageRepositories ? (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label={t('helmCharts.actions.deleteRepository')}
+                  onClick={() => setRepositoryToDelete(selectedRepositoryItem)}
                 >
-                  {t('helmCharts.filters.verifiedPublisher')}
-                </Label>
-              </div>
-            ) : null}
+                  <Trash2 className="size-4" />
+                </Button>
+              ) : null}
+            </div>
             <Button
               variant="outline"
               size="icon"
@@ -727,11 +646,28 @@ export function HelmChartListPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {!isArtifactHubSource && canManageRepositories ? (
-                <Button onClick={() => setDialogOpen(true)}>
-                  <Plus className="size-4" />
-                  {t('helmCharts.actions.addRepository')}
-                </Button>
+              {canManageRepositories ? (
+                <>
+                  <input
+                    ref={chartFileInputRef}
+                    type="file"
+                    accept=".tgz,application/gzip"
+                    className="hidden"
+                    onChange={(event) => void handleChartFileSelected(event)}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={isUploadingChart}
+                    onClick={() => chartFileInputRef.current?.click()}
+                  >
+                    <Upload className="size-4" />
+                    {t('helmCharts.actions.uploadChart')}
+                  </Button>
+                  <Button onClick={() => setDialogOpen(true)}>
+                    <Plus className="size-4" />
+                    {t('helmCharts.actions.addRepository')}
+                  </Button>
+                </>
               ) : null}
 
               <DropdownMenu>
@@ -774,24 +710,6 @@ export function HelmChartListPage() {
           </div>
         </div>
 
-        {isArtifactHubSource ? (
-          <p className="text-pretty text-xs text-muted-foreground">
-            <Trans
-              i18nKey="helmCharts.messages.artifactHubTrafficNotice"
-              components={{
-                artifactHub: (
-                  <a
-                    href="https://artifacthub.io"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="app-link"
-                  />
-                ),
-              }}
-            />
-          </p>
-        ) : null}
-
         <ResourceTableView
           table={table}
           columnCount={columns.length}
@@ -806,10 +724,7 @@ export function HelmChartListPage() {
           pagination={pagination}
           setPagination={setPagination}
           shrinkFirstColumn={false}
-          showAllPageSize={!isArtifactHubSource}
-          pageSizeOptions={
-            isArtifactHubSource ? artifactHubPageSizeOptions : undefined
-          }
+          showAllPageSize={true}
         />
       </div>
 

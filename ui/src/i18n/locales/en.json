@@ -1031,7 +1031,9 @@
       "isDefault": "Set as Default",
       "alertmanagerUrl": "Alertmanager URL",
       "imageRegistry": "Image registry",
-      "imageRegistryHint": "Chart installs and upgrades on this cluster pull container images from this registry path, keeping only the image name and tag (docker.io/bitnami/redis:7 becomes <registry>/redis:7). Leave empty to keep the chart's images."
+      "imageRegistryHint": "Chart installs and upgrades on this cluster pull container images from this registry path, keeping only the image name and tag (docker.io/bitnami/redis:7 becomes <registry>/redis:7). Leave empty to keep the chart's images.",
+      "discoveredUrl": "Auto-discovered: {{url}}. Leave empty to keep using it.",
+      "autoDiscoverHint": "Leave empty to auto-discover it in the cluster, e.g. after installing kube-prometheus-stack."
     }
   },
   "oauthManagement": {
@@ -1275,6 +1277,7 @@
     "actions": {
       "addRepository": "Add Repository",
       "deleteRepository": "Delete Repository",
+      "uploadChart": "Upload chart",
       "install": "Install"
     },
     "fields": {
@@ -1291,9 +1294,7 @@
     },
     "filters": {
       "allRepositories": "All repositories",
-      "artifactHub": "Artifact Hub",
-      "repositories": "Repositories",
-      "verifiedPublisher": "Verified publisher"
+      "repositories": "Repositories"
     },
     "messages": {
       "addRepositoryDescription": "Add a Helm repository to make its charts available. Supports classic (https://) and OCI (oci://) repositories; an OCI URL must point at a single chart.",
@@ -1302,13 +1303,14 @@
       "repositoryDeleted": "Repository deleted",
       "deleteRepositoryDescription": "This only removes the managed chart source from MPlatform. It does not delete remote charts or installed Helm releases.",
       "noCharts": "No charts found",
+      "noChartsHint": "Upload a chart package (.tgz), copy it into the server's chart directory, or add a Harbor repository.",
+      "chartUploaded": "Uploaded {{name}} {{version}}",
       "noReadme": "No README found",
       "noValues": "No values found",
       "noTemplates": "No templates found",
       "noVersions": "No versions found",
       "noChartUrl": "Chart package URL is missing.",
       "invalidValues": "Values must be a YAML object.",
-      "artifactHubTrafficNotice": "Security notice: MPlatform contacts <artifactHub>Artifact Hub</artifactHub> when searching or viewing chart information from this source. MPlatform only displays third-party data and is not responsible for its content.",
       "installed": "Helm release installed",
       "harborRepositoryHint": "Enter oci://<harbor>/<project>. Every chart in the project is listed through the Harbor API. Use a robot account with List Repository, List Artifact and Pull Repository permissions on the project, or leave credentials empty for a public project."
     },
@@ -1387,11 +1389,8 @@
       "rollbackStarted": "Rollback requested",
       "rollbackConfirmTitle": "Rollback release?",
       "rollbackConfirmDescription": "Rollback {{namespace}}/{{name}} to revision {{revision}}.",
-      "chartNotFound": "Chart not found in managed Helm repositories or Artifact Hub.",
+      "chartNotFound": "Chart not found in managed Helm repositories.",
       "chartSourceManagedRepository": "Using managed chart repository {{repository}}.",
-      "chartSourceArtifactHubVerified": "Using Artifact Hub chart from {{repository}} (verified publisher).",
-      "chartSourceArtifactHubVerifiedShort": "Artifact Hub (verified)",
-      "chartSourceArtifactHub": "Using Artifact Hub chart from {{repository}}.",
       "chartDetailsLink": "Chart details",
       "chartSourceSelectChart": "Select a chart to use a different chart package. Defaults to the current chart.",
       "newVersionAvailable": "New {{version}}",
@@ -1589,9 +1588,10 @@
       "storageSize": "Storage size",
       "storageClass": "Storage class",
       "defaultStorageClass": "Cluster default",
+      "chartsHint": "Logging charts are read from the app store's local repository. Offline clusters also need the images below; each cluster pulls them from <registry>/<image>:<tag> using its image registry setting.",
+      "chartMissing": "Not uploaded",
       "nodeHostHint": "Enter an IP address or host name of a node in that cluster. Other clusters and MPlatform write to and query http://<node address>:<NodePort>. Retention accepts h, d, w or y, such as 7d.",
-      "imagesHint": "Offline clusters must provide these images. Each cluster pulls them from its image registry setting as <registry>/<image name>:<tag>.",
-      "upgradeHint": "Upgrading MPlatform does not upgrade installed log components."
+      "upgradeHint": "Uploading a newer chart does not upgrade components that are already installed."
     },
     "collectors": {
       "title": "Log collection",

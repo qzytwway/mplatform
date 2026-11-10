@@ -218,7 +218,15 @@ function ClusterDialogContent({
             value={formData.prometheusURL}
             onChange={(e) => handleChange('prometheusURL', e.target.value)}
             type="url"
+            aria-describedby="prometheus-url-hint"
           />
+          <p id="prometheus-url-hint" className="text-sm text-muted-foreground">
+            {cluster?.discoveredPrometheusURL
+              ? t('clusterManagement.dialog.discoveredUrl', {
+                  url: cluster.discoveredPrometheusURL,
+                })
+              : t('clusterManagement.dialog.autoDiscoverHint')}
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -231,7 +239,18 @@ function ClusterDialogContent({
             onChange={(e) => handleChange('alertmanagerURL', e.target.value)}
             placeholder="http://alertmanager-operated.monitoring.svc:9093"
             type="url"
+            aria-describedby="alertmanager-url-hint"
           />
+          <p
+            id="alertmanager-url-hint"
+            className="text-sm text-muted-foreground"
+          >
+            {cluster?.discoveredAlertmanagerURL
+              ? t('clusterManagement.dialog.discoveredUrl', {
+                  url: cluster.discoveredAlertmanagerURL,
+                })
+              : t('clusterManagement.dialog.autoDiscoverHint')}
+          </p>
         </div>
 
         <div className="space-y-2">

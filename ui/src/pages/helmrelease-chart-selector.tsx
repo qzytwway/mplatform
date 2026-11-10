@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -35,18 +34,13 @@ export function HelmReleaseChartSelector({
     chartName,
     chartCandidates,
     chartKey,
-    chartOptionSourceLabel,
     activeChart,
-    activeChartSource,
     activeRepository,
     isChartSourceLoading,
     chartLookupError,
     chartSourceLabel,
   } = selection
   const chartDetailSearchParams = new URLSearchParams()
-  if (activeChartSource === 'artifacthub') {
-    chartDetailSearchParams.set('source', 'artifacthub')
-  }
   if (detailVersion) {
     chartDetailSearchParams.set('version', detailVersion)
   }
@@ -83,16 +77,8 @@ export function HelmReleaseChartSelector({
           <SelectContent className="max-h-80">
             {chartCandidates.map((chart) => (
               <SelectItem key={chartKey(chart)} value={chartKey(chart)}>
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <span className="truncate">
-                    {chart.repositoryName}/{chart.name}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className="ml-auto px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
-                  >
-                    {chartOptionSourceLabel(chart)}
-                  </Badge>
+                <span className="truncate">
+                  {chart.repositoryName}/{chart.name}
                 </span>
               </SelectItem>
             ))}

@@ -36,6 +36,9 @@ var (
 	DBType               = "sqlite"
 	DBDSN                = "dev.db"
 
+	// ChartDir holds the chart packages served by the built-in local repository.
+	ChartDir = "chart-packages"
+
 	MPlatformEncryptKey = "mplatform-default-encryption-key-change-in-production"
 
 	AllNamespaces = "_all"
@@ -124,6 +127,10 @@ func LoadEnvs() {
 
 	if dbDSN := os.Getenv("DB_DSN"); dbDSN != "" {
 		DBDSN = dbDSN
+	}
+
+	if chartDir := os.Getenv("CHART_DIR"); chartDir != "" {
+		ChartDir = chartDir
 	}
 
 	if dbType := os.Getenv("DB_TYPE"); dbType != "" {

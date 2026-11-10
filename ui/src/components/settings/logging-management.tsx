@@ -10,6 +10,7 @@ import {
   uninstallLogStorage,
   useLoggingStatus,
   type ClusterCollectorStatus,
+  type LoggingChart,
   type LoggingStatus,
 } from '@/lib/api/logging'
 import { translateError } from '@/lib/utils'
@@ -111,7 +112,7 @@ function StorageCard({ status }: { status: LoggingStatus }) {
         ) : (
           <InstallStorageForm status={status} />
         )}
-        <RequiredImages images={status.images} />
+        <RequiredCharts charts={status.charts} />
       </CardContent>
     </Card>
   )
@@ -244,14 +245,28 @@ function InstallStorageForm({ status }: { status: LoggingStatus }) {
   )
 }
 
-function RequiredImages({ images }: { images: string[] }) {
+function RequiredCharts({ charts }: { charts: LoggingChart[] }) {
   const { t } = useTranslation()
   return (
     <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
-      <p className="text-muted-foreground">{t('logging.storage.imagesHint')}</p>
-      <ul className="space-y-1 font-mono text-xs">
-        {images.map((image) => (
-          <li key={image}>{image}</li>
+      <p className="text-muted-foreground">{t('logging.storage.chartsHint')}</p>
+      <ul className="space-y-1 text-xs">
+        {charts.map((chart) => (
+          <li key={chart.name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono">{chart.name}</span>
+            {chart.version ? (
+              <>
+                <Badge variant="outline">{chart.version}</Badge>
+                <span className="font-mono text-muted-foreground">
+                  {chart.image}
+                </span>
+              </>
+            ) : (
+              <Badge variant="destructive">
+                {t('logging.storage.chartMissing')}
+              </Badge>
+            )}
+          </li>
         ))}
       </ul>
       <p className="text-xs text-muted-foreground">

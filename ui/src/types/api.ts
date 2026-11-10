@@ -155,7 +155,7 @@ export interface HelmReleaseList {
 export interface HelmRepository {
   id: number
   name: string
-  type: '' | 'harbor'
+  type: '' | 'harbor' | 'local'
   url: string
   plainHTTP: boolean
   username?: string
@@ -168,7 +168,7 @@ export interface HelmChart {
   repositoryId: number
   repositoryName: string
   repositoryUrl: string
-  source?: 'repository' | 'artifacthub'
+  source?: 'repository'
   name: string
   version: string
   appVersion?: string
@@ -176,7 +176,6 @@ export interface HelmChart {
   description?: string
   icon?: string
   home?: string
-  artifactHubUrl?: string
   chartUrl?: string
   sources?: string[]
   keywords?: string[]
@@ -222,7 +221,7 @@ export interface HelmReleaseInstallRequest {
   namespace?: string
   chartUrl: string
   repositoryName?: string
-  source?: 'repository' | 'artifacthub'
+  source?: 'repository'
   values?: Record<string, unknown>
   description?: string
   createNamespace?: boolean
@@ -232,7 +231,7 @@ export interface HelmReleaseInstallRequest {
 export interface HelmReleaseUpgradeRequest {
   chartUrl: string
   repositoryName?: string
-  source?: 'repository' | 'artifacthub'
+  source?: 'repository'
   values?: Record<string, unknown>
   description?: string
   forceConflicts?: boolean
@@ -250,7 +249,7 @@ export interface HelmReleaseAutoUpgrade {
   scheduleTime: string
   timeoutMinutes: number
   rollbackOnFailure: boolean
-  source?: 'repository' | 'artifacthub'
+  source?: 'repository'
   repositoryName?: string
   chartName?: string
   lastCheckedAt?: string
@@ -265,7 +264,7 @@ export interface HelmReleaseAutoUpgradeRequest {
   scheduleTime: string
   timeoutMinutes: number
   rollbackOnFailure: boolean
-  source?: 'repository' | 'artifacthub'
+  source?: 'repository'
   repositoryName?: string
   chartName?: string
 }
@@ -585,6 +584,8 @@ export interface Cluster {
   updatedAt: string
   prometheusURL?: string
   alertmanagerURL?: string
+  discoveredPrometheusURL?: string
+  discoveredAlertmanagerURL?: string
   imageRegistry?: string
   error?: string
 }

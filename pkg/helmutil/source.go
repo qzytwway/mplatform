@@ -2,24 +2,14 @@ package helmutil
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strings"
-	"time"
 
 	semver "github.com/blang/semver/v4"
 	"github.com/qzytwway/mplatform/pkg/model"
 )
 
-const (
-	ChartSourceRepository  = "repository"
-	ChartSourceArtifactHub = "artifacthub"
-
-	artifactHubHelmPackageAPIURL = "https://artifacthub.io/api/v1/packages/helm/"
-)
+const ChartSourceRepository = "repository"
 
 type ChartPackage struct {
 	Version    string
@@ -27,13 +17,8 @@ type ChartPackage struct {
 	Repository *model.HelmRepository
 }
 
-type artifactHubPackage struct {
-	Version    string `json:"version"`
-	ContentURL string `json:"content_url"`
-}
-
-func ResolveChartRepository(repositoryName, source string) (*model.HelmRepository, error) {
-	if repositoryName == "" || source == ChartSourceArtifactHub {
+func ResolveChartRepository(repositoryName string) (*model.HelmRepository, error) {
+	if repositoryName == "" {
 		return nil, nil
 	}
 	var repository model.HelmRepository
@@ -47,8 +32,6 @@ func LatestChartPackage(ctx context.Context, source, repositoryName, chartName s
 	switch source {
 	case "", ChartSourceRepository:
 		return latestRepositoryChartPackage(repositoryName, chartName)
-	case ChartSourceArtifactHub:
-		return latestArtifactHubChartPackage(ctx, repositoryName, chartName)
 	default:
 		return ChartPackage{}, fmt.Errorf("unsupported chart source")
 	}
@@ -80,40 +63,6 @@ func latestRepositoryChartPackage(repositoryName, chartName string) (ChartPackag
 		Version:    latest.Version,
 		URL:        ResolveURL(repository.URL, latest.URLs[0]),
 		Repository: &repository,
-	}, nil
-}
-
-func latestArtifactHubChartPackage(ctx context.Context, repositoryName, chartName string) (ChartPackage, error) {
-	packageURL := artifactHubHelmPackageAPIURL + url.PathEscape(repositoryName) + "/" + url.PathEscape(chartName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, packageURL, nil)
-	if err != nil {
-		return ChartPackage{}, err
-	}
-	req.Header.Set("User-Agent", "mplatform")
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ChartPackage{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return ChartPackage{}, fmt.Errorf("artifact hub request failed: %s", resp.Status)
-	}
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ChartPackage{}, err
-	}
-	var pkg artifactHubPackage
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return ChartPackage{}, err
-	}
-	if strings.TrimSpace(pkg.ContentURL) == "" {
-		return ChartPackage{}, fmt.Errorf("chart package URL is missing")
-	}
-	return ChartPackage{
-		Version: pkg.Version,
-		URL:     pkg.ContentURL,
 	}, nil
 }
 

@@ -74,7 +74,6 @@ export function HelmInstallDialog({
     chart.name,
     'values',
     chart.version,
-    chart.source,
     open
   )
   const defaultValues = defaultValuesQuery.isLoading

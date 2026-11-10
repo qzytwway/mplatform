@@ -260,6 +260,17 @@ export const deleteHelmRepository = (
   )
 }
 
+export const uploadLocalChart = (
+  file: File
+): Promise<{ name: string; version: string }> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return apiClient.post<{ name: string; version: string }>(
+    '/admin/charts/local',
+    formData
+  )
+}
+
 export const fetchHelmCharts = (options?: {
   repository?: string
   query?: string
@@ -275,46 +286,17 @@ export const fetchHelmCharts = (options?: {
   return fetchAPI<HelmChartList>(`/charts${query ? `?${query}` : ''}`)
 }
 
-export const fetchArtifactHubCharts = (options?: {
-  query?: string
-  verifiedPublisher?: boolean
-  limit?: number
-  offset?: number
-}): Promise<HelmChartList> => {
-  const params = new URLSearchParams()
-  if (options?.query) {
-    params.append('q', options.query)
-  }
-  if (options?.verifiedPublisher !== undefined) {
-    params.append('verifiedPublisher', String(options.verifiedPublisher))
-  }
-  if (options?.limit) {
-    params.append('limit', String(options.limit))
-  }
-  if (options?.offset) {
-    params.append('offset', String(options.offset))
-  }
-  const query = params.toString()
-  return fetchAPI<HelmChartList>(
-    `/charts/artifacthub${query ? `?${query}` : ''}`
-  )
-}
-
 export const fetchHelmChart = (
   repository: string,
   name: string,
-  version?: string,
-  source?: 'repository' | 'artifacthub'
+  version?: string
 ): Promise<HelmChartDetail> => {
   const params = new URLSearchParams()
   if (version) {
     params.append('version', version)
   }
   const query = params.toString()
-  const endpoint =
-    source === 'artifacthub'
-      ? `/charts/artifacthub/${encodeURIComponent(repository)}/${encodeURIComponent(name)}`
-      : `/charts/${encodeURIComponent(repository)}/${encodeURIComponent(name)}`
+  const endpoint = `/charts/${encodeURIComponent(repository)}/${encodeURIComponent(name)}`
 
   return fetchAPI<HelmChartDetail>(`${endpoint}${query ? `?${query}` : ''}`)
 }
@@ -323,18 +305,14 @@ export const fetchHelmChartContent = (
   repository: string,
   name: string,
   content: HelmChartContentType,
-  version?: string,
-  source?: 'repository' | 'artifacthub'
+  version?: string
 ): Promise<HelmChartContent> => {
   const params = new URLSearchParams()
   if (version) {
     params.append('version', version)
   }
   const query = params.toString()
-  const endpoint =
-    source === 'artifacthub'
-      ? `/charts/artifacthub/${encodeURIComponent(repository)}/${encodeURIComponent(name)}/content/${content}`
-      : `/charts/${encodeURIComponent(repository)}/${encodeURIComponent(name)}/content/${content}`
+  const endpoint = `/charts/${encodeURIComponent(repository)}/${encodeURIComponent(name)}/content/${content}`
 
   return fetchAPI<HelmChartContent>(`${endpoint}${query ? `?${query}` : ''}`)
 }
@@ -363,45 +341,15 @@ export const useHelmCharts = (options?: {
   })
 }
 
-export const useArtifactHubCharts = (options?: {
-  query?: string
-  verifiedPublisher?: boolean
-  limit?: number
-  offset?: number
-  enabled?: boolean
-}) => {
-  return useQuery({
-    queryKey: [
-      'helmcharts',
-      'artifacthub',
-      options?.query || '',
-      options?.verifiedPublisher ?? true,
-      options?.limit || 20,
-      options?.offset || 0,
-    ],
-    queryFn: () => fetchArtifactHubCharts(options),
-    enabled: options?.enabled ?? true,
-  })
-}
-
 export const useHelmChart = (
   repository: string | undefined,
   name: string | undefined,
   version?: string,
-  source?: 'repository' | 'artifacthub',
   enabled = true
 ) => {
   return useQuery({
-    queryKey: [
-      'helmcharts',
-      'chart',
-      source || 'repository',
-      repository,
-      name,
-      version || '',
-    ],
-    queryFn: () =>
-      fetchHelmChart(repository || '', name || '', version, source),
+    queryKey: ['helmcharts', 'chart', repository, name, version || ''],
+    queryFn: () => fetchHelmChart(repository || '', name || '', version),
     enabled: Boolean(enabled && repository && name),
   })
 }
@@ -411,27 +359,19 @@ export const useHelmChartContent = (
   name: string | undefined,
   content: HelmChartContentType,
   version?: string,
-  source?: 'repository' | 'artifacthub',
   enabled = true
 ) => {
   return useQuery({
     queryKey: [
       'helmcharts',
       'chart-content',
-      source || 'repository',
       repository,
       name,
       version || '',
       content,
     ],
     queryFn: () =>
-      fetchHelmChartContent(
-        repository || '',
-        name || '',
-        content,
-        version,
-        source
-      ),
+      fetchHelmChartContent(repository || '', name || '', content, version),
     enabled: Boolean(enabled && repository && name),
   })
 }

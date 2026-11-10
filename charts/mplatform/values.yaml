@@ -113,6 +113,24 @@ db:
     # Example: "_journal_mode=WAL&_busy_timeout=5000"
     options: ""
 
+# Directory of chart packages (.tgz) served as the app store's built-in "local" repository.
+# Charts uploaded in the UI are written here, so persist it in production.
+chartStore:
+  mountPath: /chart-packages
+  persistence:
+    pvc:
+      enabled: false
+      existingClaim: ""
+      # StorageClass to request for the PVC (optional)
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+    hostPath:
+      enabled: false
+      path: /path/to/host/dir
+      type: DirectoryOrCreate
+
 extraEnvs:
   # - name: "EXAMPLE_ENV"
   #   value: "example_value"

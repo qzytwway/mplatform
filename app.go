@@ -9,6 +9,7 @@ import (
 	"github.com/qzytwway/mplatform/internal"
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/common"
+	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/middleware"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
@@ -28,6 +29,10 @@ func initializeApp(ctx context.Context) (*cluster.ClusterManager, error) {
 	model.InitDB()
 	if _, err := model.GetGeneralSetting(); err != nil {
 		return nil, fmt.Errorf("failed to load general setting: %w", err)
+	}
+
+	if err := helmutil.EnsureLocalRepository(); err != nil {
+		klog.Warningf("Failed to set up the local chart repository: %v", err)
 	}
 
 	rbac.InitRBAC()

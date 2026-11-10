@@ -4,6 +4,10 @@ package model
 // and whose charts are listed through the Harbor API.
 const HelmRepositoryTypeHarbor = "harbor"
 
+// HelmRepositoryTypeLocal marks the built-in repository whose URL is
+// file://<dir> and whose charts are the .tgz packages in that directory.
+const HelmRepositoryTypeLocal = "local"
+
 type HelmRepository struct {
 	Model
 	Name      string       `json:"name" gorm:"type:varchar(255);uniqueIndex;not null"`

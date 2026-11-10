@@ -1,8 +1,6 @@
 package helm
 
 import (
-	"net/http"
-	"sync"
 	"time"
 
 	"github.com/qzytwway/mplatform/pkg/helmutil"
@@ -13,7 +11,6 @@ import (
 const (
 	helmRepositoryIndexCacheTTL = 5 * time.Minute
 	helmChartContentCacheTTL    = 10 * time.Minute
-	artifactHubCacheTTL         = 5 * time.Minute
 )
 
 type cachedRepositoryIndex struct {
@@ -26,18 +23,11 @@ type cachedChartContent struct {
 	expiresAt time.Time
 }
 
-type cachedArtifactHubResponse struct {
-	data      []byte
-	headers   http.Header
-	expiresAt time.Time
-}
-
-var (
-	artifactHubCacheMu sync.Mutex
-	artifactHubCache   = map[string]cachedArtifactHubResponse{}
-)
-
 func (h *HelmChartHandler) loadRepositoryIndex(repository model.HelmRepository) (*repo.IndexFile, error) {
+	// Scanning the local directory is cheap and shows copied files at once.
+	if repository.Type == model.HelmRepositoryTypeLocal {
+		return helmutil.LoadRepositoryCatalog(repository)
+	}
 	cacheKey := repositoryIndexCacheKey(repository)
 	now := time.Now()
 
