@@ -54,6 +54,7 @@ const roleToForm = (role?: Role | null): Partial<Role> => {
 const RESOURCE_SUGGESTIONS = [
   '*',
   'prometheus',
+  'alertmanager',
   ...resourceCatalog
     .filter((resource) => resource.type !== 'crs')
     .map((resource) => resource.type),

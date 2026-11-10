@@ -3,7 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
 import { CollapsibleContent } from '@radix-ui/react-collapsible'
-import { IconBox, IconLayoutDashboard } from '@tabler/icons-react'
+import {
+  IconActivity,
+  IconBell,
+  IconBox,
+  IconChartLine,
+  IconFileText,
+  IconLayoutDashboard,
+} from '@tabler/icons-react'
 import { CustomResourceDefinition } from 'kubernetes-types/apiextensions/v1'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +18,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { SidebarCustomResourceItem, SidebarItem } from '@/types/sidebar'
 import { useResources, useVersionInfo } from '@/lib/api'
+import { useAlertRules } from '@/lib/api/alerts'
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +38,18 @@ import { SidebarItemIcon } from './sidebar-item-icon'
 import { Collapsible, CollapsibleTrigger } from './ui/collapsible'
 import { VersionInfo } from './version-info'
 
+const OBSERVABILITY_ITEMS = [
+  {
+    url: '/observability/metrics',
+    titleKey: 'nav.metrics',
+    Icon: IconChartLine,
+  },
+  { url: '/observability/logs', titleKey: 'nav.logs', Icon: IconFileText },
+  { url: '/observability/alerts', titleKey: 'nav.alerts', Icon: IconBell },
+]
+
+const SIDEBAR_ALERTS_REFRESH_MS = 60000
+
 const leafItemClass =
   'h-7 data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:hover:bg-sidebar-primary data-[active=true]:hover:text-sidebar-primary-foreground'
 
@@ -40,6 +60,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { config, isLoading } = useSidebarConfig()
   const { logo } = useAuth()
   const { data: versionInfo } = useVersionInfo()
+  const { data: alertRules } = useAlertRules({
+    refetchInterval: SIDEBAR_ALERTS_REFRESH_MS,
+  })
+  const firingAlerts =
+    alertRules?.reduce(
+      (count, rule) =>
+        count + rule.alerts.filter((alert) => alert.state === 'firing').length,
+      0
+    ) ?? 0
   const [openAPIGroupItems, setOpenAPIGroupItems] = useState<
     Record<string, boolean>
   >({})
@@ -415,6 +444,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           </CollapsibleContent>
                         </SidebarMenuItem>
                       </Collapsible>
+                    ))}
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+              </SidebarMenuItem>
+            </Collapsible>
+            <Collapsible defaultOpen asChild className="group/observability">
+              <SidebarMenuItem>
+                <CollapsibleTrigger asChild>
+                  <SidebarMenuButton
+                    tooltip={t('nav.observability')}
+                    className="h-8 font-medium"
+                  >
+                    <IconActivity className="opacity-70" />
+                    <span className="truncate">{t('nav.observability')}</span>
+                    <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/observability:rotate-180" />
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <SidebarMenuSub className="mr-0 pr-0">
+                    {OBSERVABILITY_ITEMS.map(({ url, titleKey, Icon }) => (
+                      <SidebarMenuItem key={url}>
+                        <SidebarMenuButton
+                          tooltip={t(titleKey)}
+                          asChild
+                          isActive={location.pathname === url}
+                          className={leafItemClass}
+                        >
+                          <Link to={url} onClick={handleMenuItemClick}>
+                            <Icon className="opacity-70" />
+                            <span className="truncate">{t(titleKey)}</span>
+                            {url === '/observability/alerts' &&
+                              firingAlerts > 0 && (
+                                <span className="ml-auto rounded-full bg-destructive/15 px-1.5 text-[11px] font-medium tabular-nums text-destructive">
+                                  {firingAlerts}
+                                </span>
+                              )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
                     ))}
                   </SidebarMenuSub>
                 </CollapsibleContent>

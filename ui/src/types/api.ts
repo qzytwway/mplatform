@@ -629,6 +629,7 @@ export interface Cluster {
   createdAt: string
   updatedAt: string
   prometheusURL?: string
+  alertmanagerURL?: string
   error?: string
 }
 

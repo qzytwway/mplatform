@@ -37,6 +37,7 @@ function createClusterFormData(cluster?: Cluster | null) {
     description: cluster?.description || '',
     config: cluster?.config || '',
     prometheusURL: cluster?.prometheusURL || '',
+    alertmanagerURL: cluster?.alertmanagerURL || '',
     enabled: cluster?.enabled ?? true,
     isDefault: cluster?.isDefault ?? false,
     inCluster: cluster?.inCluster ?? false,
@@ -215,6 +216,19 @@ function ClusterDialogContent({
             id="prometheus-url"
             value={formData.prometheusURL}
             onChange={(e) => handleChange('prometheusURL', e.target.value)}
+            type="url"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="alertmanager-url">
+            {t('clusterManagement.dialog.alertmanagerUrl', 'Alertmanager URL')}
+          </Label>
+          <Input
+            id="alertmanager-url"
+            value={formData.alertmanagerURL}
+            onChange={(e) => handleChange('alertmanagerURL', e.target.value)}
+            placeholder="http://alertmanager-operated.monitoring.svc:9093"
             type="url"
           />
         </div>

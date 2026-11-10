@@ -104,6 +104,12 @@ export function usePrometheusQuery(
     enabled: options.enabled !== false && !!cluster && !!query,
     staleTime: options.staleTime ?? 30000,
     refetchInterval: options.refreshInterval ?? false,
+    // Keep the last result while only the time window moves, so charts don't blank on refresh.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === cluster &&
+      previousQuery?.queryKey[2] === query
+        ? previous
+        : undefined,
   })
 }
 
@@ -133,5 +139,11 @@ export function usePrometheusRangeQuery(
     enabled: options.enabled !== false && !!cluster && !!query,
     staleTime: options.staleTime ?? 30000,
     refetchInterval: options.refreshInterval ?? false,
+    // Keep the last result while only the time window moves, so charts don't blank on refresh.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === cluster &&
+      previousQuery?.queryKey[2] === query
+        ? previous
+        : undefined,
   })
 }

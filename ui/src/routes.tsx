@@ -9,6 +9,9 @@ import { HelmChartDetailPage } from './pages/helm-chart-detail-page'
 import { HelmChartListPage } from './pages/helm-chart-list-page'
 import { InitializationPage } from './pages/initialization'
 import { LoginPage } from './pages/login'
+import { AlertsPage } from './pages/observability/alerts-page'
+import { LogsPage } from './pages/observability/logs-page'
+import { MetricsPage } from './pages/observability/metrics-page'
 import { Overview } from './pages/overview'
 import { ResourceDetail } from './pages/resource-detail'
 import { ResourceList } from './pages/resource-list'
@@ -61,6 +64,18 @@ export const router = createBrowserRouter(
         {
           path: 'settings',
           element: <SettingsPage />,
+        },
+        {
+          path: 'observability/metrics',
+          element: <MetricsPage />,
+        },
+        {
+          path: 'observability/logs',
+          element: <LogsPage />,
+        },
+        {
+          path: 'observability/alerts',
+          element: <AlertsPage />,
         },
         {
           path: 'crds/:crd',

@@ -165,6 +165,7 @@ config:
   #       kind: Config
   #       ...
   #     prometheusURL: "http://prometheus:9090"
+  #     alertmanagerURL: "http://alertmanager:9093"
   #     default: true
   #   - name: in-cluster
   #     inCluster: true

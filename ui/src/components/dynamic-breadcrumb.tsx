@@ -36,6 +36,9 @@ export function DynamicBreadcrumb() {
       if (label === 'pvcs') {
         return { label: t('sidebar.short.pvcs'), href }
       }
+      if (label === 'observability') {
+        return { label: t('nav.observability') }
+      }
 
       const resource = getResourceCatalogEntry(label)
       if (!resource) {

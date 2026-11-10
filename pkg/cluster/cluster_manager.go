@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qzytwway/mplatform/pkg/alertmanager"
 	"github.com/qzytwway/mplatform/pkg/clusteragent"
 	"github.com/qzytwway/mplatform/pkg/kube"
 	"github.com/qzytwway/mplatform/pkg/model"
@@ -22,14 +23,16 @@ import (
 )
 
 type ClientSet struct {
-	Name       string
-	Version    string // Kubernetes version
-	K8sClient  *kube.K8sClient
-	PromClient *prometheus.Client
+	Name               string
+	Version            string // Kubernetes version
+	K8sClient          *kube.K8sClient
+	PromClient         *prometheus.Client
+	AlertmanagerClient *alertmanager.Client
 
 	DiscoveredPrometheusURL string
 	config                  string
 	prometheusURL           string
+	alertmanagerURL         string
 	clusterAgentGeneration  uint64
 }
 
@@ -87,22 +90,7 @@ func newClientSet(name string, k8sConfig *rest.Config, prometheusURL string) (*C
 		}
 	}
 	if prometheusURL != "" {
-		var rt = http.DefaultTransport
-		var err error
-		if isClusterLocalURL(prometheusURL) {
-			rt, err = createK8sProxyTransport(k8sConfig, prometheusURL)
-			if err != nil {
-				klog.Warningf("Failed to create k8s proxy transport for cluster %s: %v, using direct connection", name, err)
-			} else {
-				klog.Infof("Using k8s API proxy for Prometheus in cluster %s", name)
-			}
-		} else if k8sConfig.Dial != nil {
-			transport := http.DefaultTransport.(*http.Transport).Clone()
-			transport.Proxy = nil
-			transport.DialContext = k8sConfig.Dial
-			rt = transport
-			klog.Infof("Using cluster agent TCP proxy for Prometheus in cluster %s", name)
-		}
+		rt := serviceRoundTripper(name, "Prometheus", k8sConfig, prometheusURL)
 		cs.PromClient, err = prometheus.NewClientWithRoundTripper(prometheusURL, rt)
 		if err != nil {
 			klog.Warningf("Failed to create Prometheus client for cluster %s, some features may not work as expected, err: %v", name, err)
@@ -116,6 +104,42 @@ func newClientSet(name string, k8sConfig *rest.Config, prometheusURL string) (*C
 	}
 	klog.Infof("Loaded K8s client for cluster: %s, version: %s", name, cs.Version)
 	return cs, nil
+}
+
+// serviceRoundTripper reaches in-cluster services through the API server proxy,
+// and everything else through the cluster agent tunnel when there is one.
+func serviceRoundTripper(clusterName, service string, k8sConfig *rest.Config, serviceURL string) http.RoundTripper {
+	if isClusterLocalURL(serviceURL) {
+		rt, err := createK8sProxyTransport(k8sConfig, serviceURL)
+		if err != nil {
+			klog.Warningf("Failed to create k8s proxy transport for %s in cluster %s: %v, using direct connection", service, clusterName, err)
+			return http.DefaultTransport
+		}
+		klog.Infof("Using k8s API proxy for %s in cluster %s", service, clusterName)
+		return rt
+	}
+	if k8sConfig.Dial != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = nil
+		transport.DialContext = k8sConfig.Dial
+		klog.Infof("Using cluster agent TCP proxy for %s in cluster %s", service, clusterName)
+		return transport
+	}
+	return http.DefaultTransport
+}
+
+func (cs *ClientSet) configureAlertmanager(alertmanagerURL string) {
+	cs.alertmanagerURL = alertmanagerURL
+	if alertmanagerURL == "" {
+		return
+	}
+	rt := serviceRoundTripper(cs.Name, "Alertmanager", cs.K8sClient.Configuration, alertmanagerURL)
+	client, err := alertmanager.NewClient(alertmanagerURL, rt)
+	if err != nil {
+		klog.Warningf("Failed to create Alertmanager client for cluster %s: %v", cs.Name, err)
+		return
+	}
+	cs.AlertmanagerClient = client
 }
 
 func isClusterLocalURL(urlStr string) bool {
@@ -415,6 +439,11 @@ func shouldUpdateCluster(cs *ClientSet, cluster *model.Cluster) bool {
 		return true
 	}
 
+	if cs.alertmanagerURL != cluster.AlertmanagerURL {
+		klog.Infof("Alertmanager URL changed for cluster %s, updating", cluster.Name)
+		return true
+	}
+
 	// k8s version change
 	// TODO: Replace direct ClientSet.Discovery() call with a small DiscoveryInterface.
 	// current code depends on *kubernetes.Clientset, which is hard to mock in tests.
@@ -438,7 +467,12 @@ func buildClientSet(cluster *model.Cluster) (*ClientSet, error) {
 
 func (cm *ClusterManager) buildClientSet(cluster *model.Cluster) (*ClientSet, error) {
 	if !cluster.ClusterAgent {
-		return buildClientSet(cluster)
+		clientSet, err := buildClientSet(cluster)
+		if err != nil {
+			return nil, err
+		}
+		clientSet.configureAlertmanager(cluster.AlertmanagerURL)
+		return clientSet, nil
 	}
 	config, generation, err := cm.clusterAgentManager.RESTConfig(cluster.ID)
 	if err != nil {
@@ -449,6 +483,7 @@ func (cm *ClusterManager) buildClientSet(cluster *model.Cluster) (*ClientSet, er
 		return nil, err
 	}
 	clientSet.clusterAgentGeneration = generation
+	clientSet.configureAlertmanager(cluster.AlertmanagerURL)
 	return clientSet, nil
 }
 

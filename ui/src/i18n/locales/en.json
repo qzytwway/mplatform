@@ -455,7 +455,11 @@
     "storageversions": "StorageVersions",
     "storageversionmigrations": "StorageVersionMigrations",
     "helmReleases": "Helm Release",
-    "helmCharts": "App Catalog"
+    "helmCharts": "App Catalog",
+    "observability": "Observability",
+    "metrics": "Prometheus Metrics",
+    "logs": "Logs",
+    "alerts": "Alerts"
   },
   "overview": {
     "title": "Overview",
@@ -998,7 +1002,8 @@
       "prometheusUrlPlaceholder": "https://prometheus.example.com",
       "clusterAgentDescription": "Create the cluster first, then run the generated command inside the target cluster.",
       "enabled": "Enabled",
-      "isDefault": "Set as Default"
+      "isDefault": "Set as Default",
+      "alertmanagerUrl": "Alertmanager URL"
     }
   },
   "oauthManagement": {
@@ -1390,5 +1395,149 @@
     "increaseDisplayScale": "Increase display scale",
     "displayScalePercent": "Display scale percent",
     "logout": "Log out"
+  },
+  "observability": {
+    "timeRange": {
+      "label": "Time range",
+      "1h": "Last 1 hour",
+      "6h": "Last 6 hours",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days"
+    },
+    "refresh": {
+      "label": "Auto refresh",
+      "off": "Off",
+      "every": "Every {{interval}}",
+      "now": "Refresh now"
+    },
+    "unavailable": {
+      "prometheus": {
+        "title": "Prometheus is not configured",
+        "description": "Set a Prometheus URL for this cluster in Settings to see metrics and alerts."
+      },
+      "alertmanager": {
+        "title": "Alertmanager is not configured",
+        "description": "Set an Alertmanager URL for this cluster in Settings to view and manage silences."
+      },
+      "logs": {
+        "title": "Log storage is not configured",
+        "description": "Log search will be available once VictoriaLogs is connected and Vector collectors are installed on your clusters."
+      },
+      "forbidden": "You do not have permission to view this",
+      "failed": "Could not load data",
+      "configure": "Open cluster settings"
+    },
+    "metrics": {
+      "title": "Prometheus Metrics",
+      "dashboard": "Dashboards",
+      "query": "PromQL query",
+      "scope": {
+        "label": "Scope",
+        "cluster": "Cluster",
+        "node": "Node",
+        "namespace": "Namespace",
+        "workload": "Workload"
+      },
+      "selectNode": "Select a node",
+      "selectWorkload": "Select a workload",
+      "chooseTarget": "Choose what to show using the selectors above.",
+      "noData": "No data in this time range",
+      "panels": {
+        "cpu": "CPU usage (cores)",
+        "memory": "Memory working set",
+        "networkIn": "Network received",
+        "networkOut": "Network sent",
+        "throttling": "CPU throttling (highest)",
+        "restarts": "Container restarts (15 min)"
+      },
+      "queryPlaceholder": "Enter a PromQL expression, then press ⌘/Ctrl + Enter",
+      "examples": "Examples",
+      "run": "Run query",
+      "emptyQuery": "Enter a PromQL expression to chart it over the selected time range.",
+      "tooManySeries": "Showing the first {{shown}} of {{total}} series.",
+      "series": "Series",
+      "current": "Current",
+      "average": "Average",
+      "max": "Max"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "counts": "{{firing}} firing · {{pending}} pending",
+      "tabs": {
+        "active": "Active",
+        "rules": "Rules",
+        "silences": "Silences"
+      },
+      "empty": "No alerts are firing",
+      "emptyDescription": "All {{count}} alerting rules are inactive.",
+      "silenced": "Silenced",
+      "severity": {
+        "critical": "Critical",
+        "warning": "Warning",
+        "other": "Info",
+        "pending": "Pending"
+      },
+      "state": {
+        "firing": "Firing",
+        "pending": "Pending",
+        "inactive": "OK"
+      },
+      "detail": {
+        "openInMetrics": "Open in metrics",
+        "openResource": "View resource",
+        "runbook": "Runbook",
+        "silencedBy": "Silenced by {{user}} until {{until}}",
+        "target": "Target",
+        "since": "Started",
+        "ago": "{{age}} ago",
+        "value": "Value",
+        "for": "For",
+        "labels": "Labels",
+        "expression": "Expression",
+        "copied": "Expression copied",
+        "copyFailed": "Could not copy the expression",
+        "history": "Expression result",
+        "triggered": "Triggered"
+      },
+      "silence": {
+        "action": "Silence",
+        "title": "Silence {{name}}",
+        "description": "Alerts matching every selected label stop notifying until the silence ends.",
+        "matchers": "Matchers",
+        "duration": "Duration",
+        "hours": "{{count}}h",
+        "days": "{{count}}d",
+        "comment": "Comment",
+        "commentPlaceholder": "Why is this alert being silenced?",
+        "submit": "Create silence",
+        "created": "Silence created",
+        "failed": "Could not create the silence"
+      },
+      "silences": {
+        "showExpired": "Show expired",
+        "window": "Starts / ends",
+        "createdBy": "Created by",
+        "empty": "No silences",
+        "expire": "Expire",
+        "expired": "Silence expired",
+        "expireFailed": "Could not expire the silence",
+        "confirmTitle": "Expire this silence?",
+        "confirmDescription": "Matching alerts will start notifying again.",
+        "state": {
+          "active": "Active",
+          "pending": "Scheduled",
+          "expired": "Expired"
+        }
+      },
+      "rules": {
+        "filter": "Filter by name or group",
+        "severity": "Severity",
+        "group": "Group",
+        "empty": "No alerting rules"
+      }
+    },
+    "logs": {
+      "title": "Logs"
+    }
   }
 }

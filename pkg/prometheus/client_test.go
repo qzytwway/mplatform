@@ -25,6 +25,10 @@ func (f *fakePromAPI) Query(context.Context, string, time.Time, ...v1.Option) (m
 	return &model.String{}, nil, nil
 }
 
+func (f *fakePromAPI) Rules(context.Context, []string) (v1.RulesResult, error) {
+	return v1.RulesResult{}, nil
+}
+
 func (f *fakePromAPI) QueryRange(_ context.Context, query string, r v1.Range, _ ...v1.Option) (model.Value, v1.Warnings, error) {
 	f.queryRangeCalls = append(f.queryRangeCalls, r)
 	f.queryRangeQueries = append(f.queryRangeQueries, query)

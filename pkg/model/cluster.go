@@ -6,6 +6,7 @@ type Cluster struct {
 	Description            string       `json:"description" gorm:"type:text"`
 	Config                 SecretString `json:"config" gorm:"type:text"`
 	PrometheusURL          string       `json:"prometheus_url,omitempty" gorm:"type:text"`
+	AlertmanagerURL        string       `json:"alertmanager_url,omitempty" gorm:"type:text"`
 	InCluster              bool         `json:"in_cluster" gorm:"type:boolean;default:false"`
 	ClusterAgent           bool         `json:"clusterAgent" gorm:"type:boolean;default:false"`
 	ClusterAgentTokenHash  string       `json:"-" gorm:"type:varchar(64);index"`

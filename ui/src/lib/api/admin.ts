@@ -18,6 +18,7 @@ export interface ClusterCreateRequest {
   description?: string
   config?: string
   prometheusURL?: string
+  alertmanagerURL?: string
   inCluster?: boolean
   clusterAgent?: boolean
   isDefault?: boolean

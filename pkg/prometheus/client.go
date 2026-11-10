@@ -21,6 +21,7 @@ type promAPI interface {
 	Config(ctx context.Context) (v1.ConfigResult, error)
 	Query(ctx context.Context, query string, ts time.Time, opts ...v1.Option) (model.Value, v1.Warnings, error)
 	QueryRange(ctx context.Context, query string, r v1.Range, opts ...v1.Option) (model.Value, v1.Warnings, error)
+	Rules(ctx context.Context, matches []string) (v1.RulesResult, error)
 }
 
 type ResourceMetrics struct {
@@ -224,6 +225,11 @@ func (c *Client) Query(ctx context.Context, query string, ts time.Time, opts ...
 // QueryRange executes a range query against Prometheus
 func (c *Client) QueryRange(ctx context.Context, query string, r v1.Range, opts ...v1.Option) (model.Value, v1.Warnings, error) {
 	return c.client.QueryRange(ctx, query, r, opts...)
+}
+
+// Rules returns the recording and alerting rules loaded in Prometheus
+func (c *Client) Rules(ctx context.Context) (v1.RulesResult, error) {
+	return c.client.Rules(ctx, nil)
 }
 
 func (c *Client) GetCPUUsage(ctx context.Context, namespace, podNamePrefix, container string, start, end time.Time, step time.Duration) ([]UsageDataPoint, error) {

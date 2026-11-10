@@ -460,7 +460,11 @@
     "storageversions": "StorageVersions",
     "storageversionmigrations": "StorageVersionMigrations",
     "helmReleases": "Helm Release",
-    "helmCharts": "App Catalog"
+    "helmCharts": "App Catalog",
+    "observability": "可观测性",
+    "metrics": "Prometheus 指标",
+    "logs": "日志",
+    "alerts": "告警"
   },
   "overview": {
     "title": "概览",
@@ -1009,7 +1013,8 @@
       "prometheusUrlPlaceholder": "https://prometheus.example.com",
       "clusterAgentDescription": "先创建集群，然后在目标集群内运行生成的命令。",
       "enabled": "启用",
-      "isDefault": "设为默认"
+      "isDefault": "设为默认",
+      "alertmanagerUrl": "Alertmanager 地址"
     }
   },
   "oauthManagement": {
@@ -1477,5 +1482,149 @@
     "increaseDisplayScale": "放大显示比例",
     "displayScalePercent": "显示比例百分比",
     "logout": "退出登录"
+  },
+  "observability": {
+    "timeRange": {
+      "label": "时间范围",
+      "1h": "最近 1 小时",
+      "6h": "最近 6 小时",
+      "24h": "最近 24 小时",
+      "7d": "最近 7 天"
+    },
+    "refresh": {
+      "label": "自动刷新",
+      "off": "关闭",
+      "every": "每 {{interval}}",
+      "now": "立即刷新"
+    },
+    "unavailable": {
+      "prometheus": {
+        "title": "此集群未配置 Prometheus",
+        "description": "在设置中为此集群填写 Prometheus 地址后，即可查看指标和告警。"
+      },
+      "alertmanager": {
+        "title": "此集群未配置 Alertmanager",
+        "description": "在设置中为此集群填写 Alertmanager 地址后，即可查看和管理静默。"
+      },
+      "logs": {
+        "title": "日志存储未配置",
+        "description": "接入 VictoriaLogs 并为集群安装 Vector 采集组件后，即可在这里检索日志。"
+      },
+      "forbidden": "你没有查看此内容的权限",
+      "failed": "数据加载失败",
+      "configure": "前往集群设置"
+    },
+    "metrics": {
+      "title": "Prometheus 指标",
+      "dashboard": "预置仪表盘",
+      "query": "PromQL 查询",
+      "scope": {
+        "label": "范围",
+        "cluster": "集群",
+        "node": "节点",
+        "namespace": "命名空间",
+        "workload": "工作负载"
+      },
+      "selectNode": "选择节点",
+      "selectWorkload": "选择工作负载",
+      "chooseTarget": "请先在上方选择要查看的对象。",
+      "noData": "此时间范围内没有数据",
+      "panels": {
+        "cpu": "CPU 使用（核）",
+        "memory": "内存使用",
+        "networkIn": "网络接收",
+        "networkOut": "网络发送",
+        "throttling": "CPU 节流比例（最高）",
+        "restarts": "容器重启（15 分钟）"
+      },
+      "queryPlaceholder": "输入 PromQL 表达式，按 ⌘/Ctrl + Enter 执行",
+      "examples": "常用查询",
+      "run": "执行查询",
+      "emptyQuery": "输入 PromQL 表达式，查看所选时间范围内的曲线。",
+      "tooManySeries": "共 {{total}} 条序列，仅显示前 {{shown}} 条。",
+      "series": "序列",
+      "current": "当前",
+      "average": "平均",
+      "max": "最大"
+    },
+    "alerts": {
+      "title": "告警",
+      "counts": "{{firing}} 条正在触发 · {{pending}} 条待定",
+      "tabs": {
+        "active": "活动",
+        "rules": "规则",
+        "silences": "静默"
+      },
+      "empty": "当前没有正在触发的告警",
+      "emptyDescription": "{{count}} 条告警规则均未触发。",
+      "silenced": "已静默",
+      "severity": {
+        "critical": "严重",
+        "warning": "警告",
+        "other": "提示",
+        "pending": "待定"
+      },
+      "state": {
+        "firing": "触发中",
+        "pending": "待定",
+        "inactive": "正常"
+      },
+      "detail": {
+        "openInMetrics": "在指标中打开",
+        "openResource": "查看资源",
+        "runbook": "处理手册",
+        "silencedBy": "已被 {{user}} 静默至 {{until}}",
+        "target": "对象",
+        "since": "开始于",
+        "ago": "{{age}} 前",
+        "value": "当前值",
+        "for": "持续条件",
+        "labels": "标签",
+        "expression": "触发表达式",
+        "copied": "已复制表达式",
+        "copyFailed": "复制失败",
+        "history": "表达式结果",
+        "triggered": "触发"
+      },
+      "silence": {
+        "action": "静默",
+        "title": "静默 {{name}}",
+        "description": "匹配所有勾选标签的告警在静默结束前不会再发送通知。",
+        "matchers": "匹配条件",
+        "duration": "时长",
+        "hours": "{{count}} 小时",
+        "days": "{{count}} 天",
+        "comment": "备注",
+        "commentPlaceholder": "说明静默原因",
+        "submit": "创建静默",
+        "created": "静默已创建",
+        "failed": "静默创建失败"
+      },
+      "silences": {
+        "showExpired": "显示已失效",
+        "window": "开始 / 结束",
+        "createdBy": "创建者",
+        "empty": "暂无静默",
+        "expire": "使失效",
+        "expired": "静默已失效",
+        "expireFailed": "使静默失效失败",
+        "confirmTitle": "让这条静默失效？",
+        "confirmDescription": "匹配的告警将重新开始发送通知。",
+        "state": {
+          "active": "生效中",
+          "pending": "未开始",
+          "expired": "已失效"
+        }
+      },
+      "rules": {
+        "filter": "按名称或分组过滤",
+        "severity": "级别",
+        "group": "分组",
+        "empty": "没有告警规则"
+      }
+    },
+    "logs": {
+      "title": "日志"
+    }
   }
 }
