@@ -107,27 +107,6 @@ func TestGenerateNodeAgentName(t *testing.T) {
 	}
 }
 
-func TestToEnvName(t *testing.T) {
-	testCases := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "hyphen and dot", in: "a-b.c", want: "A_B_C"},
-		{name: "slash", in: "kube/system", want: "KUBE_SYSTEM"},
-		{name: "mixed case", in: "MPlatformBase", want: "MPLATFORMBASE"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ToEnvName(tc.in)
-			if got != tc.want {
-				t.Fatalf("ToEnvName(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestGenerateKubectlAgentName(t *testing.T) {
 	testCases := []struct {
 		name     string

@@ -230,42 +230,6 @@ function processAnsiCodes(codes: number[], currentState: AnsiState): AnsiState {
 }
 
 /**
- * Convert AnsiState to CSS styles
- */
-export function ansiStateToCss(state: AnsiState): React.CSSProperties {
-  const styles: React.CSSProperties = {}
-
-  if (state.color) {
-    styles.color = state.color
-  }
-
-  if (state.backgroundColor) {
-    styles.backgroundColor = state.backgroundColor
-  }
-
-  if (state.bold) {
-    styles.fontWeight = 'bold'
-  }
-
-  if (state.italic) {
-    styles.fontStyle = 'italic'
-  }
-
-  if (state.underline) {
-    styles.textDecoration = 'underline'
-  }
-
-  return styles
-}
-
-/**
- * Strip ANSI escape sequences from text
- */
-export function stripAnsi(text: string): string {
-  return text.replace(new RegExp('\u001b\\[[0-9;]*m', 'g'), '')
-}
-
-/**
  * Generate CSS class names for an AnsiState
  */
 export function getAnsiClassNames(state: AnsiState): string {

@@ -81,11 +81,13 @@ export function RecentEvents() {
       <Card>
         <CardHeader>
           <CardTitle>{t('overview.recentEvents')}</CardTitle>
-          <CardDescription>Latest cluster events</CardDescription>
+          <CardDescription>
+            {t('overview.recentEventsDescription')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-32 text-muted-foreground">
-            No recent events
+            {t('overview.noRecentEvents')}
           </div>
         </CardContent>
       </Card>
@@ -96,7 +98,9 @@ export function RecentEvents() {
     <Card>
       <CardHeader>
         <CardTitle>{t('overview.recentEvents')}</CardTitle>
-        <CardDescription>Latest cluster events</CardDescription>
+        <CardDescription>
+          {t('overview.recentEventsDescription')}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="max-h-72 overflow-y-auto scrollbar-hide">
@@ -134,7 +138,7 @@ export function RecentEvents() {
                         </span>
                         {event.reportingComponent && (
                           <span className="text-xs">
-                            Reporter: {event.reportingComponent}
+                            {t('overview.reporter')}: {event.reportingComponent}
                           </span>
                         )}
                       </div>

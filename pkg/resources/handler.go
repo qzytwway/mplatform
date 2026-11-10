@@ -326,11 +326,3 @@ func GetResource(c *gin.Context, resource, namespace, name string) (interface{},
 	}
 	return handler.GetResource(c, namespace, name)
 }
-
-func GetHandler(resource string) (resourceHandler, error) {
-	handler, exists := handlers[resource]
-	if !exists {
-		return nil, fmt.Errorf("handler for resource %s not found", resource)
-	}
-	return handler, nil
-}

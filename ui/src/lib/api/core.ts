@@ -624,11 +624,6 @@ export const deleteResource = async <T extends ResourceType>(
 }
 
 // Apply resource from YAML
-export interface ApplyResourceRequest {
-  yaml: string
-  namespace?: string
-}
-
 export interface ApplyResourceResponse {
   message: string
   kind?: string

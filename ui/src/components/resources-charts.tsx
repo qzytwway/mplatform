@@ -70,12 +70,14 @@ export function ResourceCharts(props: ResourceChartsProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Resources Request</span>
+            <span>{t('overview.resourceCharts')}</span>
           </CardTitle>
         </CardHeader>
         <div className="flex flex-col items-center justify-center h-64 gap-2">
           <p className="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : 'Unknown error occurred'}
+            {error instanceof Error
+              ? error.message
+              : t('overview.unknownError')}
           </p>
         </div>
       </Card>
@@ -97,8 +99,9 @@ export function ResourceCharts(props: ResourceChartsProps) {
                 <span>{resource.name}</span>
               </CardTitle>
               <CardDescription className="font-mono">
-                Requests: {resource.request.toFixed(1)} / Limits:{' '}
-                {resource.limit.toFixed(1)} / Total: {resource.total.toFixed(2)}{' '}
+                {t('monitoring.requests')}: {resource.request.toFixed(1)} /{' '}
+                {t('monitoring.limits')}: {resource.limit.toFixed(1)} /{' '}
+                {t('monitoring.total')}: {resource.total.toFixed(2)}{' '}
                 {resource.unit}
               </CardDescription>
             </CardHeader>
@@ -107,7 +110,9 @@ export function ResourceCharts(props: ResourceChartsProps) {
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                   <div>
                     <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span className="font-medium text-info">Requests</span>
+                      <span className="font-medium text-foreground">
+                        {t('monitoring.requests')}
+                      </span>
                       <span className="font-mono">
                         {resource.request.toFixed(1)} {resource.unit}
                       </span>
@@ -127,13 +132,17 @@ export function ResourceCharts(props: ResourceChartsProps) {
                       />
                     </div>
                     <div className="text-xs text-muted-foreground mt-1 font-mono">
-                      {resource.requestPercentage.toFixed(1)}% of capacity
+                      {t('overview.ofCapacity', {
+                        percent: resource.requestPercentage.toFixed(1),
+                      })}
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span className="font-medium text-warning">Limits</span>
+                      <span className="font-medium text-foreground">
+                        {t('monitoring.limits')}
+                      </span>
                       <span className="font-mono">
                         {resource.limit.toFixed(1)} {resource.unit}
                       </span>
@@ -145,7 +154,7 @@ export function ResourceCharts(props: ResourceChartsProps) {
                             ? 'bg-destructive'
                             : limitIsMedium
                               ? 'bg-warning'
-                              : 'bg-warning'
+                              : 'bg-primary'
                         }`}
                         style={{
                           width: `${Math.min(resource.limitPercentage, 100)}%`,
@@ -153,13 +162,16 @@ export function ResourceCharts(props: ResourceChartsProps) {
                       />
                     </div>
                     <div className="text-xs text-muted-foreground mt-1 font-mono">
-                      {resource.limitPercentage.toFixed(1)}% of capacity
+                      {t('overview.ofCapacity', {
+                        percent: resource.limitPercentage.toFixed(1),
+                      })}
                     </div>
                   </div>
                 </div>
 
                 <div className="text-xs text-muted-foreground font-mono">
-                  Available: {(resource.total - resource.request).toFixed(1)}{' '}
+                  {t('overview.available')}:{' '}
+                  {(resource.total - resource.request).toFixed(1)}{' '}
                   {resource.unit}
                 </div>
               </div>

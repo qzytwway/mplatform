@@ -347,10 +347,10 @@
   },
   "sidebar": {
     "groups": {
-      "traffic": "traffic",
-      "storage": "storage",
-      "config": "config",
-      "other": "other",
+      "traffic": "Traffic",
+      "storage": "Storage",
+      "config": "Config",
+      "other": "Other",
       "security": "Security",
       "workloads": "Workloads",
       "application": "Application"
@@ -467,7 +467,14 @@
     "recentEvents": "Recent Events",
     "resourceCharts": "Resource Charts",
     "failedToLoad": "Failed to load overview data",
-    "unknownError": "Unknown error occurred"
+    "unknownError": "Unknown error occurred",
+    "allReady": "All ready",
+    "notReadyCount": "{{count}} not ready",
+    "recentEventsDescription": "Latest cluster events",
+    "noRecentEvents": "No recent events",
+    "reporter": "Reporter",
+    "ofCapacity": "{{percent}}% of capacity",
+    "available": "Available"
   },
   "pods": {
     "title": "Pods",
@@ -767,7 +774,25 @@
       "restartResourcesDescription": "This updates each {{resource}} Pod template and triggers a rollout. Paused or OnDelete strategies may not restart immediately, and rollout health is not monitored."
     },
     "watch": "Watch",
-    "namespace": "Namespace"
+    "namespace": "Namespace",
+    "scope": {
+      "allNamespaces": "all namespaces",
+      "namespaces": "{{count}} namespaces",
+      "namespace": "namespace {{namespace}}"
+    },
+    "empty": {
+      "title": "No {{resource}} found",
+      "noLabelMatch": "No {{resource}} match labels: \"{{query}}\"",
+      "noSearchMatch": "No results match your search query: \"{{query}}\"",
+      "cluster": "There are no {{resource}} in this cluster",
+      "namespaced": "There are no {{resource}} in {{scope}}",
+      "clearSearch": "Clear search"
+    },
+    "loading": {
+      "title": "Loading {{resource}}...",
+      "description": "Retrieving data",
+      "fromScope": "Retrieving data from {{scope}}"
+    }
   },
   "errors": {
     "crdNotInstalledTitle": "Resource Type Not Available",

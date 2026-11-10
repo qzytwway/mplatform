@@ -146,11 +146,13 @@ function ResourceTableContent<T>({
   }, [selectedNamespace])
   const namespaceDescription =
     selectedNamespace === '_all'
-      ? 'All Namespaces'
+      ? t('resourceTable.scope.allNamespaces')
       : selectedNamespaces.length > 1
-        ? `${selectedNamespaces.length} namespaces`
+        ? t('resourceTable.scope.namespaces', {
+            count: selectedNamespaces.length,
+          })
         : selectedNamespace
-          ? `namespace ${selectedNamespace}`
+          ? t('resourceTable.scope.namespace', { namespace: selectedNamespace })
           : ''
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 })
@@ -370,13 +372,16 @@ function ResourceTableContent<T>({
             <Database className="h-12 w-12 text-muted-foreground animate-pulse" />
           </div>
           <h3 className="text-lg font-medium mb-1">
-            Loading {displayResourceName}...
+            {t('resourceTable.loading.title', {
+              resource: displayResourceName,
+            })}
           </h3>
           <p className="text-muted-foreground">
-            Retrieving data
             {!clusterScope && namespaceDescription
-              ? ` from ${namespaceDescription}`
-              : ''}
+              ? t('resourceTable.loading.fromScope', {
+                  scope: namespaceDescription,
+                })
+              : t('resourceTable.loading.description')}
           </p>
         </div>
       )
@@ -399,16 +404,26 @@ function ResourceTableContent<T>({
             <Box className="h-12 w-12 text-muted-foreground" />
           </div>
           <h3 className="text-lg font-medium mb-1">
-            No {displayResourceName} found
+            {t('resourceTable.empty.title', { resource: displayResourceName })}
           </h3>
           <p className="text-muted-foreground">
             {searchQuery
               ? isLabelSelector
-                ? `No ${displayResourceName} match labels: "${searchQuery}"`
-                : `No results match your search query: "${searchQuery}"`
+                ? t('resourceTable.empty.noLabelMatch', {
+                    resource: displayResourceName,
+                    query: searchQuery,
+                  })
+                : t('resourceTable.empty.noSearchMatch', {
+                    query: searchQuery,
+                  })
               : clusterScope
-                ? `There are no ${displayResourceName} found`
-                : `There are no ${displayResourceName} in ${namespaceDescription}`}
+                ? t('resourceTable.empty.cluster', {
+                    resource: displayResourceName,
+                  })
+                : t('resourceTable.empty.namespaced', {
+                    resource: displayResourceName,
+                    scope: namespaceDescription,
+                  })}
           </p>
           {searchQuery && (
             <Button
@@ -416,7 +431,7 @@ function ResourceTableContent<T>({
               className="mt-4"
               onClick={() => setSearchQuery('')}
             >
-              Clear Search
+              {t('resourceTable.empty.clearSearch')}
             </Button>
           )}
         </div>

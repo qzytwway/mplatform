@@ -28,15 +28,6 @@ func RandomString(length int) string {
 	return rand.String(length)
 }
 
-func ToEnvName(input string) string {
-	s := input
-	s = strings.ReplaceAll(s, "-", "_")
-	s = strings.ReplaceAll(s, ".", "_")
-	s = strings.ReplaceAll(s, "/", "_")
-	s = strings.ToUpper(s)
-	return s
-}
-
 func GetImageRegistryAndRepo(image string) (string, string) {
 	if digestIndex := strings.Index(image, "@"); digestIndex >= 0 {
 		image = image[:digestIndex]

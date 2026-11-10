@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 
 import {
   getResourcePluralLabel,
-  getResourceShortLabel,
   getResourceSingularLabel,
   isClusterScopedResource,
   resourceCatalog,
@@ -187,10 +186,6 @@ export function getResourceLabel(resourceType: string, plural = false) {
   return plural
     ? getResourcePluralLabel(resourceType)
     : getResourceSingularLabel(resourceType)
-}
-
-export function getResourceShortName(resourceType: string) {
-  return getResourceShortLabel(resourceType)
 }
 
 export function getResourceScope(resourceType: string): ResourceScope {

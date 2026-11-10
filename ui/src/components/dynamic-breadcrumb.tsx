@@ -36,6 +36,9 @@ export function DynamicBreadcrumb() {
       if (label === 'pvcs') {
         return { label: t('sidebar.short.pvcs'), href }
       }
+      if (label === 'settings') {
+        return { label: t('settings.title'), href }
+      }
       if (label === 'observability') {
         return { label: t('nav.observability') }
       }

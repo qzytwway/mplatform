@@ -485,5 +485,3 @@ export function RBACManagement() {
     </div>
   )
 }
-
-export default RBACManagement

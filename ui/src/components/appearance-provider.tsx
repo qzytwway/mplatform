@@ -33,8 +33,6 @@ export function AppearanceProvider({
   )
 }
 
-export default AppearanceProvider
-
 // Unified hook for reading/updating all appearance settings in one place.
 export function useAppearance() {
   const { theme, actualTheme, setTheme } = useTheme()

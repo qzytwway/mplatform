@@ -1,19 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { apiClient, authApiClient } from '../api-client'
-import { fetchBootstrap, useBootstrap } from './bootstrap'
+import { useBootstrap } from './bootstrap'
 import { fetchAPI } from './shared'
-
-// Initialize API types
-export interface InitCheckResponse {
-  initialized: boolean
-  step: number
-}
-
-// Initialize API function
-export const fetchInitCheck = async (): Promise<InitCheckResponse> => {
-  return (await fetchBootstrap()).setup
-}
 
 export const useInitCheck = () => {
   const query = useBootstrap({ staleTime: 0 })

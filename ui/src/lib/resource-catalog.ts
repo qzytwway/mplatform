@@ -1109,11 +1109,6 @@ export function getResourcePluralLabel(resource?: string | null) {
   return getResourceMetadata(resource)?.pluralLabel || ''
 }
 
-export function getResourceShortLabel(resource?: string | null) {
-  const metadata = getResourceMetadata(resource)
-  return metadata?.shortLabel || metadata?.singularLabel || ''
-}
-
 export function isClusterScopedResource(resource?: string | null) {
   return getResourceMetadata(resource)?.clusterScope ?? false
 }
@@ -1140,10 +1135,6 @@ export function getResourceQueryKey(
 ) {
   return [resource, namespace || '_all', name || '_all', cluster || '']
 }
-
-export const clusterScopedResourceTypes = resourceMetadataList
-  .filter((item) => item.clusterScope)
-  .map((item) => item.type) as ResourceType[]
 
 function fallbackMetadata(resource: string): ResourceMetadata {
   const singular = resource.endsWith('s') ? resource.slice(0, -1) : resource

@@ -153,15 +153,6 @@ export const deleteOAuthProvider = async (
   )
 }
 
-// Get single OAuth provider
-export const fetchOAuthProvider = async (
-  id: number
-): Promise<OAuthProvider> => {
-  return fetchAPI<{ provider: OAuthProvider }>(
-    `/admin/oauth-providers/${id}`
-  ).then((response) => response.provider)
-}
-
 // RBAC API
 export const fetchRoleList = async (): Promise<Role[]> => {
   return fetchAPI<{ roles: Role[] }>(`/admin/roles/`).then((resp) => resp.roles)

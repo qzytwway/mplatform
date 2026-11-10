@@ -374,5 +374,3 @@ export function RBACDialog({
     </Dialog>
   )
 }
-
-export default RBACDialog

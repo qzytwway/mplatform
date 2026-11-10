@@ -111,12 +111,14 @@ export function ClusterStatsCards({
                       stat.subValue === stat.value ? (
                         <div className="flex items-center gap-1">
                           <IconCircleCheckFilled className="size-4 text-success flex-shrink-0" />
-                          All ready
+                          {t('overview.allReady')}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
                           <IconAlertCircleFilled className="size-4 text-destructive flex-shrink-0" />
-                          {stat.value - (stat.subValue || 0)} Not Ready
+                          {t('overview.notReadyCount', {
+                            count: stat.value - (stat.subValue || 0),
+                          })}
                         </div>
                       )}
                     </div>

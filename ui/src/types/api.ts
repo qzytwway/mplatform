@@ -84,22 +84,6 @@ export interface CustomResource {
   status?: Record<string, unknown>
 }
 
-export interface CustomResourceList {
-  apiVersion: string
-  kind: string
-  items: CustomResource[]
-  metadata?: {
-    continue?: string
-    remainingItemCount?: number
-  }
-}
-
-export interface DeploymentRelatedResource {
-  events: Event[]
-  pods: Pod[]
-  services: Service[]
-}
-
 export interface HelmReleaseResource {
   apiVersion: string
   kind: string
@@ -526,16 +510,6 @@ export interface ResourceTypeMap {
   helmrelease: HelmRelease
 }
 
-export interface RecentEvent {
-  type: string
-  reason: string
-  message: string
-  involvedObjectKind: string
-  involvedObjectName: string
-  namespace?: string
-  timestamp: string
-}
-
 export interface UsageDataPoint {
   timestamp: string
   value: number
@@ -581,26 +555,6 @@ export interface OverviewData {
       limited: number
     }
   }
-}
-
-// Pagination types
-export interface PaginationInfo {
-  hasNextPage: boolean
-  nextContinueToken?: string
-  remainingItems?: number
-}
-
-export interface PaginationOptions {
-  limit?: number
-  continueToken?: string
-}
-
-// Pod current metrics types
-export interface PodCurrentMetrics {
-  podName: string
-  namespace: string
-  cpu: number // CPU cores
-  memory: number // Memory in MB
 }
 
 export interface ImageTagInfo {

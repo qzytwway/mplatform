@@ -470,5 +470,3 @@ export function RBACAssignmentDialog({
     </>
   )
 }
-
-export default RBACAssignmentDialog

@@ -17,14 +17,6 @@ func ListPasskeyCredentialsByUserID(userID uint) ([]PasskeyCredential, error) {
 	return credentials, err
 }
 
-func GetPasskeyCredentialByID(id uint, userID uint) (*PasskeyCredential, error) {
-	var credential PasskeyCredential
-	if err := DB.Where("id = ? AND user_id = ?", id, userID).First(&credential).Error; err != nil {
-		return nil, err
-	}
-	return &credential, nil
-}
-
 func GetPasskeyCredentialByCredentialID(credentialID string) (*PasskeyCredential, error) {
 	var credential PasskeyCredential
 	if err := DB.Where("credential_id = ?", credentialID).First(&credential).Error; err != nil {
