@@ -382,6 +382,7 @@
     "updateAvailable": "A newer MPlatform version is available"
   },
   "nav": {
+    "containerManagement": "Container Management",
     "overview": "Overview",
     "pods": "Pods",
     "deployments": "Deployments",

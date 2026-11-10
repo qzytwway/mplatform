@@ -1,9 +1,9 @@
 import * as React from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
 import { CollapsibleContent } from '@radix-ui/react-collapsible'
-import { IconLayoutDashboard } from '@tabler/icons-react'
+import { IconBox, IconLayoutDashboard } from '@tabler/icons-react'
 import { CustomResourceDefinition } from 'kubernetes-types/apiextensions/v1'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -15,8 +15,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -45,6 +43,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [openAPIGroupItems, setOpenAPIGroupItems] = useState<
     Record<string, boolean>
   >({})
+  const [openGroupID, setOpenGroupID] = useState<string | null>(null)
   const hasConfiguredCRDItems = useMemo(
     () =>
       config?.groups.some((group) =>
@@ -163,6 +162,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       : item.type === 'link' && item.children
         ? item.children.some(isSidebarItemActive)
         : isActive(item.url)
+
+  const activeGroupID = visibleGroups.find((group) =>
+    group.items.some(isSidebarItemActive)
+  )?.id
+
+  useEffect(() => {
+    if (activeGroupID) setOpenGroupID(activeGroupID)
+  }, [activeGroupID])
 
   const renderSidebarItem = (item: SidebarItem): React.ReactNode => {
     const title = item.titleKey
@@ -334,62 +341,87 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                tooltip={t('nav.overview')}
-                asChild
-                isActive={isActive('/')}
-                className={leafItemClass}
-              >
-                <Link to="/" onClick={handleMenuItemClick}>
-                  <IconLayoutDashboard className="opacity-70" />
-                  <span>{t('nav.overview')}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            <Collapsible
+              defaultOpen
+              asChild
+              className="group/container-management"
+            >
+              <SidebarMenuItem>
+                <CollapsibleTrigger asChild>
+                  <SidebarMenuButton
+                    tooltip={t('nav.containerManagement')}
+                    className="h-8 font-medium"
+                  >
+                    <IconBox className="opacity-70" />
+                    <span className="truncate">
+                      {t('nav.containerManagement')}
+                    </span>
+                    <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/container-management:rotate-180" />
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent
+                  forceMount
+                  className="data-[state=closed]:hidden"
+                >
+                  <SidebarMenuSub className="mr-0 pr-0">
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        tooltip={t('nav.overview')}
+                        asChild
+                        isActive={isActive('/')}
+                        className={leafItemClass}
+                      >
+                        <Link to="/" onClick={handleMenuItemClick}>
+                          <IconLayoutDashboard className="opacity-70" />
+                          <span>{t('nav.overview')}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    {pinnedItems.length > 0 && (
+                      <>
+                        <li className="px-2 pt-2 text-xs text-muted-foreground">
+                          {t('sidebar.pinned', 'Pinned')}
+                        </li>
+                        {pinnedItems.map(renderSidebarItem)}
+                      </>
+                    )}
+
+                    {visibleGroups.map((group) => (
+                      <Collapsible
+                        key={group.id}
+                        asChild
+                        open={openGroupID === group.id}
+                        onOpenChange={(open) =>
+                          setOpenGroupID(open ? group.id : null)
+                        }
+                      >
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton className="h-7 text-muted-foreground data-[state=open]:font-medium data-[state=open]:text-sidebar-foreground">
+                              <span className="truncate">
+                                {group.nameKey
+                                  ? t(group.nameKey, {
+                                      defaultValue: group.nameKey,
+                                    })
+                                  : ''}
+                              </span>
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub className="mr-0 pr-0">
+                              {group.items.map(renderSidebarItem)}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    ))}
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+              </SidebarMenuItem>
+            </Collapsible>
           </SidebarMenu>
         </SidebarGroup>
-
-        {pinnedItems.length > 0 && (
-          <SidebarGroup className="border-t border-sidebar-border py-1">
-            <SidebarGroupLabel className="text-xs font-normal text-muted-foreground">
-              {t('sidebar.pinned', 'Pinned')}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>{pinnedItems.map(renderSidebarItem)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {visibleGroups.map((group) => (
-          <Collapsible
-            key={group.id}
-            defaultOpen={!group.collapsed}
-            className="group/collapsible"
-          >
-            <SidebarGroup className="border-t border-sidebar-border py-1">
-              <SidebarGroupLabel asChild>
-                <CollapsibleTrigger className="flex items-center justify-between w-full text-xs font-normal text-muted-foreground hover:text-sidebar-foreground transition-colors">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate">
-                      {group.nameKey
-                        ? t(group.nameKey, { defaultValue: group.nameKey })
-                        : ''}
-                    </span>
-                  </span>
-                  <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
-                </CollapsibleTrigger>
-              </SidebarGroupLabel>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {group.items.map(renderSidebarItem)}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
-        ))}
       </SidebarContent>
     </Sidebar>
   )

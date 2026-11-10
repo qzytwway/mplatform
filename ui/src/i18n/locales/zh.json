@@ -386,6 +386,7 @@
     "updateAvailable": "有新的 MPlatform 版本可用"
   },
   "nav": {
+    "containerManagement": "容器管理",
     "overview": "概览",
     "workloads": "工作负载",
     "pods": "Pods",
