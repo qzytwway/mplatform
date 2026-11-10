@@ -16,6 +16,7 @@ import {
   useHelmChartContent,
 } from '@/lib/api'
 import { translateError } from '@/lib/utils'
+import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -52,6 +53,10 @@ export function HelmInstallDialog({
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { clusters, currentCluster } = useCluster()
+  const imageRegistry = clusters.find(
+    (cluster) => cluster.name === currentCluster
+  )?.imageRegistry
   const [releaseName, setReleaseName] = useState(() =>
     defaultReleaseName(chart.name)
   )
@@ -207,6 +212,11 @@ export function HelmInstallDialog({
             <DialogDescription>
               {chart.repositoryName}/{chart.name}:{chart.version}
             </DialogDescription>
+            {imageRegistry ? (
+              <p className="text-sm text-muted-foreground">
+                {t('helm.messages.imageRegistryRewrite', { imageRegistry })}
+              </p>
+            ) : null}
           </DialogHeader>
 
           {error ? (

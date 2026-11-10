@@ -38,6 +38,7 @@ function createClusterFormData(cluster?: Cluster | null) {
     config: cluster?.config || '',
     prometheusURL: cluster?.prometheusURL || '',
     alertmanagerURL: cluster?.alertmanagerURL || '',
+    imageRegistry: cluster?.imageRegistry || '',
     enabled: cluster?.enabled ?? true,
     isDefault: cluster?.isDefault ?? false,
     inCluster: cluster?.inCluster ?? false,
@@ -231,6 +232,22 @@ function ClusterDialogContent({
             placeholder="http://alertmanager-operated.monitoring.svc:9093"
             type="url"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="image-registry">
+            {t('clusterManagement.dialog.imageRegistry')}
+          </Label>
+          <Input
+            id="image-registry"
+            value={formData.imageRegistry}
+            onChange={(e) => handleChange('imageRegistry', e.target.value)}
+            placeholder="harbor.example.com/mirror"
+            aria-describedby="image-registry-hint"
+          />
+          <p id="image-registry-hint" className="text-sm text-muted-foreground">
+            {t('clusterManagement.dialog.imageRegistryHint')}
+          </p>
         </div>
 
         {/* Cluster Status Controls */}

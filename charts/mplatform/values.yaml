@@ -166,6 +166,7 @@ config:
   #       ...
   #     prometheusURL: "http://prometheus:9090"
   #     alertmanagerURL: "http://alertmanager:9093"
+  #     imageRegistry: "harbor.example.com/mirror"
   #     default: true
   #   - name: in-cluster
   #     inCluster: true

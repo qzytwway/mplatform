@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/clusteragent"
 	"github.com/qzytwway/mplatform/pkg/common"
+	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"gorm.io/gorm"
@@ -40,6 +41,15 @@ func clusterAgentServerURL(c *gin.Context) string {
 
 func (cm *ClusterManager) GetClusters(c *gin.Context) {
 	clusters, errors, defaultContext := cm.snapshotState()
+	storedClusters, err := model.ListClusters()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	imageRegistries := make(map[string]string, len(storedClusters))
+	for _, stored := range storedClusters {
+		imageRegistries[stored.Name] = stored.ImageRegistry
+	}
 	result := make([]common.ClusterInfo, 0, len(clusters))
 	user := c.MustGet("user").(model.User)
 	for name, cluster := range clusters {
@@ -47,9 +57,10 @@ func (cm *ClusterManager) GetClusters(c *gin.Context) {
 			continue
 		}
 		result = append(result, common.ClusterInfo{
-			Name:      name,
-			Version:   cluster.Version,
-			IsDefault: name == defaultContext,
+			Name:          name,
+			Version:       cluster.Version,
+			IsDefault:     name == defaultContext,
+			ImageRegistry: imageRegistries[name],
 		})
 	}
 	for name, errMsg := range errors {
@@ -90,6 +101,7 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 			"isDefault":       cluster.IsDefault,
 			"prometheusURL":   cluster.PrometheusURL,
 			"alertmanagerURL": cluster.AlertmanagerURL,
+			"imageRegistry":   cluster.ImageRegistry,
 			"config":          "",
 		}
 		if cluster.ClusterAgent {
@@ -121,12 +133,18 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		Config          string `json:"config"`
 		PrometheusURL   string `json:"prometheusURL"`
 		AlertmanagerURL string `json:"alertmanagerURL"`
+		ImageRegistry   string `json:"imageRegistry"`
 		InCluster       bool   `json:"inCluster"`
 		ClusterAgent    bool   `json:"clusterAgent"`
 		IsDefault       bool   `json:"isDefault"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.ImageRegistry = strings.TrimSpace(req.ImageRegistry)
+	if err := helmutil.ValidateImageRegistry(req.ImageRegistry); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -180,6 +198,7 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 		Config:                 model.SecretString(req.Config),
 		PrometheusURL:          req.PrometheusURL,
 		AlertmanagerURL:        req.AlertmanagerURL,
+		ImageRegistry:          req.ImageRegistry,
 		InCluster:              req.InCluster,
 		ClusterAgent:           req.ClusterAgent,
 		ClusterAgentTokenHash:  clusterAgentTokenHash,
@@ -229,12 +248,18 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 		Config          string `json:"config"`
 		PrometheusURL   string `json:"prometheusURL"`
 		AlertmanagerURL string `json:"alertmanagerURL"`
+		ImageRegistry   string `json:"imageRegistry"`
 		InCluster       bool   `json:"inCluster"`
 		IsDefault       bool   `json:"isDefault"`
 		Enabled         bool   `json:"enabled"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.ImageRegistry = strings.TrimSpace(req.ImageRegistry)
+	if err := helmutil.ValidateImageRegistry(req.ImageRegistry); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -264,6 +289,7 @@ func (cm *ClusterManager) UpdateCluster(c *gin.Context) {
 		"description":      req.Description,
 		"prometheus_url":   req.PrometheusURL,
 		"alertmanager_url": req.AlertmanagerURL,
+		"image_registry":   req.ImageRegistry,
 		"in_cluster":       req.InCluster,
 		"is_default":       req.IsDefault,
 		"enable":           req.Enabled,

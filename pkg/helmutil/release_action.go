@@ -19,6 +19,7 @@ type InstallReleaseOptions struct {
 	CreateNamespace bool
 	DryRun          bool
 	Wait            bool
+	ImageRegistry   string
 }
 
 type UninstallReleaseOptions struct {
@@ -79,6 +80,9 @@ func InstallRelease(ctx context.Context, cfg *action.Configuration, chartToInsta
 	install.Timeout = opts.Timeout
 	install.Description = opts.Description
 	install.CreateNamespace = opts.CreateNamespace
+	if opts.ImageRegistry != "" {
+		install.PostRenderer = imageRegistryPostRenderer{imageRegistry: opts.ImageRegistry}
+	}
 	if opts.DryRun {
 		install.DryRunStrategy = action.DryRunClient
 	}

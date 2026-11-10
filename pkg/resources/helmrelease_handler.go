@@ -125,6 +125,10 @@ func (h *HelmReleaseHandler) runInstall(c *gin.Context, dryRun bool) (rel *relea
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
+	imageRegistry, err := helmutil.ClusterImageRegistry(c.MustGet("cluster").(*cluster.ClientSet).Name)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
 	values := req.Values
 	if values == nil {
 		values = map[string]interface{}{}
@@ -145,6 +149,7 @@ func (h *HelmReleaseHandler) runInstall(c *gin.Context, dryRun bool) (rel *relea
 		CreateNamespace: req.CreateNamespace,
 		DryRun:          dryRun,
 		Wait:            req.Wait,
+		ImageRegistry:   imageRegistry,
 	})
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
@@ -340,6 +345,10 @@ func (h *HelmReleaseHandler) runUpgrade(c *gin.Context, dryRun bool) (result hel
 	if err != nil {
 		return helmReleaseRunResult{}, http.StatusBadRequest, err
 	}
+	imageRegistry, err := helmutil.ClusterImageRegistry(c.MustGet("cluster").(*cluster.ClientSet).Name)
+	if err != nil {
+		return helmReleaseRunResult{}, http.StatusInternalServerError, err
+	}
 
 	values := req.Values
 	if values == nil {
@@ -362,6 +371,7 @@ func (h *HelmReleaseHandler) runUpgrade(c *gin.Context, dryRun bool) (result hel
 		RollbackOnFailure: req.RollbackOnFailure,
 		DryRun:            dryRun,
 		Wait:              req.Wait,
+		ImageRegistry:     imageRegistry,
 	})
 	if err != nil {
 		return helmReleaseRunResult{}, http.StatusInternalServerError, err

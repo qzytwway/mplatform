@@ -74,6 +74,10 @@ func (e *helmReleaseAutoUpgradeExecutor) Run(ctx context.Context, task model.Sch
 	if err != nil {
 		return err
 	}
+	imageRegistry, err := helmutil.ClusterImageRegistry(cs.Name)
+	if err != nil {
+		return err
+	}
 
 	var next *release.Release
 	var runErr error
@@ -99,6 +103,7 @@ func (e *helmReleaseAutoUpgradeExecutor) Run(ctx context.Context, task model.Sch
 		ResetThenReuseValues: true,
 		Description:          "Auto upgrade requested from MPlatform",
 		RollbackOnFailure:    payload.RollbackOnFailure,
+		ImageRegistry:        imageRegistry,
 	})
 	if err != nil {
 		runErr = err

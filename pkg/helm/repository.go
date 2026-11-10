@@ -23,6 +23,14 @@ func validateOCIRepositoryURL(repositoryURL *url.URL) error {
 	return nil
 }
 
+func validateHarborProjectURL(repositoryURL *url.URL) error {
+	project := strings.Trim(repositoryURL.Path, "/")
+	if project == "" || strings.ContainsAny(project, "/:@") {
+		return fmt.Errorf("harbor repository URL must be oci://<harbor>/<project>")
+	}
+	return nil
+}
+
 func (h *HelmChartHandler) ListRepositories(c *gin.Context) {
 	var repositories []model.HelmRepository
 	if err := model.DB.Order("name").Find(&repositories).Error; err != nil {
@@ -46,6 +54,7 @@ func (h *HelmChartHandler) CreateRepository(c *gin.Context) {
 
 	repository := model.HelmRepository{
 		Name:      strings.TrimSpace(req.Name),
+		Type:      strings.TrimSpace(req.Type),
 		URL:       strings.TrimSpace(req.URL),
 		PlainHTTP: req.PlainHTTP,
 		Username:  strings.TrimSpace(req.Username),
@@ -54,6 +63,10 @@ func (h *HelmChartHandler) CreateRepository(c *gin.Context) {
 
 	if repository.Name == "" || repository.URL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "repository name and URL are required"})
+		return
+	}
+	if repository.Type != "" && repository.Type != model.HelmRepositoryTypeHarbor {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported repository type"})
 		return
 	}
 	if strings.Contains(repository.Name, "/") {
@@ -76,13 +89,21 @@ func (h *HelmChartHandler) CreateRepository(c *gin.Context) {
 		return
 	}
 	repository.URL = scheme + repository.URL[len(scheme):]
+	if repository.Type == model.HelmRepositoryTypeHarbor && scheme != registry.OCIScheme {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "harbor repository URL must be oci://<harbor>/<project>"})
+		return
+	}
 	if repository.PlainHTTP && scheme != registry.OCIScheme {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "plainHTTP is only supported for OCI repositories"})
 		return
 	}
 	if scheme == registry.OCIScheme {
 		repository.URL = strings.TrimRight(repository.URL, "/")
-		if err := validateOCIRepositoryURL(repositoryURL); err != nil {
+		validateURL := validateOCIRepositoryURL
+		if repository.Type == model.HelmRepositoryTypeHarbor {
+			validateURL = validateHarborProjectURL
+		}
+		if err := validateURL(repositoryURL); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -137,6 +158,7 @@ func toHelmRepositoryResponse(repository model.HelmRepository) helmRepositoryRes
 	return helmRepositoryResponse{
 		ID:        repository.ID,
 		Name:      repository.Name,
+		Type:      repository.Type,
 		URL:       repository.URL,
 		PlainHTTP: repository.PlainHTTP,
 		Username:  repository.Username,

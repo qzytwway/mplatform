@@ -1014,7 +1014,9 @@
       "clusterAgentDescription": "先创建集群，然后在目标集群内运行生成的命令。",
       "enabled": "启用",
       "isDefault": "设为默认",
-      "alertmanagerUrl": "Alertmanager 地址"
+      "alertmanagerUrl": "Alertmanager 地址",
+      "imageRegistry": "镜像仓库地址",
+      "imageRegistryHint": "在此集群安装或升级 Chart 时，容器镜像改从该地址拉取，只保留镜像名和标签（如 docker.io/bitnami/redis:7 改为 <地址>/redis:7）。留空则不改写。"
     }
   },
   "oauthManagement": {
@@ -1345,7 +1347,8 @@
       "versions": "版本",
       "defaultValues": "默认 Values",
       "customValues": "自定义 Values",
-      "updatedAt": "更新时间"
+      "updatedAt": "更新时间",
+      "repositoryType": "仓库类型"
     },
     "filters": {
       "allRepositories": "全部 Repository",
@@ -1367,11 +1370,16 @@
       "noChartUrl": "缺少 Chart 包 URL。",
       "invalidValues": "Values 必须是 YAML 对象。",
       "artifactHubTrafficNotice": "从该来源搜索或查看 Chart 信息时，MPlatform 会访问 <artifactHub>Artifact Hub</artifactHub>。MPlatform 仅展示第三方数据，不对其中内容负责。",
-      "installed": "Helm Release 已安装"
+      "installed": "Helm Release 已安装",
+      "harborRepositoryHint": "填写 oci://<harbor>/<项目>，平台会通过 Harbor API 列出项目中的全部 Chart。凭据请使用在该项目有“列出仓库”“列出制品”“拉取仓库”权限的机器人账号；公开项目可留空。"
     },
     "placeholders": {
       "search": "搜索 Chart...",
       "repositoryUrl": "https://charts.example.com 或 oci://registry.example.com/charts/app"
+    },
+    "repositoryTypes": {
+      "helm": "Helm / OCI",
+      "harbor": "Harbor 项目"
     }
   },
   "cloneResource": {
@@ -1462,7 +1470,8 @@
       "invalidAutoUpgradeInterval": "间隔至少为 1 分钟。",
       "invalidAutoUpgradeScheduleTime": "请输入有效时间。",
       "invalidAutoUpgradeTimeout": "超时至少为 1 分钟。",
-      "autoUpgradeChartRequired": "请选择用于自动升级的 Chart。"
+      "autoUpgradeChartRequired": "请选择用于自动升级的 Chart。",
+      "imageRegistryRewrite": "容器镜像将改从 {{imageRegistry}} 拉取。"
     },
     "placeholders": {
       "selectChart": "选择 Chart..."

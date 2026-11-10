@@ -9,6 +9,7 @@ import (
 
 type createHelmRepositoryRequest struct {
 	Name      string `json:"name" binding:"required"`
+	Type      string `json:"type"`
 	URL       string `json:"url" binding:"required"`
 	PlainHTTP bool   `json:"plainHTTP"`
 	Username  string `json:"username"`
@@ -18,6 +19,7 @@ type createHelmRepositoryRequest struct {
 type helmRepositoryResponse struct {
 	ID        uint      `json:"id"`
 	Name      string    `json:"name"`
+	Type      string    `json:"type"`
 	URL       string    `json:"url"`
 	PlainHTTP bool      `json:"plainHTTP"`
 	Username  string    `json:"username,omitempty"`

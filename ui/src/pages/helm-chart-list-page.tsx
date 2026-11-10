@@ -175,6 +175,8 @@ function AddRepositoryDialog({
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
+  const [repositoryType, setRepositoryType] =
+    useState<HelmRepository['type']>('')
   const [url, setURL] = useState('')
   const [plainHTTP, setPlainHTTP] = useState(false)
   const [username, setUsername] = useState('')
@@ -190,6 +192,7 @@ function AddRepositoryDialog({
     try {
       await createHelmRepository({
         name,
+        type: repositoryType,
         url,
         plainHTTP: isOCIRepository && plainHTTP,
         username,
@@ -197,6 +200,7 @@ function AddRepositoryDialog({
       })
       toast.success(t('helmCharts.messages.repositoryAdded'))
       setName('')
+      setRepositoryType('')
       setURL('')
       setPlainHTTP(false)
       setUsername('')
@@ -234,6 +238,34 @@ function AddRepositoryDialog({
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="helm-repository-type">
+                {t('helmCharts.fields.repositoryType')}
+              </Label>
+              <Select
+                value={repositoryType || 'helm'}
+                onValueChange={(value) =>
+                  setRepositoryType(value === 'harbor' ? 'harbor' : '')
+                }
+              >
+                <SelectTrigger id="helm-repository-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="helm">
+                    {t('helmCharts.repositoryTypes.helm')}
+                  </SelectItem>
+                  <SelectItem value="harbor">
+                    {t('helmCharts.repositoryTypes.harbor')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {repositoryType === 'harbor' ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('helmCharts.messages.harborRepositoryHint')}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="helm-repository-url">URL</Label>
               <Input
                 id="helm-repository-url"
@@ -247,7 +279,11 @@ function AddRepositoryDialog({
                     setPlainHTTP(false)
                   }
                 }}
-                placeholder={t('helmCharts.placeholders.repositoryUrl')}
+                placeholder={
+                  repositoryType === 'harbor'
+                    ? 'oci://harbor.example.com/project'
+                    : t('helmCharts.placeholders.repositoryUrl')
+                }
                 required
               />
             </div>

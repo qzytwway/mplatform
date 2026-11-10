@@ -171,6 +171,7 @@ export interface HelmReleaseList {
 export interface HelmRepository {
   id: number
   name: string
+  type: '' | 'harbor'
   url: string
   plainHTTP: boolean
   username?: string
@@ -630,6 +631,7 @@ export interface Cluster {
   updatedAt: string
   prometheusURL?: string
   alertmanagerURL?: string
+  imageRegistry?: string
   error?: string
 }
 

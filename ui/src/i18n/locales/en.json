@@ -1003,7 +1003,9 @@
       "clusterAgentDescription": "Create the cluster first, then run the generated command inside the target cluster.",
       "enabled": "Enabled",
       "isDefault": "Set as Default",
-      "alertmanagerUrl": "Alertmanager URL"
+      "alertmanagerUrl": "Alertmanager URL",
+      "imageRegistry": "Image registry",
+      "imageRegistryHint": "Chart installs and upgrades on this cluster pull container images from this registry path, keeping only the image name and tag (docker.io/bitnami/redis:7 becomes <registry>/redis:7). Leave empty to keep the chart's images."
     }
   },
   "oauthManagement": {
@@ -1258,7 +1260,8 @@
       "versions": "Versions",
       "defaultValues": "Default values",
       "customValues": "Custom values",
-      "updatedAt": "Updated"
+      "updatedAt": "Updated",
+      "repositoryType": "Repository type"
     },
     "filters": {
       "allRepositories": "All repositories",
@@ -1280,11 +1283,16 @@
       "noChartUrl": "Chart package URL is missing.",
       "invalidValues": "Values must be a YAML object.",
       "artifactHubTrafficNotice": "Security notice: MPlatform contacts <artifactHub>Artifact Hub</artifactHub> when searching or viewing chart information from this source. MPlatform only displays third-party data and is not responsible for its content.",
-      "installed": "Helm release installed"
+      "installed": "Helm release installed",
+      "harborRepositoryHint": "Enter oci://<harbor>/<project>. Every chart in the project is listed through the Harbor API. Use a robot account with List Repository, List Artifact and Pull Repository permissions on the project, or leave credentials empty for a public project."
     },
     "placeholders": {
       "search": "Search charts...",
       "repositoryUrl": "https://charts.example.com or oci://registry.example.com/charts/app"
+    },
+    "repositoryTypes": {
+      "helm": "Helm / OCI",
+      "harbor": "Harbor project"
     }
   },
   "cloneResource": {
@@ -1375,7 +1383,8 @@
       "invalidAutoUpgradeInterval": "Interval must be at least 1 minute.",
       "invalidAutoUpgradeScheduleTime": "Enter a valid time.",
       "invalidAutoUpgradeTimeout": "Timeout must be at least 1 minute.",
-      "autoUpgradeChartRequired": "Select a chart for auto upgrade."
+      "autoUpgradeChartRequired": "Select a chart for auto upgrade.",
+      "imageRegistryRewrite": "Container images will be pulled from {{imageRegistry}}."
     },
     "placeholders": {
       "selectChart": "Select a chart..."

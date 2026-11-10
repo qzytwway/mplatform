@@ -14,6 +14,9 @@ import (
 
 // LoadRepositoryCatalog normalizes classic and OCI repositories as an index.
 func LoadRepositoryCatalog(repository model.HelmRepository) (*repo.IndexFile, error) {
+	if repository.Type == model.HelmRepositoryTypeHarbor {
+		return loadHarborRepositoryIndex(repository)
+	}
 	if registry.IsOCI(repository.URL) {
 		return loadOCIRepositoryIndex(repository)
 	}

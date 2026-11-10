@@ -47,6 +47,8 @@ type ClusterInfo struct {
 	Version   string `json:"version"`
 	IsDefault bool   `json:"isDefault"`
 	Error     string `json:"error,omitempty"`
+	// ImageRegistry is where chart installs on this cluster pull images from.
+	ImageRegistry string `json:"imageRegistry,omitempty"`
 }
 
 type MetricsCell struct {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/qzytwway/mplatform/pkg/common"
+	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"github.com/qzytwway/mplatform/pkg/utils"
@@ -38,6 +39,7 @@ type ClusterConfig struct {
 	Config          string `yaml:"config"`
 	PrometheusURL   string `yaml:"prometheusURL"`
 	AlertmanagerURL string `yaml:"alertmanagerURL"`
+	ImageRegistry   string `yaml:"imageRegistry"`
 	InCluster       bool   `yaml:"inCluster"`
 	Default         bool   `yaml:"default"`
 }
@@ -260,12 +262,16 @@ func applyClusters(clusters []ClusterConfig) error {
 		}
 
 		for _, c := range clusters {
+			if err := helmutil.ValidateImageRegistry(c.ImageRegistry); err != nil {
+				return fmt.Errorf("cluster %s: %w", c.Name, err)
+			}
 			cluster := &model.Cluster{
 				Name:            c.Name,
 				Description:     c.Description,
 				Config:          model.SecretString(c.Config),
 				PrometheusURL:   c.PrometheusURL,
 				AlertmanagerURL: c.AlertmanagerURL,
+				ImageRegistry:   c.ImageRegistry,
 				InCluster:       c.InCluster,
 				IsDefault:       c.Default,
 				Enable:          true,

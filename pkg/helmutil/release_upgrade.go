@@ -20,6 +20,7 @@ type UpgradeReleaseOptions struct {
 	RollbackOnFailure    bool
 	DryRun               bool
 	Wait                 bool
+	ImageRegistry        string
 }
 
 func UpgradeRelease(ctx context.Context, cfg *action.Configuration, name string, chartToUpgrade *chart.Chart, values map[string]interface{}, opts UpgradeReleaseOptions) (*release.Release, error) {
@@ -31,6 +32,9 @@ func UpgradeRelease(ctx context.Context, cfg *action.Configuration, name string,
 	upgrade.Description = opts.Description
 	upgrade.ForceConflicts = opts.ForceConflicts
 	upgrade.RollbackOnFailure = opts.RollbackOnFailure
+	if opts.ImageRegistry != "" {
+		upgrade.PostRenderer = imageRegistryPostRenderer{imageRegistry: opts.ImageRegistry}
+	}
 	if opts.DryRun {
 		upgrade.DryRunStrategy = action.DryRunClient
 	}
