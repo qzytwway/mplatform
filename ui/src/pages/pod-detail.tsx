@@ -1,0 +1,463 @@
+import { useEffect, useMemo, useState } from 'react'
+import { IconAdjustments, IconBug } from '@tabler/icons-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Container, Pod } from 'kubernetes-types/core/v1'
+import { useTranslation } from 'react-i18next'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
+
+import {
+  resizePod,
+  updateResource,
+  useResource,
+  useResourcesEvents,
+} from '@/lib/api'
+import {
+  getResourceDetailPath,
+  getResourceQueryKey,
+} from '@/lib/resource-metadata'
+import { isVersionAtLeast, translateError } from '@/lib/utils'
+import { useCluster } from '@/hooks/use-cluster'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { ContainerInfoCard } from '@/components/container-info-card'
+import { ResourceEditor } from '@/components/editors/resource-editor'
+import { EventTable } from '@/components/event-table'
+import { LogViewer } from '@/components/log-viewer'
+import { PodDebugDialog } from '@/components/pod-debug-dialog'
+import { PodFileBrowser } from '@/components/pod-file-browser'
+import { PodMonitoring } from '@/components/pod-monitoring'
+import { PodOverview } from '@/components/pod-overview'
+import { RelatedResourcesTable } from '@/components/related-resource-table'
+import { ResourceYaml } from '@/components/resource-yaml'
+import { ContainerSelector } from '@/components/selector/container-selector'
+import { Terminal } from '@/components/terminal'
+import { VolumeTable } from '@/components/volume-table'
+
+import { ResourceDetailShell } from './resource-detail-shell'
+
+export function PodDetail(props: { namespace: string; name: string }) {
+  const { namespace, name } = props
+  const [isDebugDialogOpen, setIsDebugDialogOpen] = useState(false)
+  const [isResizeDialogOpen, setIsResizeDialogOpen] = useState(false)
+  const [selectedContainerName, setSelectedContainerName] = useState<string>()
+  const [resizeContainer, setResizeContainer] = useState<Container | null>(null)
+  const [isResizing, setIsResizing] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const tabContainerName = searchParams.get('container') || undefined
+
+  const { t } = useTranslation()
+  const { clusters, currentCluster } = useCluster()
+
+  const {
+    data: pod,
+    isLoading,
+    isError,
+    error: podError,
+    refetch,
+  } = useResource('pods', name, namespace)
+  const { data: podEvents, isLoading: isEventsLoading } = useResourcesEvents(
+    'pods',
+    name,
+    namespace
+  )
+  const attachContainerName =
+    pod?.metadata?.annotations?.['mplatform.io/debug-container']
+
+  useEffect(() => {
+    if (!pod || !pod?.spec?.containers?.length) {
+      setSelectedContainerName(undefined)
+      setResizeContainer(null)
+      return
+    }
+    setSelectedContainerName((prev) => prev || pod.spec?.containers[0].name)
+  }, [pod])
+
+  useEffect(() => {
+    if (!pod || !selectedContainerName) {
+      setResizeContainer(null)
+      return
+    }
+    const container = pod.spec?.containers.find(
+      (item) => item.name === selectedContainerName
+    )
+    setResizeContainer(
+      container ? (JSON.parse(JSON.stringify(container)) as Container) : null
+    )
+  }, [pod, selectedContainerName])
+
+  const handleSaveYaml = async (content: Pod) => {
+    await updateResource('pods', name, namespace, content)
+    toast.success(t('common.messages.yamlSaved'))
+    await refetch()
+  }
+
+  const handleDebugCreated = (updatedPod: Pod, containerName: string) => {
+    const updatedNamespace = updatedPod.metadata!.namespace!
+    const updatedName = updatedPod.metadata!.name!
+    const queryKey = getResourceQueryKey(
+      'pods',
+      updatedNamespace,
+      updatedName,
+      currentCluster
+    )
+    queryClient.setQueryData(queryKey, updatedPod)
+    setIsDebugDialogOpen(false)
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('tab', 'terminal')
+    nextParams.set('container', containerName)
+    if (updatedNamespace === namespace && updatedName === name) {
+      setSearchParams(nextParams, { replace: true })
+    } else {
+      navigate({
+        pathname: getResourceDetailPath('pods', updatedName, updatedNamespace),
+        search: `?${nextParams.toString()}`,
+      })
+    }
+  }
+
+  const handleResizeSave = async () => {
+    if (!resizeContainer) return
+    setIsResizing(true)
+    try {
+      await resizePod(namespace, name, {
+        spec: {
+          containers: [
+            {
+              name: resizeContainer.name,
+              resources: resizeContainer.resources,
+            },
+          ],
+        },
+      })
+      toast.success(t('pods.resizeResourcesSuccess'))
+      await refetch()
+      setIsResizeDialogOpen(false)
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsResizing(false)
+    }
+  }
+
+  const clusterVersion = useMemo(
+    () => clusters.find((cluster) => cluster.name === currentCluster)?.version,
+    [clusters, currentCluster]
+  )
+  const resizeSupported = useMemo(
+    () => isVersionAtLeast(clusterVersion, '1.35.0'),
+    [clusterVersion]
+  )
+  const resizeAvailable =
+    resizeSupported && (pod?.spec?.containers?.length ?? 0) > 0
+  const debugAvailable =
+    !!pod &&
+    !pod.metadata?.deletionTimestamp &&
+    pod.spec?.os?.name !== 'windows' &&
+    pod.spec?.nodeSelector?.['kubernetes.io/os'] !== 'windows' &&
+    (pod.spec?.containers.length ?? 0) > 0
+  const ephemeralAvailable =
+    debugAvailable &&
+    isVersionAtLeast(clusterVersion, '1.25.0') &&
+    pod.status?.phase !== 'Succeeded' &&
+    pod.status?.phase !== 'Failed' &&
+    !pod.metadata?.annotations?.['kubernetes.io/config.mirror']
+
+  return (
+    <>
+      <ResourceDetailShell
+        resourceType="pods"
+        resourceLabel="Pod"
+        name={name}
+        namespace={namespace}
+        data={pod}
+        isLoading={isLoading}
+        error={isError ? podError : null}
+        onRefresh={refetch}
+        tabs={[
+          {
+            value: 'overview',
+            label: t('common.tabs.overview'),
+            content: pod ? (
+              <PodOverview
+                pod={pod}
+                namespace={namespace}
+                name={name}
+                events={podEvents}
+                isEventsLoading={isEventsLoading}
+              />
+            ) : null,
+          },
+          {
+            value: 'containers',
+            label: (
+              <>
+                {t('common.tabs.containers')}
+                <Badge variant="secondary">
+                  {(pod?.spec?.containers?.length || 0) +
+                    (pod?.spec?.initContainers?.length || 0) +
+                    (pod?.spec?.ephemeralContainers?.length || 0)}
+                </Badge>
+              </>
+            ),
+            content: (
+              <div className="space-y-4">
+                {pod?.spec?.initContainers &&
+                  pod.spec.initContainers.length > 0 && (
+                    <Card>
+                      <CardContent className="space-y-3 pt-4">
+                        {pod.spec.initContainers.map((container) => (
+                          <ContainerInfoCard
+                            key={container.name}
+                            container={container}
+                            status={pod.status?.initContainerStatuses?.find(
+                              (s) => s.name === container.name
+                            )}
+                            init
+                          />
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+                <Card>
+                  <CardContent className="space-y-3 pt-4">
+                    {pod?.spec?.containers?.map((container) => (
+                      <ContainerInfoCard
+                        key={container.name}
+                        container={container}
+                        status={pod.status?.containerStatuses?.find(
+                          (s) => s.name === container.name
+                        )}
+                      />
+                    ))}
+                  </CardContent>
+                </Card>
+                {!!pod?.spec?.ephemeralContainers?.length && (
+                  <Card>
+                    <CardContent className="space-y-3 pt-4">
+                      {pod.spec.ephemeralContainers.map((container) => (
+                        <ContainerInfoCard
+                          key={container.name}
+                          container={container}
+                          status={pod.status?.ephemeralContainerStatuses?.find(
+                            (status) => status.name === container.name
+                          )}
+                          ephemeral
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            ),
+          },
+          {
+            value: 'yaml',
+            label: t('common.tabs.yaml'),
+            content: ({ resource, refreshKey }) => (
+              <ResourceYaml
+                key={refreshKey}
+                value={resource}
+                onSave={handleSaveYaml}
+                fillHeight
+              />
+            ),
+          },
+          {
+            value: 'logs',
+            label: t('common.tabs.logs'),
+            content: (
+              <LogViewer
+                namespace={namespace}
+                podName={name}
+                containers={pod?.spec?.containers}
+                initContainers={pod?.spec?.initContainers}
+                ephemeralContainers={pod?.spec?.ephemeralContainers}
+                selectedContainerName={tabContainerName}
+              />
+            ),
+          },
+          {
+            value: 'terminal',
+            label: t('common.tabs.terminal'),
+            content: (
+              <Terminal
+                namespace={namespace}
+                podName={name}
+                containers={pod?.spec?.containers}
+                initContainers={pod?.spec?.initContainers}
+                ephemeralContainers={pod?.spec?.ephemeralContainers}
+                attachContainerName={attachContainerName}
+                selectedContainerName={tabContainerName}
+              />
+            ),
+          },
+          {
+            value: 'files',
+            label: t('common.tabs.files'),
+            content: (
+              <PodFileBrowser
+                namespace={namespace}
+                podName={name}
+                containers={pod?.spec?.containers}
+                initContainers={pod?.spec?.initContainers}
+              />
+            ),
+          },
+          {
+            value: 'volumes',
+            label: (
+              <>
+                {t('common.tabs.volumes')}
+                {pod?.spec?.volumes && (
+                  <Badge variant="secondary">{pod.spec.volumes.length}</Badge>
+                )}
+              </>
+            ),
+            content: (
+              <VolumeTable
+                namespace={namespace}
+                volumes={pod?.spec?.volumes}
+                containers={pod?.spec?.containers}
+                isLoading={isLoading}
+              />
+            ),
+          },
+          {
+            value: 'related',
+            label: t('common.tabs.related'),
+            content: (
+              <RelatedResourcesTable
+                resource="pods"
+                name={name}
+                namespace={namespace}
+              />
+            ),
+          },
+          {
+            value: 'events',
+            label: t('common.tabs.events'),
+            content: (
+              <EventTable resource="pods" name={name} namespace={namespace} />
+            ),
+          },
+          {
+            value: 'monitor',
+            label: t('common.tabs.monitor'),
+            content: (
+              <PodMonitoring
+                namespace={namespace}
+                podName={name}
+                containers={pod?.spec?.containers}
+                initContainers={pod?.spec?.initContainers}
+              />
+            ),
+          },
+        ]}
+        headerActions={
+          <>
+            {debugAvailable && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDebugDialogOpen(true)}
+              >
+                <IconBug className="size-4" />
+                {t('pods.debug')}
+              </Button>
+            )}
+            {resizeAvailable && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsResizeDialogOpen(true)}
+              >
+                <IconAdjustments className="w-4 h-4" />
+                {t('pods.resizeResources')}
+              </Button>
+            )}
+          </>
+        }
+      />
+      {isDebugDialogOpen && debugAvailable && (
+        <PodDebugDialog
+          namespace={namespace}
+          name={name}
+          containers={[
+            ...(pod.spec?.containers || []),
+            ...(pod.spec?.initContainers || []),
+          ]}
+          ephemeralAvailable={ephemeralAvailable}
+          onClose={() => setIsDebugDialogOpen(false)}
+          onCreated={handleDebugCreated}
+        />
+      )}
+      <Dialog open={isResizeDialogOpen} onOpenChange={setIsResizeDialogOpen}>
+        <DialogContent className="!max-w-3xl max-h-[90vh] overflow-y-auto sm:!max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{t('pods.resizeResourcesTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('pods.resizeResourcesDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('common.fields.container')}</Label>
+              <ContainerSelector
+                containers={(pod?.spec?.containers || []).map((item) => ({
+                  name: item.name,
+                  image: item.image || '',
+                  init: false,
+                }))}
+                selectedContainer={selectedContainerName}
+                onContainerChange={setSelectedContainerName}
+                showAllOption={false}
+                placeholder={t('pods.selectContainer')}
+              />
+            </div>
+            {resizeContainer ? (
+              <ResourceEditor
+                container={resizeContainer}
+                onUpdate={(updates) =>
+                  setResizeContainer((prev) =>
+                    prev ? { ...prev, ...updates } : prev
+                  )
+                }
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                {t('pods.selectContainer')}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsResizeDialogOpen(false)}
+            >
+              {t('common.actions.cancel')}
+            </Button>
+            <Button
+              onClick={handleResizeSave}
+              disabled={!resizeContainer || isResizing}
+            >
+              {t('common.actions.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

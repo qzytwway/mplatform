@@ -1,0 +1,270 @@
+package kube
+
+import (
+	"context"
+	"fmt"
+	"os"
+	goruntime "runtime"
+	"strconv"
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/qzytwway/mplatform/pkg/version"
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	toolscache "k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+
+	metricsv1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+)
+
+var runtimeScheme = runtime.NewScheme()
+
+const (
+	defaultCacheSyncTimeout = 60 * time.Second
+	defaultKubeAPIQPS       = 50
+	defaultKubeAPIBurst     = 100
+)
+
+// cacheSyncTimeout returns the configured cache sync timeout, overridable via
+// the MPLATFORM_CACHE_SYNC_TIMEOUT env var (in seconds). The initial LIST for
+// informers on large/remote clusters can take a long time, so the default is
+// generous and remains configurable for edge cases.
+func cacheSyncTimeout() time.Duration {
+	if v := os.Getenv("MPLATFORM_CACHE_SYNC_TIMEOUT"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultCacheSyncTimeout
+}
+
+// kubeAPIQPS returns the QPS limit for the Kubernetes API client, overridable
+// via the MPLATFORM_KUBE_API_QPS env var. Defaults to 50 (client-go default is 5,
+// which is too low for large/remote clusters during the initial cache sync).
+func kubeAPIQPS() float32 {
+	if v := os.Getenv("MPLATFORM_KUBE_API_QPS"); v != "" {
+		if qps, err := strconv.ParseFloat(v, 32); err == nil && qps > 0 {
+			return float32(qps)
+		}
+	}
+	return defaultKubeAPIQPS
+}
+
+// kubeAPIBurst returns the burst limit for the Kubernetes API client,
+// overridable via the MPLATFORM_KUBE_API_BURST env var. Defaults to 100 (client-go
+// default is 10).
+func kubeAPIBurst() int {
+	if v := os.Getenv("MPLATFORM_KUBE_API_BURST"); v != "" {
+		if burst, err := strconv.Atoi(v); err == nil && burst > 0 {
+			return burst
+		}
+	}
+	return defaultKubeAPIBurst
+}
+
+func init() {
+	ctrllog.SetLogger(controllerRuntimeLogger(klog.NewKlogr()))
+	_ = scheme.AddToScheme(runtimeScheme)
+	_ = apiextensionsv1.AddToScheme(runtimeScheme)
+	_ = metricsv1.AddToScheme(runtimeScheme)
+}
+
+func controllerRuntimeLogger(logger logr.Logger) logr.Logger {
+	return logr.New(controllerRuntimeLogSink{sink: logger.GetSink()})
+}
+
+type controllerRuntimeLogSink struct {
+	sink logr.LogSink
+}
+
+func (l controllerRuntimeLogSink) Init(info logr.RuntimeInfo) {
+	l.sink.Init(info)
+}
+
+func (l controllerRuntimeLogSink) Enabled(level int) bool {
+	return klog.V(2).Enabled() && l.sink.Enabled(level)
+}
+
+func (l controllerRuntimeLogSink) Info(level int, msg string, keysAndValues ...any) {
+	if !klog.V(2).Enabled() {
+		return
+	}
+	l.sink.Info(level, msg, keysAndValues...)
+}
+
+func (l controllerRuntimeLogSink) Error(err error, msg string, keysAndValues ...any) {
+	if !klog.V(2).Enabled() {
+		return
+	}
+	l.sink.Error(err, msg, keysAndValues...)
+}
+
+func (l controllerRuntimeLogSink) WithValues(keysAndValues ...any) logr.LogSink {
+	l.sink = l.sink.WithValues(keysAndValues...)
+	return l
+}
+
+func (l controllerRuntimeLogSink) WithName(name string) logr.LogSink {
+	l.sink = l.sink.WithName(name)
+	return l
+}
+
+func (l controllerRuntimeLogSink) WithCallDepth(depth int) logr.LogSink {
+	if sink, ok := l.sink.(logr.CallDepthLogSink); ok {
+		l.sink = sink.WithCallDepth(depth)
+	}
+	return l
+}
+
+// K8sClient holds the Kubernetes client instances
+type K8sClient struct {
+	client.Client
+	ClientSet     kubernetes.Interface
+	Configuration *rest.Config
+	MetricsClient *metricsclient.Clientset
+	CacheEnabled  bool // true when using controller-runtime informer cache
+
+	cancel context.CancelFunc
+}
+
+// NewClient creates a K8sClient from a rest.Config
+func NewClient(config *rest.Config) (*K8sClient, error) {
+	config.UserAgent = fmt.Sprintf("mplatform/%s (%s/%s)", version.Version, goruntime.GOOS, goruntime.GOARCH)
+
+	// Tune QPS/Burst so the initial cache sync LIST on large/remote clusters is
+	// not throttled by the client-go defaults (QPS=5, Burst=10). Values are
+	// overridable via MPLATFORM_KUBE_API_QPS and MPLATFORM_KUBE_API_BURST. A value
+	// explicitly set on the rest.Config (e.g. from kubeconfig) is preserved.
+	if config.QPS == 0 {
+		config.QPS = kubeAPIQPS()
+	}
+	if config.Burst == 0 {
+		config.Burst = kubeAPIBurst()
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	metricsClient, err := metricsclient.NewForConfig(config)
+	if err != nil {
+		klog.Warningf("failed to create metrics client: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cacheEnabled := os.Getenv("DISABLE_CACHE") != "true"
+
+	var c client.Client
+	if !cacheEnabled {
+		c, err = client.New(config, client.Options{
+			Scheme: runtimeScheme,
+		})
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("failed to create client: %w", err)
+		}
+	} else {
+		mgr, err := manager.New(config, manager.Options{
+			Scheme:         runtimeScheme,
+			LeaderElection: false,
+			Metrics: metricsserver.Options{
+				BindAddress: "0", // Disable metrics server
+			},
+			Cache: cache.Options{
+				DefaultWatchErrorHandler: func(ctx context.Context, r *toolscache.Reflector, err error) {
+				},
+			},
+		})
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+
+		// Add field indexer for Pod spec.nodeName to enable efficient querying by node
+		if err := mgr.GetFieldIndexer().IndexField(ctx, &corev1.Pod{}, "spec.nodeName", func(rawObj client.Object) []string {
+			pod := rawObj.(*corev1.Pod)
+			if pod.Spec.NodeName == "" {
+				return nil
+			}
+			return []string{pod.Spec.NodeName}
+		}); err != nil {
+			cancel()
+			return nil, fmt.Errorf("failed to create field indexer for spec.nodeName: %w", err)
+		}
+		go func() {
+			if err := mgr.Start(ctx); err != nil {
+				fmt.Printf("Error starting manager: %v\n", err)
+			}
+		}()
+		syncCtx, syncCancel := context.WithTimeout(ctx, cacheSyncTimeout())
+		defer syncCancel()
+		if !mgr.GetCache().WaitForCacheSync(syncCtx) {
+			cancel()
+			return nil, fmt.Errorf("failed to wait for cache sync (timeout: %s); "+
+				"the cluster may be too large or the API server too slow. "+
+				"Consider increasing MPLATFORM_CACHE_SYNC_TIMEOUT or setting DISABLE_CACHE=true", cacheSyncTimeout())
+		}
+		c = mgr.GetClient()
+	}
+
+	return &K8sClient{
+		Client:        c,
+		ClientSet:     clientset,
+		Configuration: config,
+		MetricsClient: metricsClient,
+		CacheEnabled:  cacheEnabled,
+		cancel:        cancel,
+	}, nil
+}
+
+func (c *K8sClient) Stop(name string) {
+	klog.Infof("Stopping K8s client for %s", name)
+	c.cancel()
+}
+
+// GetScheme returns the runtime scheme used by the client
+func GetScheme() *runtime.Scheme {
+	return runtimeScheme
+}
+
+func WaitForResourceDeletion(ctx context.Context, client client.Client, obj client.Object, timeout time.Duration) error {
+	key := types.NamespacedName{
+		Namespace: obj.GetNamespace(),
+		Name:      obj.GetName(),
+	}
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	timeoutCh := time.After(timeout)
+	for {
+		select {
+		case <-timeoutCh:
+			return fmt.Errorf("timed out waiting for resource deletion: %s", key)
+		case <-ticker.C:
+			if err := client.Get(ctx, key, obj); err != nil {
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return fmt.Errorf("failed to get resource: %w", err)
+			} else if obj.GetDeletionTimestamp().IsZero() {
+				// resource still exist, but deletion timestamp is not set
+				// may be created again after deletion
+				// we can consider it successfully deleted.
+				return nil
+			}
+		}
+	}
+}

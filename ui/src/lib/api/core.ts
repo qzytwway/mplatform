@@ -1,0 +1,1178 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Pod } from 'kubernetes-types/core/v1'
+
+import {
+  HelmChartContent,
+  HelmChartContentType,
+  HelmChartDetail,
+  HelmChartList,
+  HelmRelease,
+  HelmReleaseAutoUpgrade,
+  HelmReleaseAutoUpgradeRequest,
+  HelmReleaseDryRunResponse,
+  HelmReleaseHistoryResponse,
+  HelmReleaseInstallRequest,
+  HelmReleaseUpgradeRequest,
+  HelmRepository,
+  ImageTagInfo,
+  RelatedResources,
+  ResourceHistoryResponse,
+  ResourcesTypeMap,
+  ResourceTemplate,
+  ResourceType,
+  ResourceTypeMap,
+  WorkloadRevisionResourceType,
+  WorkloadRevisionsResponse,
+} from '@/types/api'
+import { getResourceQueryKey } from '@/lib/resource-metadata'
+import { useCluster } from '@/hooks/use-cluster'
+
+import { API_BASE_URL, apiClient } from '../api-client'
+import {
+  appendCurrentClusterParam,
+  withCurrentClusterPath,
+} from '../current-cluster'
+import { withSubPath } from '../subpath'
+import { fetchAPI } from './shared'
+
+type ResourcesItems<T extends ResourceType> = ResourcesTypeMap[T]['items']
+
+export const fetchResources = <T>(
+  resource: string,
+  namespace?: string,
+  opts?: {
+    limit?: number
+    continueToken?: string
+    labelSelector?: string
+    fieldSelector?: string
+    reduce?: boolean
+  }
+): Promise<T> => {
+  let endpoint = namespace ? `/${resource}/${namespace}` : `/${resource}`
+  const params = new URLSearchParams()
+
+  if (opts?.limit) {
+    params.append('limit', opts.limit.toString())
+  }
+  if (opts?.continueToken) {
+    params.append('continue', opts.continueToken)
+  }
+  if (opts?.labelSelector) {
+    params.append('labelSelector', opts.labelSelector)
+  }
+  if (opts?.fieldSelector) {
+    params.append('fieldSelector', opts.fieldSelector)
+  }
+  if (opts?.reduce) {
+    params.append('reduce', 'true')
+  }
+
+  if (params.toString()) {
+    endpoint += `?${params.toString()}`
+  }
+
+  return fetchAPI<T>(endpoint)
+}
+
+// Search API types
+export interface SearchResult {
+  id: string
+  name: string
+  namespace?: string
+  resourceType: string
+  createdAt: string
+}
+
+export interface SearchResponse {
+  results: SearchResult[]
+  total: number
+}
+
+// Global search API
+export const globalSearch = async (
+  query: string,
+  options?: {
+    limit?: number
+    namespace?: string
+  }
+): Promise<SearchResponse> => {
+  if (!query.trim()) {
+    return { results: [], total: 0 }
+  }
+
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(options?.limit || 50),
+  })
+
+  if (options?.namespace) {
+    params.append('namespace', options.namespace)
+  }
+
+  const endpoint = `/search?${params.toString()}`
+  const response = await fetchAPI<SearchResponse>(endpoint)
+  const results = response.results || []
+  return {
+    ...response,
+    results,
+    total: response.total ?? results.length,
+  }
+}
+// Scale deployment API
+export const scaleDeployment = async (
+  namespace: string,
+  name: string,
+  replicas: number
+): Promise<void> => {
+  await patchResource('deployments', name, namespace, {
+    spec: { replicas },
+  })
+}
+
+export const upgradeHelmRelease = async (
+  namespace: string,
+  name: string,
+  body: HelmReleaseUpgradeRequest
+): Promise<{ message?: string }> => {
+  return apiClient.put<{ message?: string }>(
+    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/upgrade`,
+    body
+  )
+}
+
+export const dryRunUpgradeHelmRelease = async (
+  namespace: string,
+  name: string,
+  body: HelmReleaseUpgradeRequest
+): Promise<HelmReleaseDryRunResponse> => {
+  return apiClient.put<HelmReleaseDryRunResponse>(
+    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/upgrade/dry-run`,
+    body
+  )
+}
+
+export const rollbackHelmRelease = async (
+  namespace: string,
+  name: string,
+  revision?: number
+): Promise<{ message?: string }> => {
+  return apiClient.put<{ message?: string }>(
+    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/rollback`,
+    revision ? { revision } : {}
+  )
+}
+
+export const fetchHelmReleaseAutoUpgrade = (
+  namespace: string,
+  name: string
+): Promise<HelmReleaseAutoUpgrade> => {
+  return fetchAPI<HelmReleaseAutoUpgrade>(
+    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/auto-upgrade`
+  )
+}
+
+export const updateHelmReleaseAutoUpgrade = (
+  namespace: string,
+  name: string,
+  body: HelmReleaseAutoUpgradeRequest
+): Promise<HelmReleaseAutoUpgrade> => {
+  return apiClient.put<HelmReleaseAutoUpgrade>(
+    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/auto-upgrade`,
+    body
+  )
+}
+
+export const useHelmReleaseAutoUpgrade = (
+  namespace: string,
+  name: string,
+  options?: { enabled?: boolean; staleTime?: number }
+) => {
+  return useQuery({
+    queryKey: ['helmrelease-auto-upgrade', namespace, name],
+    queryFn: () => fetchHelmReleaseAutoUpgrade(namespace, name),
+    enabled: (options?.enabled ?? true) && !!namespace && !!name,
+    staleTime: options?.staleTime || 30000,
+  })
+}
+
+export const installHelmRelease = async (
+  namespace: string,
+  body: HelmReleaseInstallRequest
+): Promise<HelmRelease> => {
+  return apiClient.post<HelmRelease>(
+    `/helmrelease/${encodeURIComponent(namespace)}`,
+    body
+  )
+}
+
+export const dryRunInstallHelmRelease = async (
+  namespace: string,
+  body: HelmReleaseInstallRequest
+): Promise<HelmReleaseDryRunResponse> => {
+  return apiClient.post<HelmReleaseDryRunResponse>(
+    `/helmrelease/${encodeURIComponent(namespace)}/dry-run`,
+    body
+  )
+}
+
+export const fetchHelmReleaseHistory = (
+  namespace: string,
+  name: string
+): Promise<HelmReleaseHistoryResponse> => {
+  return fetchAPI<HelmReleaseHistoryResponse>(
+    `/helmrelease/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/history`
+  )
+}
+
+export const useHelmReleaseHistory = (
+  namespace: string,
+  name: string,
+  options?: { enabled?: boolean; staleTime?: number }
+) => {
+  return useQuery({
+    queryKey: ['helmrelease-history', namespace, name],
+    queryFn: () => fetchHelmReleaseHistory(namespace, name),
+    enabled: options?.enabled ?? true,
+    staleTime: options?.staleTime || 30000,
+  })
+}
+
+export const fetchHelmRepositories = (): Promise<HelmRepository[]> => {
+  return fetchAPI<HelmRepository[]>('/charts/repositories')
+}
+
+export const createHelmRepository = (
+  body: Pick<HelmRepository, 'name' | 'url'> & {
+    plainHTTP?: boolean
+    username?: string
+    password?: string
+  }
+): Promise<HelmRepository> => {
+  return apiClient.post<HelmRepository>('/admin/charts/repositories', body)
+}
+
+export const deleteHelmRepository = (
+  id: number
+): Promise<{ message: string }> => {
+  return apiClient.delete<{ message: string }>(
+    `/admin/charts/repositories/${id}`
+  )
+}
+
+export const fetchHelmCharts = (options?: {
+  repository?: string
+  query?: string
+}): Promise<HelmChartList> => {
+  const params = new URLSearchParams()
+  if (options?.repository) {
+    params.append('repository', options.repository)
+  }
+  if (options?.query) {
+    params.append('q', options.query)
+  }
+  const query = params.toString()
+  return fetchAPI<HelmChartList>(`/charts${query ? `?${query}` : ''}`)
+}
+
+export const fetchArtifactHubCharts = (options?: {
+  query?: string
+  verifiedPublisher?: boolean
+  limit?: number
+  offset?: number
+}): Promise<HelmChartList> => {
+  const params = new URLSearchParams()
+  if (options?.query) {
+    params.append('q', options.query)
+  }
+  if (options?.verifiedPublisher !== undefined) {
+    params.append('verifiedPublisher', String(options.verifiedPublisher))
+  }
+  if (options?.limit) {
+    params.append('limit', String(options.limit))
+  }
+  if (options?.offset) {
+    params.append('offset', String(options.offset))
+  }
+  const query = params.toString()
+  return fetchAPI<HelmChartList>(
+    `/charts/artifacthub${query ? `?${query}` : ''}`
+  )
+}
+
+export const fetchHelmChart = (
+  repository: string,
+  name: string,
+  version?: string,
+  source?: 'repository' | 'artifacthub'
+): Promise<HelmChartDetail> => {
+  const params = new URLSearchParams()
+  if (version) {
+    params.append('version', version)
+  }
+  const query = params.toString()
+  const endpoint =
+    source === 'artifacthub'
+      ? `/charts/artifacthub/${encodeURIComponent(repository)}/${encodeURIComponent(name)}`
+      : `/charts/${encodeURIComponent(repository)}/${encodeURIComponent(name)}`
+
+  return fetchAPI<HelmChartDetail>(`${endpoint}${query ? `?${query}` : ''}`)
+}
+
+export const fetchHelmChartContent = (
+  repository: string,
+  name: string,
+  content: HelmChartContentType,
+  version?: string,
+  source?: 'repository' | 'artifacthub'
+): Promise<HelmChartContent> => {
+  const params = new URLSearchParams()
+  if (version) {
+    params.append('version', version)
+  }
+  const query = params.toString()
+  const endpoint =
+    source === 'artifacthub'
+      ? `/charts/artifacthub/${encodeURIComponent(repository)}/${encodeURIComponent(name)}/content/${content}`
+      : `/charts/${encodeURIComponent(repository)}/${encodeURIComponent(name)}/content/${content}`
+
+  return fetchAPI<HelmChartContent>(`${endpoint}${query ? `?${query}` : ''}`)
+}
+
+export const useHelmRepositories = () => {
+  return useQuery({
+    queryKey: ['helmcharts', 'repositories'],
+    queryFn: fetchHelmRepositories,
+  })
+}
+
+export const useHelmCharts = (options?: {
+  repository?: string
+  query?: string
+  enabled?: boolean
+}) => {
+  return useQuery({
+    queryKey: [
+      'helmcharts',
+      'charts',
+      options?.repository || '',
+      options?.query || '',
+    ],
+    queryFn: () => fetchHelmCharts(options),
+    enabled: options?.enabled ?? true,
+  })
+}
+
+export const useArtifactHubCharts = (options?: {
+  query?: string
+  verifiedPublisher?: boolean
+  limit?: number
+  offset?: number
+  enabled?: boolean
+}) => {
+  return useQuery({
+    queryKey: [
+      'helmcharts',
+      'artifacthub',
+      options?.query || '',
+      options?.verifiedPublisher ?? true,
+      options?.limit || 20,
+      options?.offset || 0,
+    ],
+    queryFn: () => fetchArtifactHubCharts(options),
+    enabled: options?.enabled ?? true,
+  })
+}
+
+export const useHelmChart = (
+  repository: string | undefined,
+  name: string | undefined,
+  version?: string,
+  source?: 'repository' | 'artifacthub',
+  enabled = true
+) => {
+  return useQuery({
+    queryKey: [
+      'helmcharts',
+      'chart',
+      source || 'repository',
+      repository,
+      name,
+      version || '',
+    ],
+    queryFn: () =>
+      fetchHelmChart(repository || '', name || '', version, source),
+    enabled: Boolean(enabled && repository && name),
+  })
+}
+
+export const useHelmChartContent = (
+  repository: string | undefined,
+  name: string | undefined,
+  content: HelmChartContentType,
+  version?: string,
+  source?: 'repository' | 'artifacthub',
+  enabled = true
+) => {
+  return useQuery({
+    queryKey: [
+      'helmcharts',
+      'chart-content',
+      source || 'repository',
+      repository,
+      name,
+      version || '',
+      content,
+    ],
+    queryFn: () =>
+      fetchHelmChartContent(
+        repository || '',
+        name || '',
+        content,
+        version,
+        source
+      ),
+    enabled: Boolean(enabled && repository && name),
+  })
+}
+
+// Node operation APIs
+export const drainNode = async (
+  nodeName: string,
+  options: {
+    force: boolean
+    gracePeriod: number
+    deleteLocalData: boolean
+    ignoreDaemonsets: boolean
+  }
+): Promise<{
+  message: string
+  node: string
+  pods: number
+  warnings?: string | string[]
+}> => {
+  const endpoint = `/nodes/_all/${nodeName}/drain`
+  const response = await apiClient.put<{
+    message: string
+    node: string
+    pods: number
+    warnings?: string | string[]
+  }>(endpoint, options)
+
+  return response
+}
+
+export const cordonNode = async (
+  nodeName: string
+): Promise<{ message: string; node: string; unschedulable: boolean }> => {
+  const endpoint = `/nodes/_all/${nodeName}/cordon`
+  const response = await apiClient.put<{
+    message: string
+    node: string
+    unschedulable: boolean
+  }>(endpoint)
+
+  return response
+}
+
+export const uncordonNode = async (
+  nodeName: string
+): Promise<{ message: string; node: string; unschedulable: boolean }> => {
+  const endpoint = `/nodes/_all/${nodeName}/uncordon`
+  const response = await apiClient.put<{
+    message: string
+    node: string
+    unschedulable: boolean
+  }>(endpoint)
+
+  return response
+}
+
+export const taintNode = async (
+  nodeName: string,
+  taint: {
+    key: string
+    value: string
+    effect: 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute'
+  }
+): Promise<{ message: string; node: string; taint: unknown }> => {
+  const endpoint = `/nodes/_all/${nodeName}/taint`
+  const response = await apiClient.put<{
+    message: string
+    node: string
+    taint: unknown
+  }>(endpoint, taint)
+
+  return response
+}
+
+export const untaintNode = async (
+  nodeName: string,
+  key: string
+): Promise<{ message: string; node: string; removedTaintKey: string }> => {
+  const endpoint = `/nodes/_all/${nodeName}/untaint`
+  const response = await apiClient.put<{
+    message: string
+    node: string
+    removedTaintKey: string
+  }>(endpoint, { key })
+
+  return response
+}
+
+export const updateResource = async <T extends ResourceType>(
+  resource: T,
+  name: string,
+  namespace: string | undefined,
+  body: ResourceTypeMap[T]
+): Promise<void> => {
+  const endpoint = `/${resource}/${namespace || '_all'}/${name}`
+  await apiClient.put(`${endpoint}`, body)
+}
+
+export const resizePod = async (
+  namespace: string,
+  name: string,
+  body: Partial<Pod>
+): Promise<void> => {
+  const endpoint = `/pods/${namespace || '_all'}/${name}/resize`
+  await apiClient.patch(`${endpoint}`, body)
+}
+
+export const debugPod = async (
+  namespace: string,
+  name: string,
+  body: { image: string; targetContainerName: string; command?: string[] }
+): Promise<{ pod: Pod; containerName: string }> => {
+  return apiClient.patch(`/pods/${namespace}/${name}/debug`, body)
+}
+
+export const copyDebugPod = async (
+  namespace: string,
+  name: string,
+  body: {
+    copyTo: string
+    targetContainerName: string
+    image?: string
+    command: string[]
+  }
+): Promise<{ pod: Pod; containerName: string }> => {
+  return apiClient.post(`/pods/${namespace}/${name}/debug-copy`, body)
+}
+
+type DeepPartial<T> = T extends object
+  ? {
+      [P in keyof T]?: DeepPartial<T[P]>
+    }
+  : T
+export const patchResource = async <T extends ResourceType>(
+  resource: T,
+  name: string,
+  namespace: string | undefined,
+  body: DeepPartial<ResourceTypeMap[T]>
+): Promise<void> => {
+  const endpoint = `/${resource}/${namespace || '_all'}/${name}`
+  await apiClient.patch(`${endpoint}`, body)
+}
+
+export const restartWorkload = async (
+  resource: 'deployments' | 'statefulsets',
+  name: string,
+  namespace: string
+): Promise<void> => {
+  const endpoint = `/${resource}/${namespace}/${name}`
+  await apiClient.patch(endpoint, {
+    spec: {
+      template: {
+        metadata: {
+          annotations: {
+            'mplatform.kubernetes.io/restartedAt': new Date().toISOString(),
+          },
+        },
+      },
+    },
+  })
+}
+
+export const createResource = async <T extends ResourceType>(
+  resource: T,
+  namespace: string | undefined,
+  body: ResourceTypeMap[T]
+): Promise<ResourceTypeMap[T]> => {
+  const endpoint = `/${resource}/${namespace || '_all'}`
+  return await apiClient.post<ResourceTypeMap[T]>(`${endpoint}`, body)
+}
+
+export const deleteResource = async <T extends ResourceType>(
+  resource: T,
+  name: string,
+  namespace: string | undefined,
+  opts?: {
+    force?: boolean
+    wait?: boolean
+  }
+): Promise<void> => {
+  const params = new URLSearchParams()
+  if (opts?.force) {
+    params.append('force', 'true')
+  }
+  if (opts?.wait === false) {
+    params.append('wait', 'false')
+  }
+  const endpoint = `/${resource}/${namespace || '_all'}/${name}?${params.toString()}`
+  await apiClient.delete(endpoint)
+}
+
+// Apply resource from YAML
+export interface ApplyResourceRequest {
+  yaml: string
+  namespace?: string
+}
+
+export interface ApplyResourceResponse {
+  message: string
+  kind?: string
+  name?: string
+  namespace?: string
+  count?: number
+  resources?: Array<{
+    kind: string
+    name: string
+    namespace?: string
+  }>
+}
+
+export const applyResource = async (
+  yaml: string,
+  namespace?: string
+): Promise<ApplyResourceResponse> => {
+  return await apiClient.post<ApplyResourceResponse>('/resources/apply', {
+    yaml,
+    namespace,
+  })
+}
+
+export const useResourcesEvents = <T extends ResourceType>(
+  resource: T,
+  name: string,
+  namespace?: string
+) => {
+  return useQuery({
+    queryKey: ['resource-events', resource, namespace, name],
+    queryFn: () => {
+      const endpoint =
+        '/events/resources?' +
+        new URLSearchParams({
+          resource: resource,
+          name: name,
+          namespace: namespace || '',
+        }).toString()
+      return fetchAPI<ResourcesTypeMap['events']>(endpoint)
+    },
+    select: (data: ResourcesTypeMap['events']): ResourcesItems<'events'> =>
+      data.items,
+    placeholderData: (prevData) => prevData,
+  })
+}
+
+export const useResources = <T extends ResourceType>(
+  resource: T,
+  namespace?: string,
+  options?: {
+    staleTime?: number
+    limit?: number
+    labelSelector?: string
+    fieldSelector?: string
+    refreshInterval?: number
+    disable?: boolean
+    reduce?: boolean
+  }
+) => {
+  return useQuery({
+    queryKey: [
+      resource,
+      namespace,
+      options?.limit,
+      options?.labelSelector,
+      options?.fieldSelector,
+      options?.reduce ?? false,
+    ],
+    queryFn: () => {
+      return fetchResources<ResourcesTypeMap[T]>(resource, namespace, {
+        limit: options?.limit,
+        continueToken: undefined,
+        labelSelector: options?.labelSelector,
+        fieldSelector: options?.fieldSelector,
+        reduce: options?.reduce,
+      })
+    },
+    enabled: !options?.disable,
+    select: (data: ResourcesTypeMap[T]): ResourcesItems<T> => data.items,
+    placeholderData: (prevData) => prevData,
+    refetchInterval: options?.refreshInterval || 0,
+    staleTime: options?.staleTime || (resource === 'crds' ? 5000 : 1000),
+  })
+}
+
+// Hook: SSE watch for resource lists (initial snapshot + ADDED/MODIFIED/DELETED)
+export function useResourcesWatch<T extends ResourceType>(
+  resource: T,
+  namespace?: string,
+  options?: {
+    labelSelector?: string
+    fieldSelector?: string
+    reduce?: boolean
+    enabled?: boolean
+  }
+) {
+  const [data, setData] = useState<ResourcesItems<T> | undefined>(undefined)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  const buildUrl = useCallback(() => {
+    const ns = namespace || '_all'
+    const params = new URLSearchParams()
+    if (options?.reduce !== false) params.append('reduce', 'true')
+    if (options?.labelSelector)
+      params.append('labelSelector', options.labelSelector)
+    if (options?.fieldSelector)
+      params.append('fieldSelector', options.fieldSelector)
+    appendCurrentClusterParam(params)
+    return withSubPath(
+      `${API_BASE_URL}/${resource}/${ns}/watch?${params.toString()}`
+    )
+  }, [
+    resource,
+    namespace,
+    options?.reduce,
+    options?.labelSelector,
+    options?.fieldSelector,
+  ])
+
+  const disconnect = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+  }, [])
+
+  const connect = useCallback(() => {
+    disconnect()
+    setData(undefined)
+    if (options?.enabled === false) return
+    const url = buildUrl()
+    setError(null)
+    setIsConnected(false)
+
+    try {
+      const es = new EventSource(url, { withCredentials: true })
+      eventSourceRef.current = es
+
+      es.onopen = () => {
+        setIsConnected(true)
+      }
+
+      const getKey = (obj: ResourceTypeMap[T]) => {
+        return (
+          (obj.metadata?.namespace || '') + '/' + (obj.metadata?.name || '')
+        )
+      }
+
+      const upsert = (obj: string) => {
+        const object = JSON.parse(obj) as ResourceTypeMap[T]
+        setData((prev) => {
+          const arr = prev ? [...prev] : []
+          const key = getKey(object)
+          const idx = arr.findIndex(
+            (it) => getKey(it as ResourceTypeMap[T]) === key
+          )
+          if (idx >= 0) arr[idx] = object
+          else arr.unshift(object)
+          return arr as ResourcesItems<T>
+        })
+      }
+
+      const remove = (obj: string) => {
+        const object = JSON.parse(obj) as ResourceTypeMap[T]
+        setData((prev) => {
+          const arr = prev ? [...prev] : []
+          const key = getKey(object)
+          const filtered = arr.filter(
+            (it) => getKey(it as ResourceTypeMap[T]) !== key
+          )
+          return filtered as ResourcesItems<T>
+        })
+      }
+
+      es.addEventListener('added', (e: MessageEvent<string>) => {
+        upsert(e.data)
+      })
+      es.addEventListener('modified', (e: MessageEvent<string>) => {
+        upsert(e.data)
+      })
+      es.addEventListener('deleted', (e: MessageEvent<string>) => {
+        remove(e.data)
+      })
+
+      es.addEventListener('error', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data)
+          setError(new Error(payload?.error || 'SSE error'))
+        } catch {
+          setError(new Error('SSE error'))
+        }
+        setIsLoading(false)
+        setIsConnected(false)
+      })
+      es.addEventListener('close', () => {
+        setIsConnected(false)
+      })
+
+      es.onerror = () => {
+        setIsConnected(false)
+      }
+    } catch (err) {
+      if (err instanceof Error) setError(err)
+      setIsLoading(false)
+      setIsConnected(false)
+    }
+  }, [buildUrl, disconnect, options?.enabled])
+
+  const refetch = useCallback(() => {
+    disconnect()
+    setTimeout(connect, 100)
+  }, [disconnect, connect])
+
+  useEffect(() => {
+    if (options?.enabled === false) return
+    connect()
+    return () => {
+      disconnect()
+    }
+  }, [connect, disconnect, options?.enabled])
+
+  return { data, isLoading, error, isConnected, refetch, stop: disconnect }
+}
+
+export const fetchResource = <T>(
+  resource: string,
+  name: string,
+  namespace?: string,
+  cluster?: string | null
+): Promise<T> => {
+  const resourcePath = namespace
+    ? `/${resource}/${namespace}/${name}`
+    : `/${resource}/${name}`
+  return fetchAPI<T>(withCurrentClusterPath(resourcePath, cluster))
+}
+export const useResource = <T extends keyof ResourceTypeMap>(
+  resource: T,
+  name: string,
+  namespace?: string,
+  options?: { staleTime?: number; refreshInterval?: number }
+) => {
+  const { currentCluster } = useCluster()
+  const ns = namespace || '_all'
+  return useQuery({
+    queryKey: getResourceQueryKey(resource, ns, name, currentCluster),
+    queryFn: () => {
+      return fetchResource<ResourceTypeMap[T]>(
+        resource,
+        name,
+        ns,
+        currentCluster
+      )
+    },
+    refetchOnWindowFocus: 'always',
+    refetchInterval: options?.refreshInterval || 0, // Default to no auto-refresh
+    staleTime: options?.staleTime || 1000,
+  })
+}
+// Pod describe API
+export const fetchDescribe = async (
+  resourceType: ResourceType,
+  name: string,
+  namespace?: string
+): Promise<{ result: string }> => {
+  const endpoint = `/${resourceType}/${namespace ?? '_all'}/${name}/describe`
+  return fetchAPI<{ result: string }>(endpoint)
+}
+
+export const useDescribe = (
+  resourceType: ResourceType,
+  name: string,
+  namespace?: string,
+  options?: { staleTime?: number; enabled?: boolean }
+) => {
+  return useQuery({
+    queryKey: [resourceType, name, namespace, 'describe'],
+    queryFn: () => fetchDescribe(resourceType, name, namespace),
+    enabled: (options?.enabled ?? true) && !!name,
+    staleTime: options?.staleTime || 0,
+    retry: 0,
+  })
+}
+export interface FileInfo {
+  name: string
+  isDir: boolean
+  size: string
+  modTime: string
+  mode: string
+  uid: string
+  gid: string
+}
+
+export const podListFiles = async (
+  namespace: string,
+  podName: string,
+  container: string,
+  path: string,
+  options?: RequestInit,
+  cluster?: string | null
+): Promise<FileInfo[]> => {
+  const params = new URLSearchParams({
+    container,
+    path,
+  })
+  return apiClient.get<FileInfo[]>(
+    `${withCurrentClusterPath(`/pods/${namespace}/${podName}/files`, cluster)}?${params.toString()}`,
+    options
+  )
+}
+
+export const podDownloadFile = (
+  namespace: string,
+  podName: string,
+  container: string,
+  path: string
+) => {
+  const params = new URLSearchParams({
+    container,
+    path,
+  })
+  const url = withSubPath(
+    `${API_BASE_URL}${withCurrentClusterPath(`/pods/${namespace}/${podName}/files/download`)}?${params.toString()}`
+  )
+  window.open(url, '_blank')
+}
+
+export const podPreviewFile = (
+  namespace: string,
+  podName: string,
+  container: string,
+  path: string
+) => {
+  const params = new URLSearchParams({
+    container,
+    path,
+  })
+  const url = withSubPath(
+    `${API_BASE_URL}${withCurrentClusterPath(`/pods/${namespace}/${podName}/files/preview`)}?${params.toString()}`
+  )
+  window.open(url, '_blank')
+}
+
+export const podUploadFile = async (
+  namespace: string,
+  podName: string,
+  container: string,
+  path: string,
+  file: File
+): Promise<void> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const params = new URLSearchParams({
+    container,
+    path,
+  })
+
+  await apiClient.put(
+    `${withCurrentClusterPath(`/pods/${namespace}/${podName}/files/upload`)}?${params.toString()}`,
+    formData
+  )
+}
+
+export const fetchTemplates = async (): Promise<ResourceTemplate[]> => {
+  return fetchAPI<ResourceTemplate[]>('/templates/')
+}
+
+export const createTemplate = async (
+  data: Omit<ResourceTemplate, 'id'>
+): Promise<ResourceTemplate> => {
+  return apiClient.post<ResourceTemplate>('/admin/templates/', data)
+}
+
+export const updateTemplate = async (
+  id: number,
+  data: Partial<ResourceTemplate>
+): Promise<ResourceTemplate> => {
+  return apiClient.put<ResourceTemplate>(`/admin/templates/${id}`, data)
+}
+
+export const deleteTemplate = async (id: number): Promise<void> => {
+  await apiClient.delete(`/admin/templates/${id}`)
+}
+
+export const useTemplates = (options?: { staleTime?: number }) => {
+  return useQuery({
+    queryKey: ['templates'],
+    queryFn: fetchTemplates,
+    staleTime: options?.staleTime || 30000,
+  })
+}
+export async function getImageTags(image: string): Promise<ImageTagInfo[]> {
+  if (!image) return []
+  const resp = await apiClient.get<ImageTagInfo[] | null>(
+    `/image/tags?image=${encodeURIComponent(image)}`
+  )
+  return resp ?? []
+}
+
+export function useImageTags(image: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['image-tags', image],
+    queryFn: () => getImageTags(image),
+    enabled: !!image && (options?.enabled ?? true),
+    staleTime: 60 * 1000, // 1 min
+    placeholderData: (prev) => prev,
+  })
+}
+
+export async function getRelatedResources(
+  resource: ResourceType,
+  name: string,
+  namespace?: string
+) {
+  const resp = await apiClient.get<RelatedResources[]>(
+    `/${resource}/${namespace ? namespace : '_all'}/${name}/related`
+  )
+  return resp
+}
+
+export function useRelatedResources(
+  resource: ResourceType,
+  name: string,
+  namespace?: string
+) {
+  return useQuery({
+    queryKey: ['related-resources', resource, name, namespace],
+    queryFn: () => getRelatedResources(resource, name, namespace),
+    staleTime: 60 * 1000, // 1 min
+    placeholderData: (prev) => prev,
+  })
+}
+// Resource History API
+export const fetchResourceHistory = (
+  resourceType: string,
+  namespace: string,
+  name: string,
+  page: number = 1,
+  pageSize: number = 10
+): Promise<ResourceHistoryResponse> => {
+  const endpoint = `/${resourceType}/${namespace}/${name}/history?page=${page}&pageSize=${pageSize}`
+  return fetchAPI<ResourceHistoryResponse>(endpoint)
+}
+
+export const fetchWorkloadRevisions = (
+  resourceType: WorkloadRevisionResourceType,
+  namespace: string,
+  name: string,
+  cluster?: string | null
+): Promise<WorkloadRevisionsResponse> => {
+  return fetchAPI<WorkloadRevisionsResponse>(
+    withCurrentClusterPath(
+      `/${resourceType}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/revisions`,
+      cluster
+    )
+  )
+}
+
+export const useWorkloadRevisions = (
+  resourceType: WorkloadRevisionResourceType,
+  namespace: string,
+  name: string,
+  options?: { enabled?: boolean; staleTime?: number }
+) => {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: [
+      'workload-revisions',
+      resourceType,
+      namespace,
+      name,
+      currentCluster,
+    ],
+    queryFn: () =>
+      fetchWorkloadRevisions(resourceType, namespace, name, currentCluster),
+    enabled: (options?.enabled ?? true) && !!currentCluster,
+    staleTime: options?.staleTime ?? 30000,
+  })
+}
+
+export const rollbackWorkload = async (
+  resourceType: WorkloadRevisionResourceType,
+  namespace: string,
+  name: string,
+  revision: number
+): Promise<{ message?: string; revision?: number }> => {
+  return apiClient.put<{ message?: string; revision?: number }>(
+    `/${resourceType}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/rollback`,
+    { revision }
+  )
+}
+
+export const useResourceHistory = (
+  resourceType: string,
+  namespace: string,
+  name: string,
+  page: number = 1,
+  pageSize: number = 10,
+  options?: { enabled?: boolean; staleTime?: number }
+) => {
+  return useQuery({
+    queryKey: [
+      'resource-history',
+      resourceType,
+      namespace,
+      name,
+      page,
+      pageSize,
+    ],
+    queryFn: () =>
+      fetchResourceHistory(resourceType, namespace, name, page, pageSize),
+    enabled: options?.enabled ?? true,
+    staleTime: options?.staleTime || 30000, // 30 seconds cache
+  })
+}
+export const usePodFiles = (
+  namespace: string,
+  podName: string,
+  container: string,
+  path: string,
+  options?: { enabled?: boolean }
+) => {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: [
+      'pod-files',
+      namespace,
+      podName,
+      container,
+      path,
+      currentCluster,
+    ],
+    queryFn: ({ signal }) =>
+      podListFiles(
+        namespace,
+        podName,
+        container,
+        path,
+        { signal },
+        currentCluster
+      ),
+    enabled: options?.enabled !== false && !!currentCluster,
+    staleTime: 10000, // 10 seconds cache
+  })
+}

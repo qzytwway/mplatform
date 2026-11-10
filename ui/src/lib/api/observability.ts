@@ -1,0 +1,632 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+
+import { OverviewData, PodMetrics, ResourceUsageHistory } from '@/types/api'
+import { useCluster } from '@/hooks/use-cluster'
+
+import { API_BASE_URL } from '../api-client'
+import {
+  appendCurrentClusterParam,
+  withCurrentClusterPath,
+} from '../current-cluster'
+import { getWebSocketUrl } from '../subpath'
+import useWebSocket, { WebSocketMessage } from '../useWebSocket'
+import { fetchAPI } from './shared'
+
+// Overview API
+const fetchOverview = (cluster?: string | null): Promise<OverviewData> => {
+  return fetchAPI<OverviewData>(withCurrentClusterPath('/overview', cluster))
+}
+
+export const useOverview = (options?: { staleTime?: number }) => {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['overview', currentCluster],
+    queryFn: () => fetchOverview(currentCluster),
+    enabled: !!currentCluster,
+    staleTime: options?.staleTime || 30000, // 30 seconds cache
+    refetchInterval: 30000, // Auto refresh every 30 seconds
+  })
+}
+
+// Resource Usage History API
+export const fetchResourceUsageHistory = (
+  duration: string,
+  instance?: string,
+  cluster?: string | null
+): Promise<ResourceUsageHistory> => {
+  const endpoint = `/prometheus/resource-usage-history?duration=${duration}`
+  if (instance) {
+    return fetchAPI<ResourceUsageHistory>(
+      withCurrentClusterPath(
+        `${endpoint}&instance=${encodeURIComponent(instance)}`,
+        cluster
+      )
+    )
+  }
+  return fetchAPI<ResourceUsageHistory>(
+    withCurrentClusterPath(endpoint, cluster)
+  )
+}
+
+export const useResourceUsageHistory = (
+  duration: string,
+  options?: { staleTime?: number; instance?: string; enabled?: boolean }
+) => {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: [
+      'resource-usage-history',
+      currentCluster,
+      duration,
+      options?.instance,
+    ],
+    queryFn: () =>
+      fetchResourceUsageHistory(duration, options?.instance, currentCluster),
+    enabled: !!currentCluster && options?.enabled !== false,
+    staleTime: options?.staleTime || 10000, // 10 seconds cache
+    refetchInterval: 30000, // Auto refresh every 30 seconds for historical data
+    retry: 0,
+    placeholderData: (prevData, previousQuery) =>
+      previousQuery?.queryKey[1] === currentCluster ? prevData : undefined,
+  })
+}
+
+// Pod monitoring API functions
+export const fetchPodMetrics = (
+  namespace: string,
+  podName: string,
+  duration: string,
+  container?: string,
+  labelSelector?: string,
+  cluster?: string | null
+): Promise<PodMetrics> => {
+  let endpoint = `/prometheus/pods/${namespace}/${podName}/metrics?duration=${duration}`
+  if (container) {
+    endpoint += `&container=${encodeURIComponent(container)}`
+  }
+  if (labelSelector) {
+    endpoint += `&labelSelector=${encodeURIComponent(labelSelector)}`
+  }
+  return fetchAPI<PodMetrics>(withCurrentClusterPath(endpoint, cluster))
+}
+
+export const usePodMetrics = (
+  namespace: string,
+  podName: string,
+  duration: string,
+  options?: {
+    staleTime?: number
+    container?: string
+    refreshInterval?: number
+    labelSelector?: string
+  }
+) => {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: [
+      'pod-metrics',
+      currentCluster,
+      namespace,
+      podName,
+      duration,
+      options?.container,
+      options?.labelSelector,
+    ],
+    queryFn: () =>
+      fetchPodMetrics(
+        namespace,
+        podName,
+        duration,
+        options?.container,
+        options?.labelSelector,
+        currentCluster
+      ),
+    enabled: !!currentCluster && !!namespace && !!podName,
+    staleTime: options?.staleTime || 10000, // 10 seconds cache
+    refetchInterval: options?.refreshInterval || 30 * 1000, // 1 second
+    retry: 0,
+    placeholderData: (prevData, previousQuery) =>
+      previousQuery?.queryKey[1] === currentCluster ? prevData : undefined,
+  })
+}
+// Logs API functions
+export interface LogsResponse {
+  logs: string[]
+  container?: string
+  pod: string
+  namespace: string
+}
+
+// Function to fetch static logs (follow=false)
+export const fetchPodLogs = (
+  namespace: string,
+  podName: string,
+  options?: {
+    container?: string
+    tailLines?: number
+    timestamps?: boolean
+    previous?: boolean
+    sinceSeconds?: number
+  }
+): Promise<LogsResponse> => {
+  const params = new URLSearchParams()
+  params.append('follow', 'false') // Explicitly set follow=false for static logs
+
+  if (options?.container) {
+    params.append('container', options.container)
+  }
+  if (options?.tailLines !== undefined) {
+    params.append('tailLines', options.tailLines.toString())
+  }
+  if (options?.timestamps !== undefined) {
+    params.append('timestamps', options.timestamps.toString())
+  }
+  if (options?.previous !== undefined) {
+    params.append('previous', options.previous.toString())
+  }
+  if (options?.sinceSeconds !== undefined) {
+    params.append('sinceSeconds', options.sinceSeconds.toString())
+  }
+
+  const endpoint = `/logs/${namespace}/${podName}${params.toString() ? `?${params.toString()}` : ''}`
+  return fetchAPI<LogsResponse>(endpoint)
+}
+
+// Function to create SSE-based logs connection (follow=true)
+export const createLogsSSEStream = (
+  namespace: string,
+  podName: string,
+  options?: {
+    container?: string
+    tailLines?: number
+    timestamps?: boolean
+    previous?: boolean
+    sinceSeconds?: number
+  },
+  onMessage?: (data: string) => void,
+  onError?: (error: Error) => void,
+  onClose?: () => void,
+  onOpen?: () => void
+): EventSource => {
+  const params = new URLSearchParams()
+  params.append('follow', 'true') // Enable streaming
+
+  if (options?.container) {
+    params.append('container', options.container)
+  }
+  if (options?.tailLines !== undefined) {
+    params.append('tailLines', options.tailLines.toString())
+  }
+  if (options?.timestamps !== undefined) {
+    params.append('timestamps', options.timestamps.toString())
+  }
+  if (options?.previous !== undefined) {
+    params.append('previous', options.previous.toString())
+  }
+  if (options?.sinceSeconds !== undefined) {
+    params.append('sinceSeconds', options.sinceSeconds.toString())
+  }
+
+  appendCurrentClusterParam(params)
+
+  const endpoint = `${API_BASE_URL}/logs/${namespace}/${podName}?${params.toString()}`
+  const eventSource = new EventSource(endpoint, {
+    withCredentials: true,
+  })
+
+  // Handle SSE open event
+  eventSource.onopen = () => {
+    console.log('SSE connection opened')
+    if (onOpen) {
+      onOpen()
+    }
+  }
+
+  // Handle connection established
+  eventSource.addEventListener('connected', (event: MessageEvent) => {
+    console.log('SSE connection established:', event.data)
+  })
+
+  // Handle log messages
+  eventSource.addEventListener('log', (event: MessageEvent) => {
+    if (onMessage) {
+      onMessage(event.data)
+    }
+  })
+
+  // Handle errors from server
+  eventSource.addEventListener('error', (event: MessageEvent) => {
+    try {
+      const errorData = JSON.parse(event.data)
+      if (onError) {
+        onError(new Error(errorData.error))
+      }
+    } catch {
+      // This is not a server error event, likely a connection error
+      console.warn('SSE error event without valid JSON data')
+    }
+  })
+
+  // Handle connection close
+  eventSource.addEventListener('close', () => {
+    eventSource.close()
+    if (onClose) {
+      onClose()
+    }
+  })
+
+  // Handle generic SSE errors (connection issues)
+  eventSource.onerror = (event) => {
+    console.error('SSE connection error:', event)
+    if (eventSource.readyState === EventSource.CLOSED) {
+      console.log('SSE connection closed')
+      if (onClose) {
+        onClose()
+      }
+    } else if (eventSource.readyState === EventSource.CONNECTING) {
+      console.log('SSE reconnecting...')
+    } else {
+      if (onError) {
+        onError(new Error('SSE connection error'))
+      }
+    }
+  }
+
+  return eventSource
+}
+
+// Pod File Browser API
+
+export const useLogsStream = (
+  namespace: string,
+  podName: string,
+  options?: {
+    container?: string
+    tailLines?: number
+    timestamps?: boolean
+    previous?: boolean
+    sinceSeconds?: number
+    enabled?: boolean
+    follow?: boolean
+  }
+) => {
+  const [logs, setLogs] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const [downloadSpeed, setDownloadSpeed] = useState(0)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const networkStatsRef = useRef({
+    lastReset: Date.now(),
+    bytesReceived: 0,
+  })
+  const speedUpdateTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const stopStreaming = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+
+    // Clear speed update timer
+    if (speedUpdateTimerRef.current) {
+      clearInterval(speedUpdateTimerRef.current)
+      speedUpdateTimerRef.current = null
+    }
+
+    setIsConnected(false)
+    setIsLoading(false)
+    setDownloadSpeed(0)
+  }, [])
+
+  const startStreaming = useCallback(async () => {
+    if (!namespace || !podName || options?.enabled === false) return
+
+    // Close any existing connection first to prevent race conditions
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+
+    try {
+      setIsLoading(true)
+      setError(null)
+      setLogs([]) // Clear previous logs when starting new stream
+
+      if (options?.follow) {
+        // Use SSE for follow mode
+        const eventSource = createLogsSSEStream(
+          namespace,
+          podName,
+          {
+            container: options?.container,
+            tailLines: options?.tailLines,
+            timestamps: options?.timestamps,
+            previous: options?.previous,
+            sinceSeconds: options?.sinceSeconds,
+          },
+          // onMessage callback
+          (logLine: string) => {
+            // Calculate data size for network speed tracking
+            const dataSize = new Blob([logLine]).size
+            networkStatsRef.current.bytesReceived += dataSize
+
+            setLogs((prev) => [...prev, logLine])
+          },
+          // onError callback
+          (err: Error) => {
+            console.error('SSE error:', err)
+            setError(err)
+            setIsLoading(false)
+            setIsConnected(false)
+          },
+          // onClose callback
+          () => {
+            setIsLoading(false)
+            setIsConnected(false)
+          },
+          // onOpen callback
+          () => {
+            setIsLoading(false)
+            setIsConnected(true)
+            setError(null)
+
+            // Reset network stats and start speed tracking
+            networkStatsRef.current = {
+              lastReset: Date.now(),
+              bytesReceived: 0,
+            }
+            setDownloadSpeed(0)
+
+            // Start periodic speed update timer
+            if (speedUpdateTimerRef.current) {
+              clearInterval(speedUpdateTimerRef.current)
+            }
+            speedUpdateTimerRef.current = setInterval(() => {
+              const now = Date.now()
+              const stats = networkStatsRef.current
+              const timeDiff = (now - stats.lastReset) / 1000
+
+              if (timeDiff > 0) {
+                const downloadSpeedValue = stats.bytesReceived / timeDiff
+                setDownloadSpeed(downloadSpeedValue)
+
+                // Reset counters every 3 seconds
+                if (timeDiff >= 3) {
+                  stats.lastReset = now
+                  stats.bytesReceived = 0
+                }
+              }
+            }, 500)
+          }
+        )
+
+        eventSourceRef.current = eventSource
+      } else {
+        // Use static fetch for non-follow mode
+        const response = await fetchPodLogs(namespace, podName, {
+          container: options?.container,
+          tailLines: options?.tailLines,
+          timestamps: options?.timestamps,
+          previous: options?.previous,
+          sinceSeconds: options?.sinceSeconds,
+        })
+
+        setLogs(response.logs || [])
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err)
+      }
+    } finally {
+      if (!options?.follow) {
+        setIsLoading(false)
+        setIsConnected(false)
+      }
+    }
+  }, [
+    namespace,
+    podName,
+    options?.container,
+    options?.tailLines,
+    options?.timestamps,
+    options?.previous,
+    options?.sinceSeconds,
+    options?.enabled,
+    options?.follow,
+  ])
+
+  const refetch = useCallback(() => {
+    stopStreaming()
+    setTimeout(startStreaming, 100) // Small delay to ensure cleanup
+  }, [stopStreaming, startStreaming])
+
+  useEffect(() => {
+    if (options?.enabled !== false) {
+      startStreaming()
+    }
+
+    return () => {
+      stopStreaming()
+    }
+  }, [startStreaming, stopStreaming, options?.enabled])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return stopStreaming
+  }, [stopStreaming])
+
+  return {
+    logs,
+    isLoading,
+    error,
+    isConnected,
+    downloadSpeed,
+    refetch,
+    stopStreaming,
+  }
+}
+export const useLogsWebSocket = (
+  namespace: string,
+  podName: string,
+  options?: {
+    container?: string
+    tailLines?: number
+    timestamps?: boolean
+    previous?: boolean
+    sinceSeconds?: number
+    enabled?: boolean
+    labelSelector?: string
+    onNewLog?: (log: string) => void
+    onClear?: () => void
+  }
+) => {
+  const { currentCluster } = useCluster()
+  const {
+    enabled = true,
+    container,
+    tailLines,
+    timestamps,
+    previous,
+    sinceSeconds,
+    labelSelector,
+    onNewLog,
+    onClear,
+  } = options ?? {}
+
+  // Build WebSocket URL
+  const buildWebSocketUrl = useCallback(() => {
+    if (!enabled || !namespace || !podName) return ''
+
+    const params = new URLSearchParams()
+
+    if (container) {
+      params.append('container', container)
+    }
+    if (tailLines !== undefined) {
+      params.append('tailLines', tailLines.toString())
+    }
+    if (timestamps !== undefined) {
+      params.append('timestamps', timestamps.toString())
+    }
+    if (previous !== undefined) {
+      params.append('previous', previous.toString())
+    }
+    if (sinceSeconds !== undefined) {
+      params.append('sinceSeconds', sinceSeconds.toString())
+    }
+    if (labelSelector) {
+      params.append('labelSelector', labelSelector)
+    }
+
+    appendCurrentClusterParam(params, currentCluster)
+
+    const wsPath = `/api/v1/logs/${namespace}/${podName}/ws?${params.toString()}`
+    return getWebSocketUrl(wsPath)
+  }, [
+    namespace,
+    podName,
+    container,
+    tailLines,
+    timestamps,
+    previous,
+    sinceSeconds,
+    enabled,
+    labelSelector,
+    currentCluster,
+  ])
+
+  // WebSocket event handlers
+  const handleMessage = useCallback(
+    (message: WebSocketMessage) => {
+      switch (message.type) {
+        case 'log':
+          if (message.data && onNewLog) {
+            onNewLog(message.data)
+          }
+          break
+        case 'error':
+          console.error('Log streaming error:', message.data)
+          break
+        case 'close':
+          console.log('Log stream closed:', message.data)
+          break
+      }
+    },
+    [onNewLog]
+  )
+
+  const handleOpen = useCallback(() => {
+    console.debug('WebSocket connection opened')
+    // Intentionally do NOT call options.onClear here.
+    // The historical log buffer (tailLines) is delivered by the server right
+    // after the WebSocket opens. Clearing on every onopen races with that
+    // delivery and wipes out the tail history (especially on reconnects).
+    // The component is responsible for explicitly clearing the editor when
+    // the user changes pod / container / tailLines parameters.
+  }, [])
+
+  const handleClose = useCallback(() => {
+    console.debug('WebSocket connection closed')
+  }, [])
+
+  const handleError = useCallback((event: Event) => {
+    console.debug('WebSocket error:', event)
+  }, [])
+
+  // Use the generic WebSocket hook
+  const [wsState, wsActions] = useWebSocket(
+    buildWebSocketUrl,
+    {
+      onMessage: handleMessage,
+      onOpen: handleOpen,
+      onClose: handleClose,
+      onError: handleError,
+    },
+    {
+      enabled,
+      reconnectOnClose: true,
+      maxReconnectAttempts: 3,
+      reconnectInterval: 5000,
+    }
+  )
+
+  useEffect(() => {
+    onClear?.()
+  }, [currentCluster, onClear])
+
+  const refetch = useCallback(() => {
+    wsActions.reconnect()
+    onClear?.()
+  }, [wsActions, onClear])
+
+  const stopStreaming = useCallback(() => {
+    wsActions.disconnect()
+  }, [wsActions])
+
+  const clearLogs = useCallback(() => {
+    onClear?.()
+  }, [onClear])
+
+  return useMemo(
+    () => ({
+      isLoading: wsState.isConnecting,
+      error: wsState.error,
+      isConnected: wsState.isConnected,
+      downloadSpeed: wsState.networkStats.downloadSpeed,
+      refetch,
+      stopStreaming,
+      clearLogs,
+    }),
+    [
+      wsState.isConnecting,
+      wsState.error,
+      wsState.isConnected,
+      wsState.networkStats.downloadSpeed,
+      refetch,
+      stopStreaming,
+      clearLogs,
+    ]
+  )
+}

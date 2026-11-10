@@ -1,0 +1,584 @@
+import { useEffect, useState } from 'react'
+import { IconAlertTriangle, IconKey } from '@tabler/icons-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import {
+  LDAPSetting,
+  LDAPSettingUpdateRequest,
+  updateGeneralSetting,
+  updateLDAPSetting,
+  useGeneralSetting,
+  useLDAPSetting,
+} from '@/lib/api'
+import { translateError } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+
+import { OAuthProviderManagement } from './oauth-provider-management'
+
+type AuthenticationFormData = LDAPSetting
+
+function createDefaultSettings(): AuthenticationFormData {
+  return {
+    enabled: false,
+    serverUrl: '',
+    useStartTLS: false,
+    bindDn: '',
+    bindPassword: '',
+    bindPasswordConfigured: false,
+    userBaseDn: '',
+    userFilter: '',
+    usernameAttribute: '',
+    displayNameAttribute: '',
+    groupBaseDn: '',
+    groupFilter: '',
+    groupNameAttribute: '',
+  }
+}
+
+function toFormData(data?: LDAPSetting): AuthenticationFormData {
+  if (!data) {
+    return createDefaultSettings()
+  }
+
+  return {
+    enabled: data.enabled ?? false,
+    serverUrl: data.serverUrl || '',
+    useStartTLS: data.useStartTLS ?? false,
+    bindDn: data.bindDn || '',
+    bindPassword: '',
+    bindPasswordConfigured: data.bindPasswordConfigured ?? false,
+    userBaseDn: data.userBaseDn || '',
+    userFilter: data.userFilter || '',
+    usernameAttribute: data.usernameAttribute || '',
+    displayNameAttribute: data.displayNameAttribute || '',
+    groupBaseDn: data.groupBaseDn || '',
+    groupFilter: data.groupFilter || '',
+    groupNameAttribute: data.groupNameAttribute || '',
+  }
+}
+
+export function AuthenticationManagement() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const { data, error, isError, isLoading, refetch } = useLDAPSetting()
+  const { data: generalSetting } = useGeneralSetting()
+  const [formData, setFormData] = useState<AuthenticationFormData>(
+    createDefaultSettings
+  )
+  const [passwordLoginEnabled, setPasswordLoginEnabled] = useState(true)
+  const [mfaEnabled, setMFAEnabled] = useState(true)
+  const [passkeyLoginEnabled, setPasskeyLoginEnabled] = useState(true)
+
+  useEffect(() => {
+    setFormData(toFormData(data))
+  }, [data])
+
+  useEffect(() => {
+    if (generalSetting) {
+      setPasswordLoginEnabled(!generalSetting.passwordLoginDisabled)
+      setMFAEnabled(generalSetting.enableMFA ?? true)
+      setPasskeyLoginEnabled(generalSetting.enablePasskeyLogin ?? true)
+    }
+  }, [generalSetting])
+
+  const mutation = useMutation({
+    mutationFn: (params: {
+      ldap: LDAPSettingUpdateRequest
+      passwordLoginDisabled: boolean
+      enableMFA: boolean
+      enablePasskeyLogin: boolean
+    }) => {
+      const promises: Promise<unknown>[] = [
+        updateGeneralSetting({
+          passwordLoginDisabled: params.passwordLoginDisabled,
+          enableMFA: params.enableMFA,
+          enablePasskeyLogin: params.enablePasskeyLogin,
+        }),
+        updateLDAPSetting(params.ldap),
+      ]
+      return Promise.all(promises)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['ldap-setting'],
+      })
+      queryClient.invalidateQueries({ queryKey: ['general-setting'] })
+      queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      toast.success(
+        t(
+          'authenticationManagement.messages.updated',
+          'Authentication settings updated'
+        )
+      )
+    },
+    onError: (error) => {
+      toast.error(translateError(error, t))
+    },
+  })
+
+  const handleSave = () => {
+    if (!data) {
+      toast.error(
+        isError
+          ? translateError(error, t)
+          : t('common.messages.failedToLoad', {
+              resource: t('authenticationManagement.title', 'Authentication'),
+              defaultValue: 'Failed to load LDAP settings',
+            })
+      )
+      return
+    }
+
+    const payload: LDAPSettingUpdateRequest = {
+      enabled: formData.enabled,
+      serverUrl: formData.serverUrl.trim(),
+      useStartTLS: formData.useStartTLS,
+      bindDn: formData.bindDn.trim(),
+      userBaseDn: formData.userBaseDn.trim(),
+      userFilter: formData.userFilter.trim(),
+      usernameAttribute: formData.usernameAttribute.trim(),
+      displayNameAttribute: formData.displayNameAttribute.trim(),
+      groupBaseDn: formData.groupBaseDn.trim(),
+      groupFilter: formData.groupFilter.trim(),
+      groupNameAttribute: formData.groupNameAttribute.trim(),
+    }
+    if (formData.bindPassword !== '') {
+      payload.bindPassword = formData.bindPassword
+    }
+
+    mutation.mutate({
+      ldap: payload,
+      passwordLoginDisabled: !passwordLoginEnabled,
+      enableMFA: mfaEnabled,
+      enablePasskeyLogin: passkeyLoginEnabled,
+    })
+  }
+
+  if (isLoading && !data) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="text-muted-foreground">
+          {t('common.messages.loading', 'Loading...')}
+        </div>
+      </div>
+    )
+  }
+
+  if (isError && !data) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <IconKey className="h-5 w-5" />
+            {t('authenticationManagement.title', 'Authentication')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-4">
+          <div className="text-sm text-muted-foreground">
+            {translateError(error, t)}
+          </div>
+          <Button variant="outline" onClick={() => refetch()}>
+            {t('common.actions.retry', 'Retry')}
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <IconKey className="h-5 w-5" />
+            {t('authenticationManagement.title', 'Authentication')}
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border">
+            <div className="flex items-center justify-between p-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">
+                  {t('common.fields.passwordLogin', 'Password Login')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'common.messages.passwordLoginDescription',
+                    'Allow users to sign in with a username and password.'
+                  )}
+                </p>
+              </div>
+              <Switch
+                checked={passwordLoginEnabled}
+                onCheckedChange={setPasswordLoginEnabled}
+                disabled={!generalSetting}
+              />
+            </div>
+
+            {!passwordLoginEnabled && (
+              <div className="border-t p-3">
+                <div className="flex gap-3 rounded-md bg-amber-500/10 border border-amber-500/30 p-3">
+                  <IconAlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium text-amber-600 dark:text-amber-400">
+                      {t(
+                        'common.messages.passwordLoginWarningTitle',
+                        'Warning: You may lose access!'
+                      )}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {t(
+                        'common.messages.passwordLoginWarningDescription',
+                        'Verify that your LDAP or OAuth provider is working before saving. Without a working alternative login method, you will be locked out and can only recover by resetting the database.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border">
+            <div className="flex items-center justify-between p-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">
+                  {t('authenticationManagement.mfa.title', 'MFA')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'authenticationManagement.mfa.description',
+                    'Allow users to configure authenticator app MFA.'
+                  )}
+                </p>
+              </div>
+              <Switch
+                checked={mfaEnabled}
+                onCheckedChange={setMFAEnabled}
+                disabled={!generalSetting}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-lg border">
+            <div className="flex items-center justify-between p-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">
+                  {t('authenticationManagement.passkey.title', 'Passkey Login')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'authenticationManagement.passkey.description',
+                    'Allow users to register passkeys and sign in with a passkey.'
+                  )}
+                </p>
+              </div>
+              <Switch
+                checked={passkeyLoginEnabled}
+                onCheckedChange={setPasskeyLoginEnabled}
+                disabled={!generalSetting}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={mutation.isPending || !generalSetting}
+            >
+              {t('common.actions.save', 'Save')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <OAuthProviderManagement />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <IconKey className="h-5 w-5" />
+            {t('authenticationManagement.ldap.title', 'LDAP')}
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border">
+            <div className="flex items-center justify-between p-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">
+                  {t('authenticationManagement.ldap.title', 'LDAP')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    'authenticationManagement.ldap.description',
+                    'Enable LDAP username/password login and sync groups into RBAC.'
+                  )}
+                </p>
+              </div>
+              <Switch
+                checked={formData.enabled}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, enabled: checked }))
+                }
+              />
+            </div>
+
+            {formData.enabled && (
+              <div className="space-y-4 border-t p-3">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="ldap-server-url">
+                      {t(
+                        'authenticationManagement.ldap.form.serverUrl',
+                        'Server URL'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-server-url"
+                      value={formData.serverUrl}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          serverUrl: e.target.value,
+                        }))
+                      }
+                      placeholder="ldaps://ldap.example.com:636"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                      <div>
+                        <Label htmlFor="ldap-starttls" className="text-sm">
+                          {t(
+                            'authenticationManagement.ldap.form.useStartTLS',
+                            'Use StartTLS'
+                          )}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {t(
+                            'authenticationManagement.ldap.form.useStartTLSHint',
+                            'Enable StartTLS when using ldap:// endpoints.'
+                          )}
+                        </p>
+                      </div>
+                      <Switch
+                        id="ldap-starttls"
+                        checked={formData.useStartTLS}
+                        onCheckedChange={(checked) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            useStartTLS: checked,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-bind-dn">
+                      {t(
+                        'authenticationManagement.ldap.form.bindDn',
+                        'Bind DN'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-bind-dn"
+                      value={formData.bindDn}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          bindDn: e.target.value,
+                        }))
+                      }
+                      placeholder="cn=svc-mplatform,ou=services,dc=example,dc=com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-bind-password">
+                      {t(
+                        'authenticationManagement.ldap.form.bindPassword',
+                        'Bind Password'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-bind-password"
+                      type="password"
+                      value={formData.bindPassword}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          bindPassword: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        formData.bindPasswordConfigured
+                          ? t(
+                              'authenticationManagement.ldap.form.bindPasswordPlaceholder',
+                              'Leave empty to keep current bind password'
+                            )
+                          : ''
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-user-base-dn">
+                      {t(
+                        'authenticationManagement.ldap.form.userBaseDn',
+                        'User Base DN'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-user-base-dn"
+                      value={formData.userBaseDn}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          userBaseDn: e.target.value,
+                        }))
+                      }
+                      placeholder="ou=users,dc=example,dc=com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-user-filter">
+                      {t(
+                        'authenticationManagement.ldap.form.userFilter',
+                        'User Filter'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-user-filter"
+                      value={formData.userFilter}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          userFilter: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-username-attribute">
+                      {t(
+                        'authenticationManagement.ldap.form.usernameAttribute',
+                        'Username Attribute'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-username-attribute"
+                      value={formData.usernameAttribute}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          usernameAttribute: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-display-name-attribute">
+                      {t(
+                        'authenticationManagement.ldap.form.displayNameAttribute',
+                        'Display Name Attribute'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-display-name-attribute"
+                      value={formData.displayNameAttribute}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          displayNameAttribute: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-group-base-dn">
+                      {t(
+                        'authenticationManagement.ldap.form.groupBaseDn',
+                        'Group Base DN'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-group-base-dn"
+                      value={formData.groupBaseDn}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          groupBaseDn: e.target.value,
+                        }))
+                      }
+                      placeholder="ou=groups,dc=example,dc=com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-group-filter">
+                      {t(
+                        'authenticationManagement.ldap.form.groupFilter',
+                        'Group Filter'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-group-filter"
+                      value={formData.groupFilter}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          groupFilter: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="ldap-group-name-attribute">
+                      {t(
+                        'authenticationManagement.ldap.form.groupNameAttribute',
+                        'Group Name Attribute'
+                      )}
+                    </Label>
+                    <Input
+                      id="ldap-group-name-attribute"
+                      value={formData.groupNameAttribute}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          groupNameAttribute: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={mutation.isPending || !generalSetting}
+            >
+              {t('common.actions.save', 'Save')}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

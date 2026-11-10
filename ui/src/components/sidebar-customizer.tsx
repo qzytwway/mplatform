@@ -1,0 +1,737 @@
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useAuth } from '@/contexts/auth-context'
+import { useSidebarConfig } from '@/contexts/sidebar-config-context'
+import { persistPluginPreferences } from '@/plugins/sidebar'
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  FolderPlus,
+  GripVertical,
+  PanelLeftOpen,
+  Pin,
+  PinOff,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import {
+  clearGlobalSidebarPreference,
+  setGlobalSidebarPreference,
+} from '@/lib/api'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { PluginIndicator } from '@/components/plugins/plugin-indicator'
+import { CRDSelector } from '@/components/selector/crd-selector'
+import { SidebarItemIcon } from '@/components/sidebar-item-icon'
+
+const normalizeSidebarPreference = (value: string): string => {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+  try {
+    return JSON.stringify(JSON.parse(trimmed))
+  } catch {
+    return trimmed
+  }
+}
+
+const DRAG_SCROLL_EDGE_SIZE = 64
+const DRAG_SCROLL_MAX_STEP = 12
+
+export function SidebarCustomizer({
+  onOpenChange,
+}: {
+  onOpenChange?: (open: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const { user, globalSidebarPreference } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [isPublishingGlobal, setIsPublishingGlobal] = useState(false)
+  const [isClearingGlobal, setIsClearingGlobal] = useState(false)
+  const [
+    publishedGlobalSidebarPreference,
+    setPublishedGlobalSidebarPreference,
+  ] = useState(globalSidebarPreference)
+  const [selectedCRD, setSelectedCRD] = useState<
+    | {
+        name: string
+        kind: string
+      }
+    | undefined
+  >()
+  const {
+    config,
+    isLoading,
+    hasUpdate,
+    toggleItemVisibility,
+    toggleItemPin,
+    toggleGroupCollapse,
+    resetConfig,
+    toggleGroupVisibility,
+    createCustomGroup,
+    addCRDToGroup,
+    addAPIGroupToGroup,
+    removeCustomGroup,
+    removeItemFromGroup,
+    moveGroup,
+    moveItemToGroup,
+  } = useSidebarConfig()
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null)
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
+
+  const handleCreateGroup = () => {
+    if (newGroupName.trim()) {
+      createCustomGroup(newGroupName.trim())
+      setNewGroupName('')
+    }
+  }
+
+  const handleAddCRDToGroup = (groupId: string) => {
+    if (selectedCRD && groupId) {
+      addCRDToGroup(groupId, selectedCRD.name, selectedCRD.kind)
+      setSelectedCRD(undefined)
+    }
+  }
+
+  const handleItemDragStart = (
+    event: DragEvent<HTMLElement>,
+    itemId: string
+  ) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', itemId)
+    setDraggedItemId(itemId)
+  }
+
+  const handleItemDragEnd = () => {
+    setDraggedItemId(null)
+    setDragOverGroupId(null)
+  }
+
+  const handleDragAutoScroll = (event: DragEvent<HTMLElement>) => {
+    if (!draggedItemId) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const distanceToTop = event.clientY - rect.top
+    const distanceToBottom = rect.bottom - event.clientY
+    let scrollDelta = 0
+
+    if (distanceToTop < DRAG_SCROLL_EDGE_SIZE) {
+      const progress =
+        (DRAG_SCROLL_EDGE_SIZE - Math.max(0, distanceToTop)) /
+        DRAG_SCROLL_EDGE_SIZE
+      scrollDelta = -Math.ceil(progress * progress * DRAG_SCROLL_MAX_STEP)
+    } else if (distanceToBottom < DRAG_SCROLL_EDGE_SIZE) {
+      const progress =
+        (DRAG_SCROLL_EDGE_SIZE - Math.max(0, distanceToBottom)) /
+        DRAG_SCROLL_EDGE_SIZE
+      scrollDelta = Math.ceil(progress * progress * DRAG_SCROLL_MAX_STEP)
+    }
+
+    if (scrollDelta !== 0) {
+      container.scrollTop += scrollDelta
+    }
+  }
+
+  const handleGroupDragOver = (
+    event: DragEvent<HTMLElement>,
+    groupId: string
+  ) => {
+    if (!draggedItemId) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    handleDragAutoScroll(event)
+    setDragOverGroupId(groupId)
+  }
+
+  const handleGroupDragLeave = (
+    event: DragEvent<HTMLElement>,
+    groupId: string
+  ) => {
+    if (dragOverGroupId !== groupId) return
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return
+    }
+    setDragOverGroupId(null)
+  }
+
+  const handleGroupDrop = (event: DragEvent<HTMLElement>, groupId: string) => {
+    event.preventDefault()
+    const itemId = event.dataTransfer.getData('text/plain') || draggedItemId
+    if (itemId) {
+      moveItemToGroup(itemId, groupId)
+    }
+    handleItemDragEnd()
+  }
+
+  const handleItemDragOver = (
+    event: DragEvent<HTMLElement>,
+    groupId: string
+  ) => {
+    if (!draggedItemId) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+    handleDragAutoScroll(event)
+    setDragOverGroupId(groupId)
+  }
+
+  const handleItemDrop = (
+    event: DragEvent<HTMLElement>,
+    groupId: string,
+    itemIndex: number
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const itemId = event.dataTransfer.getData('text/plain') || draggedItemId
+    if (itemId) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const targetIndex =
+        itemIndex + (event.clientY > rect.top + rect.height / 2 ? 1 : 0)
+      moveItemToGroup(itemId, groupId, targetIndex)
+    }
+    handleItemDragEnd()
+  }
+
+  const pinnedItems = useMemo(() => {
+    if (!config) return []
+    return config.groups
+      .flatMap((group) => group.items)
+      .filter((item) => config.pinnedItems.includes(item.id))
+  }, [config])
+
+  const sortedGroups = useMemo(() => {
+    if (!config) return []
+    return [...config.groups].sort((a, b) => a.order - b.order)
+  }, [config])
+
+  const normalizedCurrentConfig = useMemo(() => {
+    if (!config) {
+      return ''
+    }
+    return JSON.stringify(persistPluginPreferences(config))
+  }, [config])
+
+  const normalizedGlobalSidebarPreference = useMemo(() => {
+    return normalizeSidebarPreference(publishedGlobalSidebarPreference)
+  }, [publishedGlobalSidebarPreference])
+
+  const hasPublishedGlobalSidebarPreference =
+    normalizedGlobalSidebarPreference !== ''
+
+  const isCurrentConfigGlobal =
+    hasPublishedGlobalSidebarPreference &&
+    normalizedCurrentConfig === normalizedGlobalSidebarPreference
+  const isSetAsGlobalDisabled =
+    isPublishingGlobal || isClearingGlobal || isCurrentConfigGlobal
+
+  useEffect(() => {
+    setPublishedGlobalSidebarPreference(globalSidebarPreference)
+  }, [globalSidebarPreference])
+
+  const handleSetAsGlobalSidebar = async () => {
+    if (!config || !user?.isAdmin()) {
+      return
+    }
+
+    setIsPublishingGlobal(true)
+    try {
+      await setGlobalSidebarPreference(normalizedCurrentConfig)
+      setPublishedGlobalSidebarPreference(normalizedCurrentConfig)
+      toast.success(
+        t('sidebar.setAsGlobalSuccess', 'Global sidebar updated successfully')
+      )
+    } catch (error) {
+      console.error('Failed to update global sidebar:', error)
+      toast.error(
+        t('sidebar.setAsGlobalError', 'Failed to update global sidebar')
+      )
+    } finally {
+      setIsPublishingGlobal(false)
+    }
+  }
+
+  const handleUnsetGlobalSidebar = async () => {
+    if (!user?.isAdmin()) {
+      return
+    }
+
+    setIsClearingGlobal(true)
+    try {
+      await clearGlobalSidebarPreference()
+      setPublishedGlobalSidebarPreference('')
+      toast.success(
+        t('sidebar.unsetGlobalSuccess', 'Global sidebar disabled successfully')
+      )
+    } catch (error) {
+      console.error('Failed to clear global sidebar:', error)
+      toast.error(
+        t('sidebar.unsetGlobalError', 'Failed to disable global sidebar')
+      )
+    } finally {
+      setIsClearingGlobal(false)
+    }
+  }
+
+  if (isLoading || !config) {
+    return null
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={(e) => {
+            e.preventDefault()
+            setOpen(true)
+          }}
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+          <span>
+            {t('common.actions.customizeSidebar', 'Customize Sidebar')}
+          </span>
+          {hasUpdate && (
+            <span className="ml-auto size-2 rounded-full bg-red-500" />
+          )}
+        </DropdownMenuItem>
+      </DialogTrigger>
+
+      <DialogContent className="!max-w-4xl max-h-[calc(100dvh-1rem)] p-0">
+        <DialogHeader className="p-4 pb-2 sm:p-6 sm:pb-2">
+          <DialogTitle className="flex items-center gap-2">
+            <PanelLeftOpen className="h-5 w-5" />
+            {t('common.actions.customizeSidebar', 'Customize Sidebar')}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto px-4 max-h-[calc(100dvh-10rem)] sm:px-6"
+        >
+          <div className="space-y-6 pb-6">
+            {pinnedItems.length > 0 && (
+              <>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Pin className="h-4 w-4" />
+                    {t('sidebar.pinnedItems', 'Pinned Items')} (
+                    {pinnedItems.length})
+                  </Label>
+                  <div className="space-y-2">
+                    {pinnedItems.map((item) => {
+                      const title = item.titleKey
+                        ? t(item.titleKey, { defaultValue: item.titleKey })
+                        : ''
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex flex-col gap-3 rounded-md border bg-muted/20 p-2 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <SidebarItemIcon
+                              item={item}
+                              className="text-sidebar-primary"
+                            />
+                            <span className="text-sm">{title}</span>
+                            <PluginIndicator pluginId={item.pluginId} />
+                            <Badge variant="outline" className="text-xs">
+                              {t('sidebar.pinned', 'Pinned')}
+                            </Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleItemPin(item.id)}
+                            className="h-8 w-8 p-0"
+                            aria-label="Unpin"
+                          >
+                            <PinOff className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">
+                {t('sidebar.menuGroups', 'Menu Groups')}
+              </Label>
+
+              {sortedGroups.map((group, index) => (
+                <div
+                  key={group.id}
+                  className={cn(
+                    '-m-2 space-y-3 rounded-md border border-transparent p-2',
+                    dragOverGroupId === group.id && 'border-primary bg-muted/30'
+                  )}
+                  onDragOver={(event) => handleGroupDragOver(event, group.id)}
+                  onDragLeave={(event) => handleGroupDragLeave(event, group.id)}
+                  onDrop={(event) => handleGroupDrop(event, group.id)}
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-medium">
+                        {group.nameKey
+                          ? t(group.nameKey, { defaultValue: group.nameKey })
+                          : ''}
+                      </h4>
+                      <PluginIndicator pluginId={group.pluginId} />
+                      {group.isCustom && (
+                        <Badge variant="outline" className="text-xs">
+                          Custom
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-xs">
+                        {
+                          group.items.filter(
+                            (item) => !config.hiddenItems.includes(item.id)
+                          ).length
+                        }
+                        /{group.items.length}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleGroupCollapse(group.id)}
+                        className="h-8 px-2 text-xs"
+                      >
+                        {group.collapsed
+                          ? t('common.actions.expand', 'Expand')
+                          : t('common.actions.collapse', 'Collapse')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleGroupVisibility(group.id)}
+                        className="h-8 w-8 p-0"
+                        title={group.visible ? 'Hide' : 'Show'}
+                        aria-label={group.visible ? 'Hide group' : 'Show group'}
+                      >
+                        {!group.visible ? (
+                          <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => moveGroup(group.id, 'up')}
+                        className="h-8 w-8 p-0"
+                        title={t('common.actions.moveUp', 'Move up')}
+                        disabled={index === 0}
+                        aria-label={t('common.actions.moveUp', 'Move up')}
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => moveGroup(group.id, 'down')}
+                        className="h-8 w-8 p-0"
+                        title={t('common.actions.moveDown', 'Move down')}
+                        disabled={index === sortedGroups.length - 1}
+                        aria-label={t('common.actions.moveDown', 'Move down')}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                      {group.isCustom && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeCustomGroup(group.id)}
+                          className="h-8 w-8 p-0"
+                          title="Delete custom group"
+                          aria-label="Delete custom group"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    className={`grid gap-2 pl-4 ${group.collapsed ? 'hidden' : ''} ${!group.visible ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    {group.items.map((item, itemIndex) => {
+                      const isHidden = config.hiddenItems.includes(item.id)
+                      const isPinned = config.pinnedItems.includes(item.id)
+                      const isRemovable =
+                        item.type === 'apiGroup' ||
+                        item.type === 'customResource'
+                      const title = item.titleKey
+                        ? t(item.titleKey, { defaultValue: item.titleKey })
+                        : ''
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            'flex flex-col gap-3 rounded border p-2 transition-colors sm:flex-row sm:items-center sm:justify-between',
+                            isHidden
+                              ? 'bg-muted/10 opacity-50'
+                              : 'bg-background',
+                            draggedItemId === item.id && 'opacity-60'
+                          )}
+                          onDragOver={(event) =>
+                            handleItemDragOver(event, group.id)
+                          }
+                          onDrop={(event) =>
+                            handleItemDrop(event, group.id, itemIndex)
+                          }
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              draggable
+                              onDragStart={(event) =>
+                                handleItemDragStart(event, item.id)
+                              }
+                              onDragEnd={handleItemDragEnd}
+                              className="size-8 cursor-grab p-0 text-muted-foreground active:cursor-grabbing"
+                              title={t('sidebar.dragItem', 'Drag item')}
+                              aria-label={t('sidebar.dragItem', 'Drag item')}
+                            >
+                              <GripVertical className="h-3.5 w-3.5" />
+                            </Button>
+                            <SidebarItemIcon
+                              item={item}
+                              className="text-sidebar-primary"
+                            />
+                            <span className="text-sm">{title}</span>
+                            <PluginIndicator pluginId={item.pluginId} />
+                            {item.type === 'apiGroup' && (
+                              <Badge variant="outline" className="text-xs">
+                                {t('sidebar.apiGroup', 'API Group')}
+                              </Badge>
+                            )}
+                            {isPinned && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Pin className="h-3 w-3 mr-1" />
+                                {t('sidebar.pinned', 'Pinned')}
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 self-end sm:self-auto">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleItemPin(item.id)}
+                              className={`h-8 w-8 p-0 ${isPinned ? 'text-primary' : 'text-muted-foreground'}`}
+                              title={isPinned ? 'Unpin' : 'Pin to top'}
+                              aria-label={isPinned ? 'Unpin' : 'Pin to top'}
+                            >
+                              {isPinned ? (
+                                <PinOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Pin className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                            {isRemovable ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  removeItemFromGroup(group.id, item.id)
+                                }
+                                className="h-8 w-8 p-0"
+                                title="Remove from group"
+                                aria-label="Remove from group"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleItemVisibility(item.id)}
+                                className="h-8 w-8 p-0"
+                                title={isHidden ? 'Show' : 'Hide'}
+                                aria-label={
+                                  isHidden ? 'Show item' : 'Hide item'
+                                }
+                              >
+                                {isHidden ? (
+                                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {group.isCustom && (
+                      <div className="flex flex-col gap-2 rounded border bg-muted/5 p-2 sm:flex-row">
+                        <CRDSelector
+                          selectedCRD={selectedCRD?.name || ''}
+                          onCRDChange={(crdName, kind) =>
+                            setSelectedCRD({
+                              name: crdName,
+                              kind: kind,
+                            })
+                          }
+                          onAPIGroupAdd={(groupName) =>
+                            addAPIGroupToGroup(group.id, groupName)
+                          }
+                          addedAPIGroups={group.items.flatMap((item) =>
+                            item.type === 'apiGroup' ? [item.apiGroup] : []
+                          )}
+                          placeholder="Select CRD to add..."
+                        />
+                        <Button
+                          onClick={() => handleAddCRDToGroup(group.id)}
+                          disabled={!selectedCRD}
+                          size="sm"
+                          className="gap-2"
+                          title="Add CRD to group"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="space-y-3 p-4 border rounded-md bg-muted/10">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <FolderPlus className="h-4 w-4" />
+                  {t('common.actions.createGroup', 'Create New Group')}
+                </Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    placeholder={t(
+                      'sidebar.groupNamePlaceholder',
+                      'Group name'
+                    )}
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleCreateGroup()
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={handleCreateGroup}
+                    disabled={!newGroupName.trim()}
+                    aria-label={t(
+                      'common.actions.createGroup',
+                      'Create New Group'
+                    )}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t bg-muted/10 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6 sm:pt-4">
+          <Button variant="outline" onClick={resetConfig} className="gap-2">
+            <RotateCcw className="h-4 w-4" />
+            {t('sidebar.resetToDefault', 'Reset to Default')}
+          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {user?.isAdmin() && hasPublishedGlobalSidebarPreference && (
+              <Button
+                variant="outline"
+                onClick={handleUnsetGlobalSidebar}
+                disabled={isPublishingGlobal || isClearingGlobal}
+              >
+                {t('sidebar.unsetGlobal', 'Unset global sidebar')}
+              </Button>
+            )}
+            {user?.isAdmin() && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex"
+                    tabIndex={isSetAsGlobalDisabled ? 0 : undefined}
+                  >
+                    <Button
+                      variant="outline"
+                      onClick={handleSetAsGlobalSidebar}
+                      disabled={isSetAsGlobalDisabled}
+                      aria-describedby="set-global-sidebar-description"
+                    >
+                      {t('sidebar.setAsGlobal', 'Set as global sidebar')}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  id="set-global-sidebar-description"
+                  side="top"
+                  className="max-w-xs text-pretty"
+                >
+                  {t(
+                    'sidebar.setAsGlobalDescription',
+                    'Apply the current layout to all non-admin users and admins without a personal sidebar configuration. Admins with a personal configuration keep their own layout.'
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <Button
+              onClick={() => {
+                handleOpenChange(false)
+              }}
+            >
+              {t('common.actions.done', 'Done')}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

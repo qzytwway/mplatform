@@ -1,0 +1,133 @@
+name: E2E
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/e2e.yml"
+      - "Makefile"
+      - "go.mod"
+      - "go.sum"
+      - "*.go"
+      - "internal/**"
+      - "pkg/**"
+      - "ui/**"
+      - "e2e/**"
+      - "scripts/e2e-start-app.sh"
+      - "scripts/get-version.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/e2e.yml"
+      - "Makefile"
+      - "go.mod"
+      - "go.sum"
+      - "*.go"
+      - "internal/**"
+      - "pkg/**"
+      - "ui/**"
+      - "e2e/**"
+      - "scripts/e2e-start-app.sh"
+      - "scripts/get-version.sh"
+
+env:
+  GO_VERSION: "1.26"
+  NODE_VERSION: "24"
+
+jobs:
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      E2E_KIND_NAME: mplatform-e2e
+      E2E_KUBECONFIG: ${{ github.workspace }}/mplatform-e2e.kubeconfig
+      KIND_LOGS_DIR: ${{ github.workspace }}/kind-logs
+      E2E_PORT: "38080"
+      MPLATFORM_E2E_LDAP_URL: ldap://127.0.0.1:3389
+      MPLATFORM_E2E_OAUTH_ISSUER: http://127.0.0.1:5556
+      MPLATFORM_E2E_USE_SYSTEM_CHROME: "true"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: |
+            ui/pnpm-lock.yaml
+            e2e/pnpm-lock.yaml
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          check-latest: true
+
+      - name: Install deps
+        run: make deps
+
+      - name: Install E2E deps
+        run: make e2e-install
+
+      - name: Verify Chrome
+        run: google-chrome --version
+
+      - name: Install kind
+        run: |
+          [ "$(uname -m)" = "x86_64" ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64
+          [ "$(uname -m)" = "aarch64" ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-arm64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Start OpenLDAP
+        run: make e2e-setup-ldap
+
+      - name: Start Dex
+        run: make e2e-setup-dex
+
+      - name: Run E2E tests
+        run: make e2e-run
+
+      - name: Export kind logs
+        if: always()
+        run: |
+          if command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "${E2E_KIND_NAME}"; then
+            kind export logs "${KIND_LOGS_DIR}" --name "${E2E_KIND_NAME}"
+          else
+            echo "kind cluster ${E2E_KIND_NAME} does not exist"
+          fi
+
+      - name: Collect external auth logs
+        if: always()
+        run: |
+          docker logs mplatform-e2e-ldap > "${GITHUB_WORKSPACE}/mplatform-e2e-ldap.log" 2>&1 || true
+          docker logs mplatform-e2e-dex > "${GITHUB_WORKSPACE}/mplatform-e2e-dex.log" 2>&1 || true
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            ${{ env.KIND_LOGS_DIR }}
+            ${{ github.workspace }}/mplatform-e2e-ldap.log
+            ${{ github.workspace }}/mplatform-e2e-dex.log
