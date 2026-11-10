@@ -724,7 +724,12 @@
   "cluster": {
     "loading": "加载集群中...",
     "error": "加载集群失败：{{error}}",
-    "error403": "你没有权限访问此集群，请联系管理员。"
+    "error403": "你没有权限访问此集群，请联系管理员。",
+    "none": {
+      "title": "还没有连接集群",
+      "description": "添加一个 Kubernetes 集群后，这里会显示它的资源。",
+      "contactAdmin": "请联系管理员添加集群。"
+    }
   },
   "resourceTable": {
     "searchResources": "搜索{{resource}}…",

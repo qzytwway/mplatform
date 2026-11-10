@@ -719,7 +719,12 @@
   "cluster": {
     "loading": "Loading clusters...",
     "error": "Error loading clusters: {{error}}",
-    "error403": "You do not have permission to access this cluster. Please contact your administrator for more information."
+    "error403": "You do not have permission to access this cluster. Please contact your administrator for more information.",
+    "none": {
+      "title": "No cluster connected",
+      "description": "Add a Kubernetes cluster to see its resources here.",
+      "contactAdmin": "Ask an administrator to add a cluster."
+    }
   },
   "resourceTable": {
     "searchResources": "Search {{resource}}...",

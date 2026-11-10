@@ -1,8 +1,9 @@
 import './App.css'
 
 import { ReactNode } from 'react'
+import { IconServer } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
-import { Outlet, useSearchParams } from 'react-router-dom'
+import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom'
 
 import { AIChatbox, StandaloneAIChatbox } from './components/ai-chat/ai-chatbox'
 import { AppSidebar } from './components/app-sidebar'
@@ -14,9 +15,11 @@ import {
   useGlobalSearch,
 } from './components/global-search-provider'
 import { SiteHeader } from './components/site-header'
+import { Button } from './components/ui/button'
 import { SidebarInset, SidebarProvider } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
 import { AIChatProvider } from './contexts/ai-chat-context'
+import { useAuth } from './contexts/auth-context'
 import { ClusterProvider } from './contexts/cluster-context'
 import { TerminalProvider, useTerminal } from './contexts/terminal-context'
 import { useCluster } from './hooks/use-cluster'
@@ -49,11 +52,48 @@ function ClusterGate({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+// Settings and plugin management stay reachable so an admin can add the first cluster.
+const CLUSTER_FREE_PATHS = ['/settings', '/plugins']
+
+function NoCluster() {
+  const { t } = useTranslation()
+  const { user } = useAuth()
+  const isAdmin = user?.isAdmin() ?? false
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+      <IconServer className="size-10 text-muted-foreground" stroke={1.5} />
+      <div>
+        <h2 className="text-base font-medium">{t('cluster.none.title')}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isAdmin
+            ? t('cluster.none.description')
+            : t('cluster.none.contactAdmin')}
+        </p>
+      </div>
+      {isAdmin && (
+        <Button asChild size="sm">
+          <Link to="/settings?tab=clusters">
+            {t('clusterManagement.actions.add')}
+          </Link>
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function AppContent() {
   const { isOpen, closeSearch } = useGlobalSearch()
   const { isOpen: isTerminalOpen } = useTerminal()
+  const { clusters } = useCluster()
+  const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const isIframe = searchParams.get('iframe') === 'true'
+  const needsCluster =
+    clusters.length === 0 &&
+    !CLUSTER_FREE_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    )
 
   if (isIframe) {
     return <Outlet />
@@ -69,7 +109,7 @@ function AppContent() {
             <div className="flex min-h-0 flex-1 flex-col gap-4 py-4 md:gap-6">
               <div className="flex min-h-0 flex-1 flex-col px-4 lg:px-6">
                 <ErrorBoundary>
-                  <Outlet />
+                  {needsCluster ? <NoCluster /> : <Outlet />}
                 </ErrorBoundary>
               </div>
             </div>
