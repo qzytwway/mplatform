@@ -148,6 +148,8 @@ export interface GPUNode {
 
 export interface GPUComponent {
   installed: boolean
+  // The chart version of the installed release; chart is the local chart.
+  version?: string
   chart: {
     name: string
     version?: string

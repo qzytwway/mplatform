@@ -138,7 +138,9 @@ function ComponentCard({
           <span className="text-muted-foreground">
             {t(`modelServing.${name}.installed`)}
           </span>
-          {chart.version && <Badge variant="outline">{chart.version}</Badge>}
+          {component.version && (
+            <Badge variant="outline">{component.version}</Badge>
+          )}
         </div>
         <Button
           variant="outline"

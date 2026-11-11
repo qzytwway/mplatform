@@ -10,6 +10,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/storage/driver"
 )
 
 // The GPU Operator provides the driver, container toolkit, GPU Feature
@@ -23,16 +24,34 @@ var (
 )
 
 type gpuComponent struct {
-	Installed bool        `json:"installed"`
-	Chart     chartStatus `json:"chart"`
+	Installed bool `json:"installed"`
+	// Version is the chart version of the installed release, which differs
+	// from the local chart's when either was updated since the install.
+	Version string      `json:"version,omitempty"`
+	Chart   chartStatus `json:"chart"`
+}
+
+func installedComponent(cs *cluster.ClientSet, namespace, name string) (gpuComponent, error) {
+	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, namespace)
+	if err != nil {
+		return gpuComponent{}, err
+	}
+	rel, err := helmutil.GetRelease(cfg, name)
+	if errors.Is(err, driver.ErrReleaseNotFound) {
+		return gpuComponent{}, nil
+	} else if err != nil {
+		return gpuComponent{}, err
+	}
+	component := gpuComponent{Installed: true}
+	if rel.Chart != nil && rel.Chart.Metadata != nil {
+		component.Version = rel.Chart.Metadata.Version
+	}
+	return component, nil
 }
 
 func releaseInstalled(cs *cluster.ClientSet, namespace, name string) (bool, error) {
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, namespace)
-	if err != nil {
-		return false, err
-	}
-	return helmutil.ReleaseExists(cfg, name)
+	component, err := installedComponent(cs, namespace, name)
+	return component.Installed, err
 }
 
 func (h *Handler) GetGPUComponents(c *gin.Context) {
@@ -41,14 +60,13 @@ func (h *Handler) GetGPUComponents(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	gpuOperator := gpuComponent{}
-	gpuOperator.Installed, err = releaseInstalled(cs, gpuOperatorNamespace, gpuOperatorReleaseName)
+	gpuOperator, err := installedComponent(cs, gpuOperatorNamespace, gpuOperatorReleaseName)
 	if err == nil {
 		gpuOperator.Chart, err = gpuOperatorChartStatus()
 	}
 	hami := gpuComponent{}
 	if err == nil {
-		hami.Installed, err = releaseInstalled(cs, hamiNamespace, hamiReleaseName)
+		hami, err = installedComponent(cs, hamiNamespace, hamiReleaseName)
 	}
 	if err == nil {
 		hami.Chart, err = hamiChartStatus(cs.Version)
