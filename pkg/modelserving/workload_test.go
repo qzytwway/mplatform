@@ -82,6 +82,16 @@ func assertArgs(t *testing.T, args []string, sequences ...[]string) {
 	}
 }
 
+// assertHeadlessServicePerGroup checks that LeaderWorkerSet names its
+// headless Services after groups, apart from the OpenAI Service, which takes
+// the service's name.
+func assertHeadlessServicePerGroup(t *testing.T, workload *unstructured.Unstructured) {
+	t.Helper()
+	policy, _, err := unstructured.NestedString(workload.Object, "spec", "networkConfig", "subdomainPolicy")
+	require.NoError(t, err)
+	assert.Equal(t, "UniquePerReplica", policy)
+}
+
 func TestBuildLeaderWorkerSetSingleNode(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -135,6 +145,7 @@ func TestBuildLeaderWorkerSetSingleNode(t *testing.T) {
 			assert.Equal(t, lwsGVK, workload.GroupVersionKind())
 			replicas, _, _ := unstructured.NestedInt64(workload.Object, "spec", "replicas")
 			assert.Equal(t, int64(1), replicas)
+			assertHeadlessServicePerGroup(t, workload)
 			template := lwsTemplate(t, workload)
 			assert.Equal(t, int64(1), template["size"])
 			leader, pod := groupPods(t, template)
@@ -214,6 +225,7 @@ func TestBuildLeaderWorkerSetMultiNode(t *testing.T) {
 			require.NoError(t, err)
 			replicas, _, _ := unstructured.NestedInt64(workload.Object, "spec", "replicas")
 			assert.Equal(t, int64(3), replicas)
+			assertHeadlessServicePerGroup(t, workload)
 			template := lwsTemplate(t, workload)
 			assert.Equal(t, int64(2), template["size"])
 			assert.Equal(t, "RecreateGroupOnPodRestart", template["restartPolicy"])
@@ -579,6 +591,9 @@ func TestRouter(t *testing.T) {
 			}}, router.Spec.Template.Spec.TopologySpreadConstraints)
 			container := router.Spec.Template.Spec.Containers[0]
 			assert.Equal(t, "lmsysorg/sglang-router:latest", container.Image)
+			// The SGLang router's tokenizer lookups on the hub fail at once
+			// instead of waiting on the network.
+			assert.Equal(t, []corev1.EnvVar{{Name: "HF_ENDPOINT", Value: "http://127.0.0.1:1"}}, container.Env)
 			assert.Equal(t, &corev1.HTTPGetAction{Path: "/readiness", Port: intstr.FromInt32(servingPort)}, container.ReadinessProbe.HTTPGet)
 			assert.Equal(t, &corev1.HTTPGetAction{Path: "/liveness", Port: intstr.FromInt32(servingPort)}, container.LivenessProbe.HTTPGet)
 			assert.Equal(t, corev1.ResourceList{
@@ -641,6 +656,8 @@ func TestVLLMRouter(t *testing.T) {
 			container := router.Spec.Template.Spec.Containers[0]
 			assert.Equal(t, tt.image, container.Image)
 			assert.Equal(t, []string{"vllm-router"}, container.Command)
+			// vllm-router loads no tokenizer for the workers it discovers.
+			assert.Empty(t, container.Env)
 			service := serviceLabel + "=qwen-pd"
 			leader := lwsWorkerIndexLabel + "=0"
 			assert.Equal(t, append([]string{

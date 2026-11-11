@@ -216,3 +216,99 @@ func TestScaleServiceHandler(t *testing.T) {
 		})
 	}
 }
+
+// existingWorkload is an inference service of the given kind in a namespace.
+func existingWorkload(gvk schema.GroupVersionKind, namespace, name string) unstructured.Unstructured {
+	workload := unstructured.Unstructured{}
+	workload.SetGroupVersionKind(gvk)
+	workload.SetNamespace(namespace)
+	workload.SetName(name)
+	workload.SetLabels(serviceLabels(name))
+	return workload
+}
+
+func TestGroupNameConflict(t *testing.T) {
+	tests := []struct {
+		name     string
+		req      serviceRequest
+		existing unstructured.Unstructured
+		want     string
+	}{
+		{
+			name:     "a group name of a LeaderWorkerSet service",
+			req:      serviceRequest{Name: "qwen-0", Namespace: "default", Mode: modeSingle},
+			existing: existingWorkload(lwsGVK, "default", "qwen"),
+			want:     "qwen",
+		},
+		{
+			name:     "a pd service named like a group",
+			req:      serviceRequest{Name: "qwen-12", Namespace: "default", Mode: modePD},
+			existing: existingWorkload(lwsGVK, "default", "qwen"),
+			want:     "qwen",
+		},
+		{
+			name:     "a service whose group names are taken",
+			req:      serviceRequest{Name: "qwen", Namespace: "default", Mode: modeMulti},
+			existing: existingWorkload(disaggregatedSetGVK, "default", "qwen-1"),
+			want:     "qwen-1",
+		},
+		{
+			name:     "a pd service has no group names of its own",
+			req:      serviceRequest{Name: "qwen", Namespace: "default", Mode: modePD},
+			existing: existingWorkload(lwsGVK, "default", "qwen-1"),
+		},
+		{
+			name:     "a DisaggregatedSet names no groups",
+			req:      serviceRequest{Name: "qwen-0", Namespace: "default", Mode: modeSingle},
+			existing: existingWorkload(disaggregatedSetGVK, "default", "qwen"),
+		},
+		{
+			name:     "suffixes other than a group index",
+			req:      serviceRequest{Name: "qwen-v2", Namespace: "default", Mode: modeSingle},
+			existing: existingWorkload(lwsGVK, "default", "qwen"),
+		},
+		{
+			name:     "another namespace",
+			req:      serviceRequest{Name: "qwen-0", Namespace: "default", Mode: modeSingle},
+			existing: existingWorkload(lwsGVK, "other", "qwen"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, groupNameConflict(&tt.req, []unstructured.Unstructured{tt.existing}))
+		})
+	}
+}
+
+func TestCreateServiceRejectsGroupNames(t *testing.T) {
+	setupHistoryDB(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.ServedModel{}))
+	served := chatModel()
+	require.NoError(t, model.DB.Create(served).Error)
+	gin.SetMode(gin.TestMode)
+	existing := parseTestRequest(t, singleBody())
+	workload, err := buildLeaderWorkerSet(&existing, served, nil)
+	require.NoError(t, err)
+	var creates int
+	cs := newFakeClientSet(t, interceptor.Funcs{
+		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			creates++
+			return c.Create(ctx, obj, opts...)
+		},
+	}, crdObject(lwsCRD), crdObject(disaggregatedSetCRD), workload)
+	handler := &Handler{cm: testClusters{"test": cs}}
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) { c.Set("user", model.User{Username: "admin"}) })
+	engine.POST("/clusters/:cluster/services", handler.CreateService)
+	body := singleBody()
+	body.Name, body.ModelID = "qwen-0", served.ID
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/clusters/test/services", strings.NewReader(string(raw))))
+
+	require.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), "clashes with inference service qwen")
+	assert.Zero(t, creates)
+}

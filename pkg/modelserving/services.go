@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/cluster"
@@ -225,6 +226,15 @@ func (h *Handler) CreateService(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+	workloads, err := listWorkloads(ctx, cs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if other := groupNameConflict(&req, workloads); other != "" {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("name %s clashes with inference service %s in this namespace: the pods and Services of each group are named <service>-<group index>", req.Name, other)})
+		return
+	}
 	if req.VGPU != nil {
 		if status, err := requireModeComponents(cs, gpuModeVGPU); err != nil {
 			c.JSON(status, gin.H{"error": err.Error()})
@@ -292,6 +302,34 @@ func requireWorkloadCRD(ctx context.Context, cs *cluster.ClientSet, mode string)
 		return "", http.StatusBadRequest, errors.New(missing)
 	}
 	return crd, http.StatusOK, nil
+}
+
+// groupNameConflict returns the inference service among workloads whose
+// objects would take the names of req's, or "" when there is none.
+// LeaderWorkerSet names the leader pod, worker StatefulSet and headless
+// Service of each group <name>-<group index>, and every inference service
+// has an OpenAI Service of its own name.
+func groupNameConflict(req *serviceRequest, workloads []unstructured.Unstructured) string {
+	for i := range workloads {
+		workload := &workloads[i]
+		if workload.GetNamespace() != req.Namespace {
+			continue
+		}
+		name := workload.GetName()
+		// A DisaggregatedSet names nothing <name>-<index>, but its OpenAI
+		// Service still takes a group name of a new LeaderWorkerSet.
+		if workload.GetKind() == lwsGVK.Kind && isGroupName(req.Name, name) ||
+			req.Mode != modePD && isGroupName(name, req.Name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// isGroupName reports whether name is a group name of service.
+func isGroupName(name, service string) bool {
+	index, ok := strings.CutPrefix(name, service+"-")
+	return ok && index != "" && strings.Trim(index, "0123456789") == ""
 }
 
 // buildServiceObjects returns everything a service consists of in creation
