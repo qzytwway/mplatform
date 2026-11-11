@@ -2155,6 +2155,7 @@
       "title": "日志"
     },
     "dashboards": {
+      "group": "分组",
       "search": "搜索仪表盘",
       "noMatch": "没有匹配的仪表盘。",
       "empty": "暂无仪表盘。",

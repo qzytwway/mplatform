@@ -2068,6 +2068,7 @@
       "title": "Logs"
     },
     "dashboards": {
+      "group": "Group",
       "search": "Search dashboards",
       "noMatch": "No dashboards match your search.",
       "empty": "No dashboards yet.",
