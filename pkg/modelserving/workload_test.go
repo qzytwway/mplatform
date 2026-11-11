@@ -591,8 +591,8 @@ func TestRouter(t *testing.T) {
 			}}, router.Spec.Template.Spec.TopologySpreadConstraints)
 			container := router.Spec.Template.Spec.Containers[0]
 			assert.Equal(t, "lmsysorg/sglang-router:latest", container.Image)
-			// Tokenizer lookups on the hub fail at once instead of waiting
-			// on the network.
+			// The SGLang router's tokenizer lookups on the hub fail at once
+			// instead of waiting on the network.
 			assert.Equal(t, []corev1.EnvVar{{Name: "HF_ENDPOINT", Value: "http://127.0.0.1:1"}}, container.Env)
 			assert.Equal(t, &corev1.HTTPGetAction{Path: "/readiness", Port: intstr.FromInt32(servingPort)}, container.ReadinessProbe.HTTPGet)
 			assert.Equal(t, &corev1.HTTPGetAction{Path: "/liveness", Port: intstr.FromInt32(servingPort)}, container.LivenessProbe.HTTPGet)
@@ -656,6 +656,8 @@ func TestVLLMRouter(t *testing.T) {
 			container := router.Spec.Template.Spec.Containers[0]
 			assert.Equal(t, tt.image, container.Image)
 			assert.Equal(t, []string{"vllm-router"}, container.Command)
+			// vllm-router loads no tokenizer for the workers it discovers.
+			assert.Empty(t, container.Env)
 			service := serviceLabel + "=qwen-pd"
 			leader := lwsWorkerIndexLabel + "=0"
 			assert.Equal(t, append([]string{

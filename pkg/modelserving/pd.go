@@ -74,8 +74,15 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 	labels := serviceLabels(req.Name)
 	labels[roleLabel] = roleRouter
 	command := []string{"python3", "-m", "sglang_router.launch_router"}
+	// The SGLang router looks up the tokenizer of the model path its workers
+	// report, a path in their pods that is never a Hugging Face model, and
+	// routes without it. A closed local hub fails that lookup at once, where
+	// it would otherwise reach huggingface.co or, offline, retry until
+	// connections time out.
+	env := []corev1.EnvVar{{Name: "HF_ENDPOINT", Value: "http://127.0.0.1:1"}}
 	if req.Runtime == runtimeVLLM {
 		command = []string{"vllm-router"}
+		env = nil
 	}
 	return &appsv1.Deployment{
 		ObjectMeta: meta,
@@ -102,14 +109,8 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 						Image:   req.PD.RouterImage,
 						Command: command,
 						Args:    routerArgs(req),
-						// The router looks up the tokenizer of the model path
-						// its workers report, a path in their pods that is never
-						// a Hugging Face model, and routes without it. A closed
-						// local hub fails that lookup at once, where it would
-						// otherwise reach huggingface.co or, offline, retry
-						// until connections time out.
-						Env:   []corev1.EnvVar{{Name: "HF_ENDPOINT", Value: "http://127.0.0.1:1"}},
-						Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}},
+						Env:     env,
+						Ports:   []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}},
 						// Requests keep the router out of the BestEffort class,
 						// whose pods are evicted first.
 						Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
