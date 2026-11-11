@@ -45,7 +45,7 @@ import {
   type PDRoleValues,
   type ServiceModeValues,
 } from './service-mode-fields'
-import { modeBlocker } from './service-modes'
+import { MAX_PD_NAME_LENGTH, modeBlocker } from './service-modes'
 import {
   ServiceNetworkFields,
   type NetworkValues,
@@ -59,10 +59,7 @@ const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
 // Radix Select items cannot have an empty value.
 const ANY_NODE = '__any__'
 
-// The backend's limits; PD names are shorter because the DisaggregatedSet
-// webhook bounds the names it derives from them.
 const MAX_NAME_LENGTH = 40
-const MAX_PD_NAME_LENGTH = 30
 
 const DEFAULT_PD_ROLE: PDRoleValues = {
   replicas: '1',
@@ -153,8 +150,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     groupSize: '2',
     prefill: DEFAULT_PD_ROLE,
     decode: DEFAULT_PD_ROLE,
-    // Empty runs the router from the service image, which matches the
-    // engine version it routes to.
+    // The backend runs the router from the service image when empty.
     routerImage: '',
     routerReplicas: '1',
     routerPolicy: 'default',
@@ -234,7 +230,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           pd: {
             prefill: toPDRole(modeValues.prefill),
             decode: toPDRole(modeValues.decode),
-            routerImage: modeValues.routerImage.trim() || image.trim(),
+            // Empty runs the router from the service image.
+            routerImage: modeValues.routerImage.trim(),
             routerReplicas: Number(modeValues.routerReplicas),
             routerPolicy:
               modeValues.routerPolicy === 'default'
@@ -290,6 +287,13 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
               maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
               required
             />
+            {mode === 'pd' && (
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.pdNameHint', {
+                  max: MAX_PD_NAME_LENGTH,
+                })}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>{t('common.fields.namespace')}</Label>
@@ -359,7 +363,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           values={modeValues}
           onValuesChange={setModeValues}
           gpuCountLabel={gpuCountLabel}
-          image={image}
+          service={{ image, cpu, memory }}
           rdmaEnabled={networkValues.rdma !== 'none'}
         />
         <div className="grid gap-4 md:grid-cols-3">

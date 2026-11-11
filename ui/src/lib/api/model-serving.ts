@@ -99,7 +99,7 @@ export interface InferencePod {
 
 export interface InferenceServiceDetail extends InferenceService {
   pods: InferencePod[]
-  deployment?: DeploymentConfig
+  deployment?: DeploymentConfig | null
 }
 
 // DeploymentConfig is read back from the pod templates of a service's

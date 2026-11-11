@@ -2179,7 +2179,7 @@
       "anyNode": "Any node",
       "nodeHint": "Optional. Node-local models must run on a node that has the model directory.",
       "extraArgs": "Extra arguments",
-      "extraArgsHint": "Appended to the runtime start command, separated by spaces.",
+      "extraArgsHint": "Appended to the runtime start command, separated by spaces. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "mode": "Mode",
       "modes": {
         "single": "Single node",
@@ -2202,6 +2202,8 @@
       "prefillReplicas": "Prefill replicas",
       "decodeReplicas": "Decode replicas",
       "routerImage": "Router image",
+      "routerMissing": "The router is missing, so it cannot be scaled here.",
+      "pdNameHint": "PD service names are at most {{max}} characters.",
       "routerImageHint": "Leave empty to use the service image, so the router matches the engine version it routes to. The image must include sglang_router.",
       "routerReplicas": "Router replicas",
       "routerReplicasHint": "Replicas prefer different nodes, so the router keeps serving when one node fails.",
@@ -2224,10 +2226,10 @@
       "roleImagesDiffer": "Prefill and decode run different images. KV transfer needs the same engine version on both sides.",
       "routerCacheWarning": "Router replicas do not share their cache trees, so cache hits drop with more than one replica.",
       "transferBackendNeedsRDMA": "Mooncake over RDMA needs an RDMA network. Configure one below or choose Mooncake (TCP).",
-      "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name.",
+      "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "inheritService": "Same as the service",
       "nodesPerReplica": "Nodes per replica",
-      "extraArgsHintPD": "Appended to both the prefill and decode start commands; each role's own arguments come after them and can override them.",
+      "extraArgsHintPD": "Appended to both the prefill and decode start commands; each role's own arguments come after them and can override them. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "transferBackend": "KV transfer",
       "transferBackends": {
         "mooncake": "Mooncake (RDMA)",
@@ -2257,7 +2259,7 @@
       "rdmaNetworks": "Networks (Multus)",
       "rdmaNetworksHint": "Use the resource name your device plugin serves. Networks are optional and go into the pod's k8s.v1.cni.cncf.io/networks annotation; setups with dedicated NICs such as SR-IOV need them.",
       "env": "Environment variables",
-      "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME.",
+      "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "scaleTitle": "Scale inference service",
       "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
       "scaleDescriptionPD": "Set the prefill, decode and router replicas.",
@@ -2408,7 +2410,8 @@
       "podSettings": "Pod settings",
       "hostNetwork": "Host network",
       "privileged": "Privileged",
-      "requestLimit": "{{request}} (limit {{limit}})"
+      "requestLimit": "{{request}} (limit {{limit}})",
+      "requestOnly": "{{request}} (request)"
     },
     "lws": {
       "title": "LeaderWorkerSet",

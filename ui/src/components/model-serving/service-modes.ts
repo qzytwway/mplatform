@@ -7,6 +7,11 @@ import type {
 
 export const DEPLOYMENT_MODES: DeploymentMode[] = ['single', 'multi', 'pd']
 
+// The backend's limits for PD services, which keep the names the
+// DisaggregatedSet webhook derives from them short enough.
+export const MAX_PD_NAME_LENGTH = 30
+export const MAX_PD_ROLE_REPLICAS = 100
+
 export const RUNTIME_LABELS: Record<InferenceRuntime, string> = {
   vllm: 'vLLM',
   sglang: 'SGLang',

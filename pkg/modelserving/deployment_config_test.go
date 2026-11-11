@@ -266,31 +266,102 @@ func TestReadDeploymentConfigOfRouter(t *testing.T) {
 	assert.Equal(t, "cache_aware", config.RouterPolicy)
 }
 
-func TestReadDeploymentConfigPrefersAnnotations(t *testing.T) {
+func TestReadDeploymentConfigSources(t *testing.T) {
 	limits := map[string]any{"nvidia.com/gpu": "1"}
-	// The templates say host network, nixl over mlx5_9 and round robin.
-	workload := pdWorkload(
-		map[string]any{"replicas": int64(1), "leaderWorkerTemplate": map[string]any{"size": int64(1), "workerTemplate": map[string]any{
-			"spec": map[string]any{"hostNetwork": true, "containers": []any{containerSpec(
-				[]any{"--disaggregation-transfer-backend", "nixl", "--disaggregation-ib-device", "mlx5_9"}, nil, limits)}},
-		}}},
-		singlePodRole(containerSpec(nil, nil, limits), nil),
-	)
-	workload.SetAnnotations(map[string]string{
+	// The templates say host network, nixl over mlx5_9 and round robin,
+	// while the annotations recorded at creation say otherwise.
+	edited := map[string]any{"replicas": int64(1), "leaderWorkerTemplate": map[string]any{"size": int64(1), "workerTemplate": map[string]any{
+		"spec": map[string]any{"hostNetwork": true, "containers": []any{containerSpec(
+			[]any{"--disaggregation-transfer-backend", "nixl", "--disaggregation-ib-device", "mlx5_9"}, nil, limits)}},
+	}}}
+	annotations := map[string]string{
 		rdmaAnnotation:            rdmaModeDevicePlugin,
 		transferBackendAnnotation: transferMooncake,
-		ibDevicesAnnotation:       "",
-		routerPolicyAnnotation:    "",
-	})
+		ibDevicesAnnotation:       "mlx5_0",
+		routerPolicyAnnotation:    "cache_aware",
+	}
+	tests := []struct {
+		name    string
+		prefill map[string]any
+		router  *appsv1.Deployment
+		want    deploymentConfig
+	}{
+		{
+			name:    "templates win but the rdma mode is recorded",
+			prefill: edited,
+			router:  oldRouter("--policy", "round_robin"),
+			want:    deploymentConfig{RDMA: rdmaModeDevicePlugin, TransferBackend: transferNIXL, IBDevices: "mlx5_9", RouterPolicy: "round_robin"},
+		},
+		{
+			name:    "a router without a policy uses the default",
+			prefill: edited,
+			router:  oldRouter("--pd-disaggregation"),
+			want:    deploymentConfig{RDMA: rdmaModeDevicePlugin, TransferBackend: transferNIXL, IBDevices: "mlx5_9"},
+		},
+		{
+			name:    "annotations fill in missing templates",
+			prefill: map[string]any{"replicas": int64(1)},
+			want:    deploymentConfig{RDMA: rdmaModeDevicePlugin, TransferBackend: transferMooncake, IBDevices: "mlx5_0", RouterPolicy: "cache_aware"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workload := pdWorkload(tt.prefill, singlePodRole(containerSpec(nil, nil, limits), nil))
+			workload.SetAnnotations(annotations)
 
-	config, err := readDeploymentConfig(workload, oldRouter("--policy", "round_robin"))
+			config, err := readDeploymentConfig(workload, tt.router)
 
-	require.NoError(t, err)
-	assert.Equal(t, rdmaModeDevicePlugin, config.RDMA)
-	assert.Equal(t, transferMooncake, config.TransferBackend)
-	// Recorded empty values win too: the service was created without them.
-	assert.Empty(t, config.IBDevices)
-	assert.Empty(t, config.RouterPolicy)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want.RDMA, config.RDMA)
+			assert.Equal(t, tt.want.TransferBackend, config.TransferBackend)
+			assert.Equal(t, tt.want.IBDevices, config.IBDevices)
+			assert.Equal(t, tt.want.RouterPolicy, config.RouterPolicy)
+		})
+	}
+}
+
+func TestMaskArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "flag and value",
+			args: []string{"--api-key", "sk-123", "--port", "8000"},
+			want: []string{"--api-key", maskedValue, "--port", "8000"},
+		},
+		{
+			name: "flag=value in any case",
+			args: []string{"--HF_TOKEN=hf_abc", "--admin-Password=p", "--ssl-keyfile=/etc/key.pem"},
+			want: []string{"--HF_TOKEN=" + maskedValue, "--admin-Password=" + maskedValue, "--ssl-keyfile=/etc/key.pem"},
+		},
+		{
+			name: "every sensitive word",
+			args: []string{"--secret", "a", "--passwd", "b", "--db-credential", "c", "--auth", "d", "--openai-apikey", "e"},
+			want: []string{"--secret", maskedValue, "--passwd", maskedValue, "--db-credential", maskedValue, "--auth", maskedValue, "--openai-apikey", maskedValue},
+		},
+		{
+			name: "words inside other words stay readable",
+			args: []string{"--max-total-tokens", "8192", "--tokenizer-path", "/models/tok", "--author", "me"},
+			want: []string{"--max-total-tokens", "8192", "--tokenizer-path", "/models/tok", "--author", "me"},
+		},
+		{
+			name: "a flag after a sensitive flag is not its value",
+			args: []string{"--enable-auth", "--port", "8000", "--api-key", "-negative"},
+			want: []string{"--enable-auth", "--port", "8000", "--api-key", maskedValue},
+		},
+		{name: "a sensitive flag at the end", args: []string{"--api-key"}, want: []string{"--api-key"}},
+		{name: "none", args: nil, want: []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := append([]string(nil), tt.args...)
+
+			assert.Equal(t, tt.want, maskArgs(tt.args))
+			assert.Equal(t, before, tt.args, "the args must not change")
+		})
+	}
 }
 
 func TestReadEnvVar(t *testing.T) {
@@ -300,10 +371,13 @@ func TestReadEnvVar(t *testing.T) {
 		want configEnvVar
 	}{
 		{"plain", corev1.EnvVar{Name: "NCCL_IB_GID_INDEX", Value: "3"}, configEnvVar{Name: "NCCL_IB_GID_INDEX", Value: "3"}},
-		{"token", corev1.EnvVar{Name: "HF_TOKEN", Value: "hf_abc"}, configEnvVar{Name: "HF_TOKEN", Value: maskedEnvValue}},
-		{"lowercase secret", corev1.EnvVar{Name: "my_secret", Value: "s"}, configEnvVar{Name: "my_secret", Value: maskedEnvValue}},
-		{"api key", corev1.EnvVar{Name: "OPENAI_API_KEY", Value: "sk"}, configEnvVar{Name: "OPENAI_API_KEY", Value: maskedEnvValue}},
-		{"password", corev1.EnvVar{Name: "DB_PASSWORD", Value: "p"}, configEnvVar{Name: "DB_PASSWORD", Value: maskedEnvValue}},
+		{"token", corev1.EnvVar{Name: "HF_TOKEN", Value: "hf_abc"}, configEnvVar{Name: "HF_TOKEN", Value: maskedValue}},
+		{"lowercase secret", corev1.EnvVar{Name: "my_secret", Value: "s"}, configEnvVar{Name: "my_secret", Value: maskedValue}},
+		{"api key", corev1.EnvVar{Name: "OPENAI_API_KEY", Value: "sk"}, configEnvVar{Name: "OPENAI_API_KEY", Value: maskedValue}},
+		{"password", corev1.EnvVar{Name: "DB_PASSWORD", Value: "p"}, configEnvVar{Name: "DB_PASSWORD", Value: maskedValue}},
+		{"passwd", corev1.EnvVar{Name: "PGPASSWD", Value: "p"}, configEnvVar{Name: "PGPASSWD", Value: maskedValue}},
+		{"credential", corev1.EnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: "/c.json"}, configEnvVar{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: maskedValue}},
+		{"auth", corev1.EnvVar{Name: "BASIC_AUTH", Value: "u:p"}, configEnvVar{Name: "BASIC_AUTH", Value: maskedValue}},
 		{"empty sensitive value stays empty", corev1.EnvVar{Name: "HF_TOKEN"}, configEnvVar{Name: "HF_TOKEN"}},
 		{
 			"pod field",
@@ -392,7 +466,7 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 				{Name: "MOONCAKE_PROTOCOL", Value: "tcp"},
 				{Name: "MC_FORCE_TCP", Value: "1"},
 				{Name: "NCCL_IB_GID_INDEX", Value: "5"},
-				{Name: "HF_TOKEN", Value: maskedEnvValue},
+				{Name: "HF_TOKEN", Value: maskedValue},
 			}, pod.Env)
 			assert.Contains(t, pod.Resources, resourceQuantity{Name: "cpu", Request: "8", Limit: "8"})
 			assert.Contains(t, pod.Resources, resourceQuantity{Name: "nvidia.com/gpu", Limit: "8"})

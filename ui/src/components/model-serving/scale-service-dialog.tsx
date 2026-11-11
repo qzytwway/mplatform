@@ -21,6 +21,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { MAX_PD_ROLE_REPLICAS } from './service-modes'
+
 interface ScaleServiceDialogProps {
   service: InferenceServiceDetail
   open: boolean
@@ -64,7 +66,14 @@ function ScaleServiceDialogContent({
     roleReplicas('prefill')
   )
   const [decodeReplicas, setDecodeReplicas] = useState(roleReplicas('decode'))
-  const [routerReplicas, setRouterReplicas] = useState(roleReplicas('router'))
+  // The backend cannot scale a missing router; one scaled to zero outside
+  // the console is treated alike.
+  const currentRouterReplicas =
+    service.roles.find((role) => role.name === 'router')?.replicas ?? 0
+  const routerExists = currentRouterReplicas >= 1
+  const [routerReplicas, setRouterReplicas] = useState(
+    String(currentRouterReplicas)
+  )
   // The router's default policy is cache_aware.
   const routerPolicy = service.deployment?.routerPolicy
   const cacheAware =
@@ -84,19 +93,24 @@ function ScaleServiceDialogContent({
           ? {
               prefillReplicas: Number(prefillReplicas),
               decodeReplicas: Number(decodeReplicas),
-              routerReplicas: Number(routerReplicas),
+              // Omitted, the router is left as it is.
+              ...(routerExists &&
+                Number(routerReplicas) !== currentRouterReplicas && {
+                  routerReplicas: Number(routerReplicas),
+                }),
             }
           : { replicas: Number(replicas) }
       )
       toast.success(t('modelServing.services.messages.scaled'))
-      await queryClient.invalidateQueries({
-        queryKey: ['model-serving-services'],
-      })
       onClose()
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
       setIsScaling(false)
+      // A scale that failed halfway has changed the service too.
+      void queryClient.invalidateQueries({
+        queryKey: ['model-serving-services'],
+      })
     }
   }
 
@@ -121,6 +135,7 @@ function ScaleServiceDialogContent({
                 id="scale-prefill-replicas"
                 type="number"
                 min={1}
+                max={MAX_PD_ROLE_REPLICAS}
                 value={prefillReplicas}
                 onChange={(event) => setPrefillReplicas(event.target.value)}
                 required
@@ -134,6 +149,7 @@ function ScaleServiceDialogContent({
                 id="scale-decode-replicas"
                 type="number"
                 min={1}
+                max={MAX_PD_ROLE_REPLICAS}
                 value={decodeReplicas}
                 onChange={(event) => setDecodeReplicas(event.target.value)}
                 required
@@ -149,9 +165,15 @@ function ScaleServiceDialogContent({
                 min={1}
                 value={routerReplicas}
                 onChange={(event) => setRouterReplicas(event.target.value)}
+                disabled={!routerExists}
                 required
               />
             </div>
+            {!routerExists && (
+              <p className="text-xs text-muted-foreground sm:col-span-3">
+                {t('modelServing.services.routerMissing')}
+              </p>
+            )}
             {cacheAware && Number(routerReplicas) > 1 && (
               <p className="text-xs text-destructive sm:col-span-3">
                 {t('modelServing.services.routerCacheWarning')}

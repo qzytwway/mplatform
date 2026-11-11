@@ -1,5 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -12,7 +12,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
 
-const SERVICE_IMAGE = 'lmsysorg/sglang:v0.5'
+const SERVICE = { image: 'lmsysorg/sglang:v0.5', cpu: '8', memory: '' }
+const SERVICE_IMAGE = SERVICE.image
 
 const ROLE: PDRoleValues = {
   replicas: '1',
@@ -41,16 +42,20 @@ const IMAGES_DIFFER = 'modelServing.services.roleImagesDiffer'
 const CACHE_WARNING = 'modelServing.services.routerCacheWarning'
 const NEEDS_RDMA = 'modelServing.services.transferBackendNeedsRDMA'
 
-function renderPD(patch: Partial<ServiceModeValues>, rdmaEnabled = false) {
+function renderPD(
+  patch: Partial<ServiceModeValues>,
+  rdmaEnabled = false,
+  onValuesChange: (values: ServiceModeValues) => void = () => {}
+) {
   render(
     <ServiceModeFields
       mode="pd"
       onModeChange={() => {}}
       blockers={{ single: undefined, multi: undefined, pd: undefined }}
       values={{ ...VALUES, ...patch }}
-      onValuesChange={() => {}}
+      onValuesChange={onValuesChange}
       gpuCountLabel="GPUs per pod"
-      image={SERVICE_IMAGE}
+      service={SERVICE}
       rdmaEnabled={rdmaEnabled}
     />
   )
@@ -70,6 +75,45 @@ describe('ServiceModeFields in PD mode', () => {
     expect(
       screen.getByLabelText('modelServing.services.routerImage')
     ).toHaveAttribute('placeholder', SERVICE_IMAGE)
+  })
+
+  it('changes the role whose field is edited', () => {
+    const onValuesChange = vi.fn()
+    renderPD({}, false, onValuesChange)
+
+    fireEvent.change(
+      screen.getByLabelText('common.fields.replicas', {
+        selector: '#inference-decode-replicas',
+      }),
+      { target: { value: '3' } }
+    )
+
+    expect(onValuesChange).toHaveBeenLastCalledWith({
+      ...VALUES,
+      decode: { ...ROLE, replicas: '3' },
+    })
+  })
+
+  it('changes a role override in its advanced settings', () => {
+    const onValuesChange = vi.fn()
+    renderPD({}, false, onValuesChange)
+
+    fireEvent.click(screen.getAllByText('common.fields.advancedSettings')[0])
+    const cpu = screen.getByLabelText('common.fields.cpu', {
+      selector: '#inference-prefill-cpu',
+    })
+    fireEvent.change(cpu, { target: { value: '16' } })
+
+    expect(cpu).toHaveAttribute('placeholder', SERVICE.cpu)
+    expect(
+      screen.getByLabelText('common.fields.memory', {
+        selector: '#inference-prefill-memory',
+      })
+    ).toHaveAttribute('placeholder', 'modelServing.services.inheritService')
+    expect(onValuesChange).toHaveBeenLastCalledWith({
+      ...VALUES,
+      prefill: { ...ROLE, cpu: '16' },
+    })
   })
 
   it.each([

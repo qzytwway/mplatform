@@ -1,6 +1,7 @@
 package modelserving
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -16,9 +17,11 @@ const (
 	maxServiceNameLength = 40
 	// The DisaggregatedSet webhook of LWS v1.0.0 (validateGeneratedNames)
 	// rejects names whose child LeaderWorkerSets or pods would exceed 63
-	// characters, which a longer name reaches with the prefill role at two
-	// digit replica counts.
+	// characters. A 30-character name stays within that for the prefill role
+	// while replica indexes have at most two digits, so pd roles are capped
+	// at maxPDRoleReplicas: a 101st replica would be rejected on scale-up.
 	maxPDServiceNameLength = 30
+	maxPDRoleReplicas      = 100
 )
 
 type serviceRequest struct {
@@ -213,7 +216,7 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	pd := pdRequest{
 		Prefill:         prefill,
 		Decode:          decode,
-		RouterImage:     strings.TrimSpace(req.PD.RouterImage),
+		RouterImage:     cmp.Or(strings.TrimSpace(req.PD.RouterImage), defaultRouterImage(&req)),
 		TransferBackend: req.PD.TransferBackend,
 		IBDevices:       strings.TrimSpace(req.PD.IBDevices),
 		RouterReplicas:  req.PD.RouterReplicas,
@@ -256,6 +259,13 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	return req, nil
 }
 
+// defaultRouterImage is the image a pd router runs unless one is given.
+// SGLang images ship sglang_router, and sharing the service image keeps the
+// router at the engine version it routes to.
+func defaultRouterImage(req *serviceRequest) string {
+	return req.Image
+}
+
 func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
 	field := "pd." + name
 	role := pdRoleRequest{
@@ -270,6 +280,9 @@ func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
 	}
 	if role.Replicas < 1 || role.GroupSize < 1 || role.GPUCount < 1 {
 		return role, fmt.Errorf("%s replicas, groupSize and gpuCount must be at least 1", field)
+	}
+	if role.Replicas > maxPDRoleReplicas {
+		return role, fmt.Errorf("%s replicas must be at most %d", field, maxPDRoleReplicas)
 	}
 	if err := validateArgs(field+".extraArgs", role.ExtraArgs); err != nil {
 		return role, err
