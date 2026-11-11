@@ -73,7 +73,7 @@ func (h *Handler) ListServices(c *gin.Context) {
 }
 
 func listServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceService, error) {
-	workloads, err := listWorkloads(ctx, cs)
+	workloads, err := listWorkloads(ctx, cs, "")
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +88,10 @@ func listServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceServic
 	return items, nil
 }
 
-// listWorkloads returns the workloads of every inference service in the
-// cluster, skipping kinds whose CRD is not installed.
-func listWorkloads(ctx context.Context, cs *cluster.ClientSet) ([]unstructured.Unstructured, error) {
+// listWorkloads returns the workloads of every inference service in
+// namespace, or in the cluster when namespace is "", skipping kinds whose CRD
+// is not installed.
+func listWorkloads(ctx context.Context, cs *cluster.ClientSet, namespace string) ([]unstructured.Unstructured, error) {
 	items := []unstructured.Unstructured{}
 	for _, kind := range workloadKinds {
 		installed, err := crdInstalled(ctx, cs, kind.crd)
@@ -102,7 +103,8 @@ func listWorkloads(ctx context.Context, cs *cluster.ClientSet) ([]unstructured.U
 		}
 		workloads := &unstructured.UnstructuredList{}
 		workloads.SetGroupVersionKind(kind.gvk)
-		if err := cs.K8sClient.List(ctx, workloads, client.MatchingLabels{managedByLabel: managedByValue}); err != nil {
+		if err := cs.K8sClient.List(ctx, workloads, client.InNamespace(namespace),
+			client.MatchingLabels{managedByLabel: managedByValue}); err != nil {
 			return nil, err
 		}
 		for i := range workloads.Items {
@@ -189,7 +191,12 @@ func (h *Handler) GetService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, serviceDetail{inferenceService: service, Pods: pods, Deployment: config})
+	c.JSON(http.StatusOK, serviceDetail{
+		inferenceService: service,
+		Pods:             pods,
+		Deployment:       config,
+		SharedSubdomain:  sharedSubdomain(workload),
+	})
 }
 
 func (h *Handler) CreateService(c *gin.Context) {
@@ -226,7 +233,7 @@ func (h *Handler) CreateService(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	workloads, err := listWorkloads(ctx, cs)
+	workloads, err := listWorkloads(ctx, cs, req.Namespace)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -33,6 +33,7 @@ import { ServiceDeploymentCard } from '@/components/model-serving/service-deploy
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
 import { ServicePublishCard } from '@/components/model-serving/service-publish-card'
+import { SharedSubdomainAlert } from '@/components/model-serving/shared-subdomain-alert'
 
 const SERVICES_PATH = '/model-serving/services'
 
@@ -122,6 +123,13 @@ export function ServiceDetailPage() {
           {t('common.actions.delete')}
         </Button>
       </div>
+
+      {service.sharedSubdomain && (
+        <SharedSubdomainAlert
+          name={service.name}
+          namespace={service.namespace}
+        />
+      )}
 
       <Card>
         <CardHeader>

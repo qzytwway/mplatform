@@ -332,6 +332,9 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
               maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
               required
             />
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.nameHint')}
+            </p>
             {mode === 'pd' && (
               <p className="text-xs text-muted-foreground">
                 {t('modelServing.services.pdNameHint', {

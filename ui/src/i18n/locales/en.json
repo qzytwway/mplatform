@@ -2203,6 +2203,9 @@
       "routerImage": "Router image",
       "routerMissing": "The router is missing, so it cannot be scaled here.",
       "pdNameHint": "PD service names are at most {{max}} characters.",
+      "nameHint": "Must not be another service's name in this namespace plus a hyphen and a number, such as qwen-0 when qwen exists.",
+      "sharedSubdomainTitle": "This service cannot become ready",
+      "sharedSubdomainDescription": "It was created before a fix: its LeaderWorkerSet has the same name as its Service, so it never becomes ready. Delete and recreate the service, or run the command below, which recreates every group in a rolling update.",
       "routerImageHints": {
         "sglang": "Leave empty to use the service image, so the router matches the engine version it routes to. The image must include sglang_router.",
         "vllm": "Leave empty to use {{image}}; vLLM images do not include a router. The image must include vllm-router."

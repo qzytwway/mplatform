@@ -100,6 +100,9 @@ export interface InferencePod {
 export interface InferenceServiceDetail extends InferenceService {
   pods: InferencePod[]
   deployment?: DeploymentConfig | null
+  // Set on single and multi-node services created before their
+  // LeaderWorkerSet got a headless Service per group; they never get ready.
+  sharedSubdomain?: boolean
 }
 
 // DeploymentConfig is read back from the pod templates of a service's

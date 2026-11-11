@@ -2290,6 +2290,9 @@
       "routerImage": "路由镜像",
       "routerMissing": "路由不存在，无法在此伸缩。",
       "pdNameHint": "PD 服务名最多 {{max}} 个字符。",
+      "nameHint": "不能与同命名空间已有服务名加“-数字”重名，例如已有 qwen 时不能叫 qwen-0。",
+      "sharedSubdomainTitle": "该服务无法就绪",
+      "sharedSubdomainDescription": "该服务创建于修复之前，其 LeaderWorkerSet 与对外 Service 同名，导致无法就绪。请删除后重建，或执行以下命令（会滚动重建整组）：",
       "routerImageHints": {
         "sglang": "留空则使用服务镜像，使路由与其转发的推理引擎版本一致。镜像需包含 sglang_router。",
         "vllm": "留空则使用 {{image}}；vLLM 镜像不含路由。镜像需包含 vllm-router。"
