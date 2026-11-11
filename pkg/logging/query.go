@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,7 +18,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/common"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
-	"gorm.io/gorm"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -32,14 +30,17 @@ const (
 	maxErrorBodyBytes = 1024
 )
 
+// transports keeps each cluster's API proxy transport while its client set
+// is unchanged, so queries reuse connections.
 var (
-	transportMu     sync.Mutex
-	cachedTransport struct {
-		cs  *cluster.ClientSet
-		url string
-		rt  http.RoundTripper
-	}
+	transportMu sync.Mutex
+	transports  = map[string]clusterTransport{}
 )
+
+type clusterTransport struct {
+	cs *cluster.ClientSet
+	rt http.RoundTripper
+}
 
 func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	g := group.Group("/logging")
@@ -56,15 +57,12 @@ type logQuery struct {
 }
 
 func (h *Handler) QueryStatus(c *gin.Context) {
-	_, err := loadStorage()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusOK, gin.H{"configured": false})
-		return
-	} else if err != nil {
+	storage, _, err := releasesInstalled(c.MustGet("cluster").(*cluster.ClientSet))
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"configured": true})
+	c.JSON(http.StatusOK, gin.H{"configured": storage})
 }
 
 func (h *Handler) Query(c *gin.Context) {
@@ -88,7 +86,7 @@ func (h *Handler) Query(c *gin.Context) {
 	params := q.params()
 	params.Set("query", fmt.Sprintf("%s | sort by (_time desc) | limit %d", q.query, limit))
 
-	resp, err := h.victoriaLogsGet(c.Request.Context(), "/select/logsql/query", params)
+	resp, err := victoriaLogsGet(c, "/select/logsql/query", params)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -131,7 +129,7 @@ func (h *Handler) Hits(c *gin.Context) {
 	params.Set("query", q.query)
 	params.Set("step", fmt.Sprintf("%ds", step))
 
-	resp, err := h.victoriaLogsGet(c.Request.Context(), "/select/logsql/hits", params)
+	resp, err := victoriaLogsGet(c, "/select/logsql/hits", params)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -255,27 +253,17 @@ func (q *logQuery) params() url.Values {
 	}
 }
 
-func (h *Handler) victoriaLogsGet(ctx context.Context, path string, params url.Values) (*http.Response, error) {
-	storage, err := loadStorage()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("log storage is not installed")
-	} else if err != nil {
-		return nil, err
-	}
-	cs, err := h.cm.GetClientSet(storage.ClusterName)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, storage.WriteURL+path+"?"+params.Encode(), nil)
+// victoriaLogsGet queries the VictoriaLogs of the request's cluster, which is
+// only reachable inside that cluster, through the Kubernetes API proxy.
+func victoriaLogsGet(c *gin.Context, path string, params url.Values) (*http.Response, error) {
+	cs := c.MustGet("cluster").(*cluster.ClientSet)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), queryTimeout)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, victoriaLogsServiceURL()+path+"?"+params.Encode(), nil)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	// The Kubernetes API proxy strips Authorization, so the platform queries
-	// the NodePort address, through the cluster agent tunnel when needed.
-	req.SetBasicAuth(storage.Username, string(storage.Password))
-	resp, err := (&http.Client{Transport: storageTransport(cs, storage.WriteURL)}).Do(req)
+	resp, err := (&http.Client{Transport: clusterProxyTransport(cs)}).Do(req)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("victorialogs request failed: %w", err)
@@ -290,17 +278,15 @@ func (h *Handler) victoriaLogsGet(ctx context.Context, path string, params url.V
 	return resp, nil
 }
 
-// storageTransport reuses the transport while the storage cluster's client set
-// is unchanged, so agent tunnels keep their connection pool.
-func storageTransport(cs *cluster.ClientSet, writeURL string) http.RoundTripper {
+func clusterProxyTransport(cs *cluster.ClientSet) http.RoundTripper {
 	transportMu.Lock()
 	defer transportMu.Unlock()
-	if cachedTransport.cs != cs || cachedTransport.url != writeURL {
-		cachedTransport.cs = cs
-		cachedTransport.url = writeURL
-		cachedTransport.rt = cluster.ServiceTransport(cs, "VictoriaLogs", writeURL)
+	cached, ok := transports[cs.Name]
+	if !ok || cached.cs != cs {
+		cached = clusterTransport{cs: cs, rt: cluster.ServiceTransport(cs, "VictoriaLogs", victoriaLogsServiceURL())}
+		transports[cs.Name] = cached
 	}
-	return cachedTransport.rt
+	return cached.rt
 }
 
 type cancelOnClose struct {

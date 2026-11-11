@@ -5,15 +5,9 @@ import { useCluster } from '@/hooks/use-cluster'
 import { apiClient } from '../api-client'
 import { withCurrentClusterPath } from '../current-cluster'
 
-export interface LogStorage {
-  clusterName: string
-  namespace: string
-  serviceURL: string
-  writeURL: string
-}
-
-export interface ClusterCollectorStatus {
+export interface ClusterLoggingStatus {
   name: string
+  storage: boolean
   collecting: boolean
   error?: string
 }
@@ -25,15 +19,11 @@ export interface LoggingChart {
 }
 
 export interface LoggingStatus {
-  storage: LogStorage | null
   charts: LoggingChart[]
-  clusters: ClusterCollectorStatus[]
+  clusters: ClusterLoggingStatus[]
 }
 
-export interface InstallLogStorageRequest {
-  cluster: string
-  nodeHost: string
-  nodePort?: number
+export interface InstallLoggingRequest {
   storageSize?: string
   storageClass?: string
   retention?: string
@@ -64,24 +54,19 @@ export function useLoggingStatus() {
   })
 }
 
-export function installLogStorage(request: InstallLogStorageRequest) {
-  return apiClient.post<LogStorage>('/admin/logging/storage', request)
-}
-
-export function uninstallLogStorage() {
-  return apiClient.delete<{ message: string }>('/admin/logging/storage')
-}
-
-export function enableLogCollector(cluster: string) {
+export function installLogging(
+  cluster: string,
+  request: InstallLoggingRequest
+) {
   return apiClient.post<{ message: string }>(
-    `/admin/logging/collectors/${encodeURIComponent(cluster)}`,
-    {}
+    `/admin/logging/clusters/${encodeURIComponent(cluster)}`,
+    request
   )
 }
 
-export function disableLogCollector(cluster: string) {
+export function uninstallLogging(cluster: string) {
   return apiClient.delete<{ message: string }>(
-    `/admin/logging/collectors/${encodeURIComponent(cluster)}`
+    `/admin/logging/clusters/${encodeURIComponent(cluster)}`
   )
 }
 

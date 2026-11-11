@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +13,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientgofake "k8s.io/client-go/kubernetes/fake"
 )
@@ -130,21 +128,4 @@ func TestParseLogQueryScopesNamespacesByRBAC(t *testing.T) {
 			require.Equal(t, tc.wantFilters, filters)
 		})
 	}
-}
-
-func TestAuthSecretIsCreatedUpdatedAndDeleted(t *testing.T) {
-	ctx := context.Background()
-	clientSet := &cluster.ClientSet{Name: "prod", K8sClient: &kube.K8sClient{ClientSet: clientgofake.NewSimpleClientset()}}
-	secrets := clientSet.K8sClient.ClientSet.CoreV1().Secrets(Namespace)
-
-	require.NoError(t, ensureAuthSecret(ctx, clientSet, "first"))
-	require.NoError(t, ensureAuthSecret(ctx, clientSet, "second"))
-	secret, err := secrets.Get(ctx, authSecretName, metav1.GetOptions{})
-	require.NoError(t, err)
-	require.Equal(t, "second", secret.StringData[authSecretKey])
-
-	require.NoError(t, deleteAuthSecret(ctx, clientSet))
-	require.NoError(t, deleteAuthSecret(ctx, clientSet))
-	_, err = secrets.Get(ctx, authSecretName, metav1.GetOptions{})
-	require.True(t, apierrors.IsNotFound(err))
 }

@@ -104,7 +104,6 @@ func InitDB() {
 		PendingSession{},
 		HelmRepository{},
 		ScheduledTask{},
-		LogStorage{},
 		ModelStorage{},
 		ServedModel{},
 		ModelGateway{},

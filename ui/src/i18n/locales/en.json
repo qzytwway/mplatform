@@ -1462,7 +1462,7 @@
       },
       "logs": {
         "title": "Log storage is not configured",
-        "description": "Install VictoriaLogs and turn on collection for this cluster in the logging settings to search logs here."
+        "description": "Install logging for this cluster in the logging settings to search its logs here."
       },
       "forbidden": "You do not have permission to view this",
       "failed": "Could not load data",
@@ -1578,43 +1578,33 @@
     }
   },
   "logging": {
-    "storage": {
-      "title": "Log storage",
-      "description": "Install VictoriaLogs into one cluster to store logs from every cluster. It is exposed through a NodePort so Vector agents in other clusters, and MPlatform itself, can reach it; access requires a generated password.",
-      "cluster": "Cluster",
-      "selectCluster": "Select a cluster",
-      "namespace": "Namespace",
-      "writeURL": "Write address",
+    "title": "Logging",
+    "description": "Install logging into a cluster: VictoriaLogs stores the cluster's container logs, and a Vector agent on every node collects them. Logs stay in their own cluster, and MPlatform queries them through the cluster's Kubernetes API.",
+    "installed": "Installed",
+    "incomplete": "Incomplete",
+    "notInstalled": "Not installed",
+    "unavailable": "Unavailable",
+    "chartsHint": "Logging charts are read from the app store's local repository. Offline clusters also need the images below; each cluster pulls them from <registry>/<image>:<tag> using its image registry setting.",
+    "chartMissing": "Not uploaded",
+    "upgradeHint": "Uploading a newer chart does not upgrade components that are already installed.",
+    "actions": {
+      "install": "Install",
+      "installing": "Installing...",
+      "uninstall": "Uninstall"
+    },
+    "install": {
+      "title": "Install logging in {{cluster}}",
+      "description": "Installs VictoriaLogs and Vector into the mplatform-logging namespace of the cluster.",
       "retention": "Retention",
-      "nodeHost": "Node address",
       "storageSize": "Storage size",
       "storageClass": "Storage class",
       "defaultStorageClass": "Cluster default",
-      "chartsHint": "Logging charts are read from the app store's local repository. Offline clusters also need the images below; each cluster pulls them from <registry>/<image>:<tag> using its image registry setting.",
-      "chartMissing": "Not uploaded",
-      "nodeHostHint": "Enter an IP address or host name of a node in that cluster. Other clusters and MPlatform write to and query http://<node address>:<NodePort>. Retention accepts h, d, w or y, such as 7d.",
-      "upgradeHint": "Uploading a newer chart does not upgrade components that are already installed."
-    },
-    "collectors": {
-      "title": "Log collection",
-      "description": "Turning collection on installs a Vector agent on every node of the cluster, which sends container logs to the log storage.",
-      "storageRequired": "Install log storage before turning on collection.",
-      "unavailable": "Unavailable",
-      "collecting": "Collecting",
-      "notCollecting": "Off",
-      "toggle": "Log collection for {{cluster}}"
-    },
-    "actions": {
-      "installStorage": "Install",
-      "installing": "Installing...",
-      "uninstallStorage": "Uninstall"
+      "hint": "VictoriaLogs keeps logs on a persistent volume for the retention period, which accepts h, d, w or y, such as 7d."
     },
     "messages": {
-      "storageInstalled": "Log storage installed",
-      "storageUninstalled": "Log storage uninstalled",
-      "uninstallStorageNote": "Turn off collection on every cluster first. The data volume is kept and must be deleted manually.",
-      "collectorEnabled": "Log collection turned on for {{cluster}}",
-      "collectorDisabled": "Log collection turned off for {{cluster}}"
+      "installed": "Logging installed in {{cluster}}",
+      "uninstalled": "Logging uninstalled from {{cluster}}",
+      "uninstallNote": "VictoriaLogs and Vector are removed. The log data volume is kept and must be deleted manually."
     },
     "search": {
       "pod": "Pod",

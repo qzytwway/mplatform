@@ -2,8 +2,6 @@ package logging
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,8 +13,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
-	"github.com/qzytwway/mplatform/pkg/utils"
-	"gorm.io/gorm"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,7 +26,6 @@ const (
 	helmActionTimeout  = 5 * time.Minute
 	defaultStorageSize = "20Gi"
 	defaultRetention   = "7d"
-	defaultNodePort    = 30428
 )
 
 var (
@@ -53,33 +48,23 @@ func NewHandler(cm *cluster.ClusterManager) *Handler {
 func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g := group.Group("/logging")
 	g.GET("", h.GetStatus)
-	g.POST("/storage", h.InstallStorage)
-	g.DELETE("/storage", h.UninstallStorage)
-	g.POST("/collectors/:cluster", h.EnableCollector)
-	g.DELETE("/collectors/:cluster", h.DisableCollector)
+	g.POST("/clusters/:cluster", h.Install)
+	g.DELETE("/clusters/:cluster", h.Uninstall)
 }
 
-type installStorageRequest struct {
-	Cluster      string `json:"cluster" binding:"required"`
+type installRequest struct {
 	StorageClass string `json:"storageClass"`
 	StorageSize  string `json:"storageSize"`
 	Retention    string `json:"retention"`
-	NodeHost     string `json:"nodeHost" binding:"required"`
-	NodePort     int    `json:"nodePort"`
 }
 
-type clusterCollectorStatus struct {
+// clusterStatus reports which logging releases a cluster has: VictoriaLogs
+// stores the cluster's logs and Vector collects them.
+type clusterStatus struct {
 	Name       string `json:"name"`
+	Storage    bool   `json:"storage"`
 	Collecting bool   `json:"collecting"`
 	Error      string `json:"error,omitempty"`
-}
-
-func loadStorage() (*model.LogStorage, error) {
-	var storage model.LogStorage
-	if err := model.DB.First(&storage).Error; err != nil {
-		return nil, err
-	}
-	return &storage, nil
 }
 
 func (h *Handler) GetStatus(c *gin.Context) {
@@ -88,183 +73,54 @@ func (h *Handler) GetStatus(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	storage, err := loadStorage()
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	clusters, err := h.collectorStatuses()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"storage": storage, "charts": charts, "clusters": clusters})
-}
-
-func (h *Handler) collectorStatuses() ([]clusterCollectorStatus, error) {
 	clusters, err := model.ListClusters()
 	if err != nil {
-		return nil, err
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	statuses := make([]clusterCollectorStatus, 0, len(clusters))
+	statuses := make([]clusterStatus, 0, len(clusters))
 	for _, stored := range clusters {
 		if !stored.Enable {
 			continue
 		}
-		status := clusterCollectorStatus{Name: stored.Name}
+		status := clusterStatus{Name: stored.Name}
 		if cs, err := h.cm.GetClientSet(stored.Name); err != nil {
 			status.Error = err.Error()
-		} else if status.Collecting, err = releaseExists(cs, vectorRelease); err != nil {
+		} else if status.Storage, status.Collecting, err = releasesInstalled(cs); err != nil {
 			status.Error = err.Error()
 		}
 		statuses = append(statuses, status)
 	}
-	return statuses, nil
+	c.JSON(http.StatusOK, gin.H{"charts": charts, "clusters": statuses})
 }
 
-func releaseExists(cs *cluster.ClientSet, name string) (bool, error) {
+func releasesInstalled(cs *cluster.ClientSet) (storage, collecting bool, err error) {
 	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, Namespace)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return helmutil.ReleaseExists(cfg, name)
+	if storage, err = helmutil.ReleaseExists(cfg, victoriaLogsRelease); err != nil {
+		return false, false, err
+	}
+	collecting, err = helmutil.ReleaseExists(cfg, vectorRelease)
+	return storage, collecting, err
 }
 
-func (h *Handler) InstallStorage(c *gin.Context) {
-	var req installStorageRequest
+// Install puts VictoriaLogs and the Vector agent that feeds it into the
+// cluster. Releases already there are kept, so a failed install can be
+// retried.
+func (h *Handler) Install(c *gin.Context) {
+	cs, err := h.cm.GetClientSet(c.Param("cluster"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	var req installRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	opts, writeURL, err := parseInstallStorageRequest(&req)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if _, err := loadStorage(); err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "log storage is already installed"})
-		return
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	cs, err := h.cm.GetClientSet(req.Cluster)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	password, err := randomPassword()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	loadedChart, err := loadVictoriaLogsChart()
-	if err != nil {
-		c.JSON(chartErrorStatus(err), gin.H{"error": err.Error()})
-		return
-	}
-	if err := installRelease(c, cs, victoriaLogsRelease, loadedChart, victoriaLogsValues(opts), password); err != nil {
-		c.JSON(installErrorStatus(err), gin.H{"error": err.Error()})
-		return
-	}
-
-	storage := model.LogStorage{
-		ClusterName: cs.Name,
-		Namespace:   Namespace,
-		ServiceURL:  victoriaLogsServiceURL(),
-		WriteURL:    writeURL,
-		Username:    authUsername,
-		Password:    model.SecretString(password),
-	}
-	if err := model.DB.Create(&storage).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, storage)
-}
-
-func parseInstallStorageRequest(req *installStorageRequest) (storageOptions, string, error) {
-	opts := storageOptions{
-		StorageClass: strings.TrimSpace(req.StorageClass),
-		StorageSize:  strings.TrimSpace(req.StorageSize),
-		Retention:    strings.TrimSpace(req.Retention),
-		NodePort:     req.NodePort,
-	}
-	if opts.StorageSize == "" {
-		opts.StorageSize = defaultStorageSize
-	}
-	if opts.Retention == "" {
-		opts.Retention = defaultRetention
-	}
-	if opts.NodePort == 0 {
-		opts.NodePort = defaultNodePort
-	}
-	if quantity, err := resource.ParseQuantity(opts.StorageSize); err != nil || quantity.Sign() <= 0 {
-		return opts, "", fmt.Errorf("storage size must be a positive quantity such as 20Gi")
-	}
-	if opts.StorageClass != "" && len(validation.IsDNS1123Subdomain(opts.StorageClass)) > 0 {
-		return opts, "", fmt.Errorf("storage class must be a valid resource name")
-	}
-	if !retentionPattern.MatchString(opts.Retention) {
-		return opts, "", fmt.Errorf("retention must be a number followed by h, d, w or y, such as 7d")
-	}
-	endpoint, err := utils.NodeEndpoint(req.NodeHost, opts.NodePort)
-	if err != nil {
-		return opts, "", err
-	}
-	return opts, "http://" + endpoint, nil
-}
-
-func (h *Handler) UninstallStorage(c *gin.Context) {
-	storage, err := loadStorage()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "log storage is not installed"})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	statuses, err := h.collectorStatuses()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	for _, status := range statuses {
-		if status.Collecting {
-			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("disable log collection on cluster %s first", status.Name)})
-			return
-		}
-	}
-	cs, err := h.cm.GetClientSet(storage.ClusterName)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := uninstallRelease(c, cs, victoriaLogsRelease); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := deleteAuthSecret(c.Request.Context(), cs); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := model.DB.Delete(storage).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "log storage uninstalled"})
-}
-
-func (h *Handler) EnableCollector(c *gin.Context) {
-	storage, err := loadStorage()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "install log storage first"})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	cs, err := h.cm.GetClientSet(c.Param("cluster"))
+	opts, err := parseInstallRequest(req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -274,85 +130,122 @@ func (h *Handler) EnableCollector(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cluster names containing commas cannot collect logs"})
 		return
 	}
-	writeURL := storage.WriteURL
-	if cs.Name == storage.ClusterName {
-		writeURL = storage.ServiceURL
-	}
-	loadedChart, err := loadVectorChart()
+	victoriaLogsChart, err := loadVictoriaLogsChart()
 	if err != nil {
 		c.JSON(chartErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	values := vectorValues(collectorOptions{ClusterName: cs.Name, WriteURL: writeURL})
-	if err := installRelease(c, cs, vectorRelease, loadedChart, values, string(storage.Password)); err != nil {
-		c.JSON(installErrorStatus(err), gin.H{"error": err.Error()})
+	vectorChart, err := loadVectorChart()
+	if err != nil {
+		c.JSON(chartErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "log collection enabled"})
+	ctx := c.Request.Context()
+	if err := ensureNamespace(ctx, cs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, Namespace)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	operatorID := c.MustGet("user").(model.User).ID
+	releases := []struct {
+		name   string
+		chart  *chart.Chart
+		values map[string]any
+	}{
+		{victoriaLogsRelease, victoriaLogsChart, victoriaLogsValues(opts)},
+		{vectorRelease, vectorChart, vectorValues(collectorOptions{ClusterName: cs.Name})},
+	}
+	installed := 0
+	for _, release := range releases {
+		err := helmutil.ClaimReleaseName(cfg, cs.Name, operatorID, release.name, Namespace, uninstallOptions)
+		if errors.Is(err, helmutil.ErrReleaseAlreadyInstalled) {
+			continue
+		} else if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		err = helmutil.InstallPlatformRelease(ctx, cfg, cs.Name, operatorID, release.chart, release.values, helmutil.InstallReleaseOptions{
+			ReleaseName: release.name,
+			Namespace:   Namespace,
+			Timeout:     helmActionTimeout,
+			Description: "Installed by MPlatform logging",
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		installed++
+	}
+	if installed == 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "logging is already installed in this cluster"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"message": "logging installed"})
 }
 
-func (h *Handler) DisableCollector(c *gin.Context) {
+func parseInstallRequest(req installRequest) (storageOptions, error) {
+	opts := storageOptions{
+		StorageClass: strings.TrimSpace(req.StorageClass),
+		StorageSize:  strings.TrimSpace(req.StorageSize),
+		Retention:    strings.TrimSpace(req.Retention),
+	}
+	if opts.StorageSize == "" {
+		opts.StorageSize = defaultStorageSize
+	}
+	if opts.Retention == "" {
+		opts.Retention = defaultRetention
+	}
+	if quantity, err := resource.ParseQuantity(opts.StorageSize); err != nil || quantity.Sign() <= 0 {
+		return opts, fmt.Errorf("storage size must be a positive quantity such as 20Gi")
+	}
+	if opts.StorageClass != "" && len(validation.IsDNS1123Subdomain(opts.StorageClass)) > 0 {
+		return opts, fmt.Errorf("storage class must be a valid resource name")
+	}
+	if !retentionPattern.MatchString(opts.Retention) {
+		return opts, fmt.Errorf("retention must be a number followed by h, d, w or y, such as 7d")
+	}
+	return opts, nil
+}
+
+// Uninstall removes Vector first, so it stops sending before the storage
+// goes away. The VictoriaLogs data volume is kept.
+func (h *Handler) Uninstall(c *gin.Context) {
 	cs, err := h.cm.GetClientSet(c.Param("cluster"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := uninstallRelease(c, cs, vectorRelease); err != nil {
+	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, Namespace)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// The storage cluster's VictoriaLogs still reads the same Secret.
-	storage, err := loadStorage()
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if storage == nil || storage.ClusterName != cs.Name {
-		if err := deleteAuthSecret(c.Request.Context(), cs); err != nil {
+	operatorID := c.MustGet("user").(model.User).ID
+	removed := 0
+	for _, name := range []string{vectorRelease, victoriaLogsRelease} {
+		exists, err := helmutil.ReleaseExists(cfg, name)
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if !exists {
+			continue
+		}
+		if err := helmutil.UninstallPlatformRelease(cfg, cs.Name, operatorID, name, Namespace, uninstallOptions); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		removed++
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "log collection disabled"})
-}
-
-func installRelease(c *gin.Context, cs *cluster.ClientSet, name string, loadedChart *chart.Chart, values map[string]any, password string) error {
-	ctx := c.Request.Context()
-	if err := ensureNamespace(ctx, cs); err != nil {
-		return err
+	if removed == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logging is not installed in this cluster"})
+		return
 	}
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, Namespace)
-	if err != nil {
-		return err
-	}
-	operatorID := c.MustGet("user").(model.User).ID
-	if err := helmutil.ClaimReleaseName(cfg, cs.Name, operatorID, name, Namespace, uninstallOptions); err != nil {
-		return err
-	}
-	if err := ensureAuthSecret(ctx, cs, password); err != nil {
-		return err
-	}
-	return helmutil.InstallPlatformRelease(ctx, cfg, cs.Name, operatorID, loadedChart, values, helmutil.InstallReleaseOptions{
-		ReleaseName: name,
-		Namespace:   Namespace,
-		Timeout:     helmActionTimeout,
-		Description: "Installed by MPlatform logging",
-	})
-}
-
-func installErrorStatus(err error) int {
-	if errors.Is(err, helmutil.ErrReleaseAlreadyInstalled) {
-		return http.StatusConflict
-	}
-	return http.StatusInternalServerError
-}
-
-func uninstallRelease(c *gin.Context, cs *cluster.ClientSet, name string) error {
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, Namespace)
-	if err != nil {
-		return err
-	}
-	return helmutil.UninstallPlatformRelease(cfg, cs.Name, c.MustGet("user").(model.User).ID, name, Namespace, uninstallOptions)
+	c.JSON(http.StatusOK, gin.H{"message": "logging uninstalled"})
 }
 
 // ensureNamespace creates the logging namespace with the privileged Pod
@@ -370,37 +263,4 @@ func ensureNamespace(ctx context.Context, cs *cluster.ClientSet) error {
 		return nil
 	}
 	return err
-}
-
-func ensureAuthSecret(ctx context.Context, cs *cluster.ClientSet, password string) error {
-	secrets := cs.K8sClient.ClientSet.CoreV1().Secrets(Namespace)
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: authSecretName},
-		Type:       corev1.SecretTypeOpaque,
-		StringData: map[string]string{authSecretKey: password},
-	}
-	_, err := secrets.Create(ctx, secret, metav1.CreateOptions{})
-	if apierrors.IsAlreadyExists(err) {
-		_, err = secrets.Update(ctx, secret, metav1.UpdateOptions{})
-	}
-	if err != nil {
-		return fmt.Errorf("failed to store log storage credentials: %w", err)
-	}
-	return nil
-}
-
-func deleteAuthSecret(ctx context.Context, cs *cluster.ClientSet) error {
-	err := cs.K8sClient.ClientSet.CoreV1().Secrets(Namespace).Delete(ctx, authSecretName, metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to delete log storage credentials: %w", err)
-	}
-	return nil
-}
-
-func randomPassword() (string, error) {
-	buf := make([]byte, 24)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("failed to generate password: %w", err)
-	}
-	return hex.EncodeToString(buf), nil
 }

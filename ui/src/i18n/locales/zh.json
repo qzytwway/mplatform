@@ -1549,7 +1549,7 @@
       },
       "logs": {
         "title": "日志存储未配置",
-        "description": "在设置的日志页安装 VictoriaLogs，并为集群开启采集后，即可在这里检索日志。"
+        "description": "在日志设置中为此集群安装日志组件后，即可在这里检索日志。"
       },
       "forbidden": "你没有查看此内容的权限",
       "failed": "数据加载失败",
@@ -1665,43 +1665,33 @@
     }
   },
   "logging": {
-    "storage": {
-      "title": "日志存储",
-      "description": "在一个集群中安装 VictoriaLogs，集中存储所有集群的日志。它通过 NodePort 暴露，供其他集群的 Vector 和 MPlatform 访问，访问需要平台生成的密码。",
-      "cluster": "集群",
-      "selectCluster": "选择集群",
-      "namespace": "命名空间",
-      "writeURL": "写入地址",
+    "title": "日志",
+    "description": "在集群中安装日志组件：VictoriaLogs 存储本集群的容器日志，每个节点上的 Vector 负责采集。日志留在各自的集群里，MPlatform 通过集群的 Kubernetes API 查询。",
+    "installed": "已安装",
+    "incomplete": "未装全",
+    "notInstalled": "未安装",
+    "unavailable": "不可用",
+    "chartsHint": "日志组件的 Chart 从应用商店的本地仓库（local）读取。离线环境还需要准备下列镜像，各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
+    "chartMissing": "未上传",
+    "upgradeHint": "上传新版本 Chart 不会自动升级已安装的日志组件。",
+    "actions": {
+      "install": "安装",
+      "installing": "安装中...",
+      "uninstall": "卸载"
+    },
+    "install": {
+      "title": "在 {{cluster}} 中安装日志组件",
+      "description": "把 VictoriaLogs 和 Vector 安装到该集群的 mplatform-logging 命名空间。",
       "retention": "保留时长",
-      "nodeHost": "节点地址",
       "storageSize": "存储大小",
       "storageClass": "存储类",
       "defaultStorageClass": "集群默认",
-      "chartsHint": "日志组件的 Chart 从应用商店的本地仓库（local）读取。离线环境还需要准备下列镜像，各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
-      "chartMissing": "未上传",
-      "nodeHostHint": "填写该集群中某个节点的 IP 或主机名，其他集群和 MPlatform 会通过 http://<节点地址>:<NodePort> 写入和查询日志。保留时长支持 h、d、w、y，如 7d。",
-      "upgradeHint": "上传新版本 Chart 不会自动升级已安装的日志组件。"
-    },
-    "collectors": {
-      "title": "日志采集",
-      "description": "开启采集后，会在该集群的每个节点上安装 Vector，把容器日志发送到日志存储。",
-      "storageRequired": "请先安装日志存储，再开启采集。",
-      "unavailable": "不可用",
-      "collecting": "采集中",
-      "notCollecting": "未开启",
-      "toggle": "{{cluster}} 的日志采集"
-    },
-    "actions": {
-      "installStorage": "安装",
-      "installing": "安装中...",
-      "uninstallStorage": "卸载"
+      "hint": "VictoriaLogs 会把日志保存在持久卷上，保留时长支持 h、d、w、y，如 7d。"
     },
     "messages": {
-      "storageInstalled": "日志存储已安装",
-      "storageUninstalled": "日志存储已卸载",
-      "uninstallStorageNote": "请先关闭所有集群的日志采集。数据卷不会被删除，需要手动清理。",
-      "collectorEnabled": "已开启 {{cluster}} 的日志采集",
-      "collectorDisabled": "已关闭 {{cluster}} 的日志采集"
+      "installed": "已在 {{cluster}} 中安装日志组件",
+      "uninstalled": "已从 {{cluster}} 卸载日志组件",
+      "uninstallNote": "会删除 VictoriaLogs 和 Vector，日志数据卷会保留，需要手动删除。"
     },
     "search": {
       "pod": "Pod",
