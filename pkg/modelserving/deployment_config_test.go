@@ -397,6 +397,21 @@ func TestMaskArgs(t *testing.T) {
 			want: []string{"--max-total-tokens", "8192", "--tokenizer-path", "/models/tok", "--author", "me"},
 		},
 		{
+			name: "fields of vLLM json flags in dotted form",
+			args: []string{
+				"--kv-transfer-config.kv_connector_extra_config.token=abc",
+				"--kv-transfer-config.kv_connector_extra_config.api_key", "xyz",
+				"--kv-transfer-config.kv_connector_extra_config.backends", "UCX",
+				"--kv-transfer-config", `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`,
+			},
+			want: []string{
+				"--kv-transfer-config.kv_connector_extra_config.token=" + maskedValue,
+				"--kv-transfer-config.kv_connector_extra_config.api_key", maskedValue,
+				"--kv-transfer-config.kv_connector_extra_config.backends", "UCX",
+				"--kv-transfer-config", `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`,
+			},
+		},
+		{
 			name: "a flag after a sensitive flag is not its value",
 			args: []string{"--enable-auth", "--port", "8000", "--api-key", "-negative"},
 			want: []string{"--enable-auth", "--port", "8000", "--api-key", maskedValue},

@@ -2315,7 +2315,7 @@
       "roleImagesDiffer": "Prefill 与 Decode 使用了不同的镜像。KV 传输要求两侧推理引擎版本一致。",
       "routerCacheWarning": "各路由副本的缓存树不共享，多于一个副本时缓存命中率会下降。",
       "transferBackendNeedsRDMA": "Mooncake (RDMA) 需要 RDMA 网络。请在下方配置，或改用 Mooncake (TCP)。",
-      "roleEnvHint": "每行一个 KEY=VALUE，追加在服务级环境变量之后；与服务级同名的变量以这里为准。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
+      "roleEnvHint": "每行一个 KEY=VALUE，追加在服务级环境变量之后；与服务级同名的变量以这里为准。",
       "inheritService": "沿用服务设置",
       "nodesPerReplica": "每副本节点数",
       "nodesPerReplicaVLLMHint": "vLLM 下固定为 1。其 NIXL 连接器不支持混合 KV 缓存的模型跨节点流水线并行，其它模型也未经验证。",

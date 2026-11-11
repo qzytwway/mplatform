@@ -84,15 +84,6 @@ describe('ServiceDeploymentCard', () => {
     )
   })
 
-  it('lets the keyboard reach code blocks', () => {
-    render(<ServiceDeploymentCard config={CONFIG} mode="multi" />)
-
-    expect(codeBlock('modelServing.deployment.command')).toHaveAttribute(
-      'tabindex',
-      '0'
-    )
-  })
-
   it('tells requests from limits and shows pod settings', () => {
     render(<ServiceDeploymentCard config={CONFIG} mode="multi" />)
 

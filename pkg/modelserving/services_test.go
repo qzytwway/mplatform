@@ -68,6 +68,9 @@ func newFakeClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.O
 	return &cluster.ClientSet{Name: "test", K8sClient: &kube.K8sClient{Client: fakeClient}}
 }
 
+// setupHistoryDB points the global model.DB at an in-memory database for the
+// test and restores it on cleanup. Tests using it must not call t.Parallel(),
+// as parallel tests would share and swap the global.
 func setupHistoryDB(t *testing.T) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})

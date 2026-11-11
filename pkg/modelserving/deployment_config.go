@@ -222,8 +222,10 @@ func maskArgs(args []string) []string {
 	return masked
 }
 
+// isSensitiveFlag splits flag names at dots too, which vLLM takes to set one
+// field of a JSON flag, as in --kv-transfer-config.kv_connector_extra_config.token.
 func isSensitiveFlag(flag string) bool {
-	words := strings.FieldsFunc(strings.ToLower(flag), func(r rune) bool { return r == '-' || r == '_' })
+	words := strings.FieldsFunc(strings.ToLower(flag), func(r rune) bool { return r == '-' || r == '_' || r == '.' })
 	return slices.ContainsFunc(words, func(word string) bool { return slices.Contains(sensitiveFlagWords, word) })
 }
 

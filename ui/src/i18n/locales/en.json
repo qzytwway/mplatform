@@ -2228,7 +2228,7 @@
       "roleImagesDiffer": "Prefill and decode run different images. KV transfer needs the same engine version on both sides.",
       "routerCacheWarning": "Router replicas do not share their cache trees, so cache hits drop with more than one replica.",
       "transferBackendNeedsRDMA": "Mooncake over RDMA needs an RDMA network. Configure one below or choose Mooncake (TCP).",
-      "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
+      "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name.",
       "inheritService": "Same as the service",
       "nodesPerReplica": "Nodes per replica",
       "nodesPerReplicaVLLMHint": "Fixed at 1 with vLLM. Its NIXL connector rejects pipelining over nodes for models with hybrid KV caches, and it is unverified for others.",
