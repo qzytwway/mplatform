@@ -1495,7 +1495,8 @@
       "tabs": {
         "active": "Active",
         "rules": "Rules",
-        "silences": "Silences"
+        "silences": "Silences",
+        "notifications": "Notifications"
       },
       "empty": "No alerts are firing",
       "emptyDescription": "All {{count}} alerting rules are inactive.",
@@ -1627,6 +1628,152 @@
         "save": "Save",
         "saving": "Saving...",
         "saved": "Saved. Prometheus picks up the rule within a couple of minutes."
+      },
+      "notifications": {
+        "save": "Save",
+        "saving": "Saving...",
+        "edit": "Edit",
+        "delete": "Delete",
+        "unmanaged": "Alertmanager still uses the configuration from the kube-prometheus-stack values. The first save here replaces it with the configuration managed in MPlatform.",
+        "reconcileError": "prometheus-operator could not apply the Alertmanager configuration: {{error}}",
+        "disabled": {
+          "title": "Alertmanager is not enabled",
+          "description": "The kube-prometheus-stack of this cluster runs without Alertmanager, so firing alerts are not sent anywhere. Enabling it upgrades the release and starts Alertmanager with the configuration managed here.",
+          "enable": "Enable Alertmanager"
+        },
+        "types": {
+          "email": "Email",
+          "wechat": "WeCom",
+          "webhook": "Webhook",
+          "feishu": "Feishu bot",
+          "bark": "Bark"
+        },
+        "channels": {
+          "title": "Channels",
+          "description": "Where alerts are sent. Alertmanager sends email, WeCom and webhooks itself; Feishu and Bark go through a forwarder MPlatform deploys next to it. Sensitive settings are kept only in a Secret in the cluster.",
+          "add": "Add channel",
+          "empty": "No channels yet.",
+          "name": "Name",
+          "type": "Type",
+          "target": "Target",
+          "configured": "Configured",
+          "test": "Send test notification",
+          "testSent": "Test notification sent to {{name}}. It may take a few seconds to arrive.",
+          "notLoaded": "Alertmanager has not loaded the latest configuration yet. Try again in a minute.",
+          "inUse": "{{name}} is used by the routing. Remove it from the routes and the default receiver first."
+        },
+        "channelEditor": {
+          "title": {
+            "create": "Add channel",
+            "edit": "Edit channel"
+          },
+          "name": "Name",
+          "type": "Type",
+          "sendResolved": "Also notify when alerts resolve",
+          "secretKept": "Set. Leave empty to keep it.",
+          "saved": "Channel saved. Alertmanager applies it in a minute or so.",
+          "fields": {
+            "email": {
+              "to": "Recipients",
+              "toHint": "Separate addresses with commas.",
+              "from": "Sender",
+              "smarthost": "SMTP server",
+              "username": "Username",
+              "password": "Password",
+              "requireTLS": "Use STARTTLS",
+              "requireTLSHint": "Turn it off for port 465, which uses TLS from the start."
+            },
+            "wechat": {
+              "corpID": "Corp ID",
+              "agentID": "Agent ID",
+              "apiSecret": "Secret",
+              "toUser": "Users",
+              "toUserHint": "WeCom user, department or tag IDs separated by |. Leave all of them empty to send to everyone.",
+              "toParty": "Departments",
+              "toTag": "Tags"
+            },
+            "webhook": {
+              "url": "URL"
+            },
+            "feishu": {
+              "url": "Webhook URL",
+              "secret": "Signing secret",
+              "secretHint": "Only needed when the bot has signature verification on."
+            },
+            "bark": {
+              "server": "Server",
+              "key": "Device key"
+            }
+          }
+        },
+        "routing": {
+          "title": "Routing",
+          "description": "Each alert goes to the first route it matches, or to the default receiver when none matches. A route set to continue lets later routes match the alert too.",
+          "editDefaults": "Edit defaults",
+          "addRoute": "Add route",
+          "defaultReceiver": "Default receiver",
+          "none": "Do not notify",
+          "groupBy": "Group by",
+          "groupWait": "Group wait",
+          "groupInterval": "Group interval",
+          "repeatInterval": "Repeat interval",
+          "empty": "No routes. Every alert goes to the default receiver.",
+          "conditions": "Conditions",
+          "receivers": "Receivers",
+          "allAlerts": "All alerts",
+          "continue": "Continue",
+          "moveUp": "Move up",
+          "moveDown": "Move down",
+          "saved": "Routing saved. Alertmanager applies it in a minute or so."
+        },
+        "routeEditor": {
+          "title": {
+            "create": "Add route",
+            "edit": "Edit route"
+          },
+          "receivers": "Send to",
+          "receiversRequired": "Select at least one channel.",
+          "severities": "Severity",
+          "severitiesHint": "Matches any of the selected severities. Select none to match all.",
+          "namespaces": "Namespaces",
+          "namespacesHint": "Separate with commas. Leave empty to match all.",
+          "matchers": "Labels",
+          "addMatcher": "Add label",
+          "labelName": "Label",
+          "labelValue": "Value",
+          "intervalsHint": "Leave the intervals empty to use the defaults.",
+          "continue": "Continue to later routes",
+          "continueHint": "Alerts matching this route are also checked against the routes after it.",
+          "noChannels": "Add a channel first."
+        },
+        "defaultsEditor": {
+          "title": "Routing defaults",
+          "receiverHint": "Where alerts no route matches go.",
+          "groupByHint": "Alerts with the same values of these labels are sent together. Separate with commas.",
+          "groupWaitHint": "How long to wait for more alerts before the first notification of a new group.",
+          "groupIntervalHint": "How long to wait before notifying about alerts added to a group.",
+          "repeatIntervalHint": "How long to wait before sending a notification again for alerts still firing."
+        },
+        "confirm": {
+          "working": "Working...",
+          "enable": {
+            "title": "Enable Alertmanager?",
+            "description": "Upgrades kube-prometheus-stack in this cluster with Alertmanager turned on. It may take a minute or so.",
+            "action": "Enable",
+            "done": "Alertmanager enabled"
+          },
+          "deleteChannel": {
+            "title": "Delete channel {{name}}?",
+            "description": "Alertmanager stops sending to it in a minute or so.",
+            "action": "Delete",
+            "done": "Channel {{name}} deleted"
+          },
+          "deleteRoute": {
+            "title": "Delete this route?",
+            "description": "Alerts it matched go to later routes or to the default receiver.",
+            "action": "Delete"
+          }
+        }
       }
     },
     "logs": {

@@ -81,7 +81,9 @@ type ruleTarget struct {
 	releaseNamespace string
 }
 
-func findRuleTarget(ctx context.Context, cs *cluster.ClientSet) (*ruleTarget, error) {
+// findPrometheus returns the cluster's Prometheus managed by
+// prometheus-operator.
+func findPrometheus(ctx context.Context, cs *cluster.ClientSet) (*unstructured.Unstructured, error) {
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(prometheusListGVK)
 	if err := cs.K8sClient.List(ctx, list); err != nil {
@@ -93,7 +95,14 @@ func findRuleTarget(ctx context.Context, cs *cluster.ClientSet) (*ruleTarget, er
 	if len(list.Items) == 0 {
 		return nil, errNoPrometheus
 	}
-	prometheus := list.Items[0]
+	return &list.Items[0], nil
+}
+
+func findRuleTarget(ctx context.Context, cs *cluster.ClientSet) (*ruleTarget, error) {
+	prometheus, err := findPrometheus(ctx, cs)
+	if err != nil {
+		return nil, err
+	}
 	if _, found, _ := unstructured.NestedFieldNoCopy(prometheus.Object, "spec", "ruleSelector"); !found {
 		return nil, errNoRuleSelector
 	}

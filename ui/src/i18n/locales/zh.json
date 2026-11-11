@@ -1582,7 +1582,8 @@
       "tabs": {
         "active": "活动",
         "rules": "规则",
-        "silences": "静默"
+        "silences": "静默",
+        "notifications": "通知"
       },
       "empty": "当前没有正在触发的告警",
       "emptyDescription": "{{count}} 条告警规则均未触发。",
@@ -1714,6 +1715,152 @@
         "save": "保存",
         "saving": "保存中...",
         "saved": "已保存，Prometheus 会在一两分钟内加载这条规则。"
+      },
+      "notifications": {
+        "save": "保存",
+        "saving": "保存中...",
+        "edit": "编辑",
+        "delete": "删除",
+        "unmanaged": "Alertmanager 目前还在使用 kube-prometheus-stack values 里的配置。在这里第一次保存后，会改用 MPlatform 管理的配置。",
+        "reconcileError": "prometheus-operator 无法应用 Alertmanager 配置：{{error}}",
+        "disabled": {
+          "title": "未启用 Alertmanager",
+          "description": "这个集群的 kube-prometheus-stack 没有启用 Alertmanager，触发的告警不会发送到任何地方。启用后会升级该发布，并以这里管理的配置启动 Alertmanager。",
+          "enable": "启用 Alertmanager"
+        },
+        "types": {
+          "email": "邮件",
+          "wechat": "企业微信",
+          "webhook": "Webhook",
+          "feishu": "飞书机器人",
+          "bark": "Bark"
+        },
+        "channels": {
+          "title": "通知渠道",
+          "description": "告警发送的目的地。邮件、企业微信和 Webhook 由 Alertmanager 直接发送；飞书和 Bark 通过 MPlatform 部署在它旁边的转发服务发送。敏感信息只保存在集群的 Secret 中。",
+          "add": "添加渠道",
+          "empty": "还没有通知渠道。",
+          "name": "名称",
+          "type": "类型",
+          "target": "目标",
+          "configured": "已配置",
+          "test": "发送测试通知",
+          "testSent": "已向 {{name}} 发送测试通知，可能需要几秒钟才能收到。",
+          "notLoaded": "Alertmanager 还没有加载最新配置，请一分钟后再试。",
+          "inUse": "{{name}} 正在被路由使用，请先从路由和默认接收人中移除。"
+        },
+        "channelEditor": {
+          "title": {
+            "create": "添加渠道",
+            "edit": "编辑渠道"
+          },
+          "name": "名称",
+          "type": "类型",
+          "sendResolved": "告警恢复时也发送通知",
+          "secretKept": "已设置，留空则保持不变",
+          "saved": "渠道已保存，Alertmanager 大约一分钟后生效。",
+          "fields": {
+            "email": {
+              "to": "收件人",
+              "toHint": "多个地址用英文逗号分隔。",
+              "from": "发件人",
+              "smarthost": "SMTP 服务器",
+              "username": "用户名",
+              "password": "密码",
+              "requireTLS": "使用 STARTTLS",
+              "requireTLSHint": "465 端口一开始就使用 TLS，请关闭此项。"
+            },
+            "wechat": {
+              "corpID": "企业 ID",
+              "agentID": "应用 AgentId",
+              "apiSecret": "应用 Secret",
+              "toUser": "成员",
+              "toUserHint": "企业微信的成员、部门或标签 ID，多个用 | 分隔。都不填则发给所有人。",
+              "toParty": "部门",
+              "toTag": "标签"
+            },
+            "webhook": {
+              "url": "URL"
+            },
+            "feishu": {
+              "url": "Webhook 地址",
+              "secret": "签名密钥",
+              "secretHint": "仅在机器人开启了签名校验时需要。"
+            },
+            "bark": {
+              "server": "服务器",
+              "key": "设备 Key"
+            }
+          }
+        },
+        "routing": {
+          "title": "通知路由",
+          "description": "告警按顺序匹配路由，发给第一个匹配的路由；都不匹配时发给默认接收人。开启「继续匹配」的路由，匹配后还会继续检查后面的路由。",
+          "editDefaults": "编辑默认设置",
+          "addRoute": "添加路由",
+          "defaultReceiver": "默认接收人",
+          "none": "不发送",
+          "groupBy": "分组标签",
+          "groupWait": "分组等待",
+          "groupInterval": "分组间隔",
+          "repeatInterval": "重复通知间隔",
+          "empty": "还没有路由，所有告警都发给默认接收人。",
+          "conditions": "匹配条件",
+          "receivers": "接收人",
+          "allAlerts": "所有告警",
+          "continue": "继续匹配",
+          "moveUp": "上移",
+          "moveDown": "下移",
+          "saved": "路由已保存，Alertmanager 大约一分钟后生效。"
+        },
+        "routeEditor": {
+          "title": {
+            "create": "添加路由",
+            "edit": "编辑路由"
+          },
+          "receivers": "发送到",
+          "receiversRequired": "至少选择一个渠道。",
+          "severities": "级别",
+          "severitiesHint": "匹配所选的任一级别；不选则匹配所有级别。",
+          "namespaces": "命名空间",
+          "namespacesHint": "多个用英文逗号分隔；留空则匹配所有命名空间。",
+          "matchers": "标签",
+          "addMatcher": "添加标签",
+          "labelName": "标签名",
+          "labelValue": "值",
+          "intervalsHint": "间隔留空则使用默认设置。",
+          "continue": "继续匹配后面的路由",
+          "continueHint": "匹配这条路由的告警，还会继续检查它后面的路由。",
+          "noChannels": "请先添加通知渠道。"
+        },
+        "defaultsEditor": {
+          "title": "路由默认设置",
+          "receiverHint": "没有匹配任何路由的告警发送到这里。",
+          "groupByHint": "这些标签的值相同的告警会合并在一条通知里发送。多个用英文逗号分隔。",
+          "groupWaitHint": "新分组发出第一条通知前，等待更多告警的时间。",
+          "groupIntervalHint": "分组中有新增告警时，再次通知前等待的时间。",
+          "repeatIntervalHint": "告警持续触发时，重复发送通知的间隔。"
+        },
+        "confirm": {
+          "working": "处理中...",
+          "enable": {
+            "title": "启用 Alertmanager？",
+            "description": "会升级这个集群的 kube-prometheus-stack 并开启 Alertmanager，可能需要一分钟左右。",
+            "action": "启用",
+            "done": "已启用 Alertmanager"
+          },
+          "deleteChannel": {
+            "title": "删除渠道 {{name}}？",
+            "description": "Alertmanager 大约一分钟后停止向它发送通知。",
+            "action": "删除",
+            "done": "已删除渠道 {{name}}"
+          },
+          "deleteRoute": {
+            "title": "删除这条路由？",
+            "description": "原来匹配它的告警会交给后面的路由或默认接收人。",
+            "action": "删除"
+          }
+        }
       }
     },
     "logs": {

@@ -12,20 +12,27 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/qzytwway/mplatform/pkg/alertnotify"
 	"github.com/qzytwway/mplatform/pkg/clusteragent"
 	"github.com/qzytwway/mplatform/pkg/common"
 	"github.com/qzytwway/mplatform/pkg/version"
 	"k8s.io/klog/v2"
 )
 
+// subcommands run inside managed clusters from the platform image.
+var subcommands = map[string]func(context.Context, []string) error{
+	"cluster-agent":   clusteragent.Run,
+	"alert-forwarder": alertnotify.RunForwarder,
+}
+
 func main() {
 	klog.InitFlags(nil)
-	if len(os.Args) > 1 && os.Args[1] == "cluster-agent" {
+	if len(os.Args) > 1 && subcommands[os.Args[1]] != nil {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		err := clusteragent.Run(ctx, os.Args[2:])
+		err := subcommands[os.Args[1]](ctx, os.Args[2:])
 		stop()
 		if err != nil {
-			log.Fatalf("Failed to run cluster agent: %v", err)
+			log.Fatalf("Failed to run %s: %v", os.Args[1], err)
 		}
 		return
 	}

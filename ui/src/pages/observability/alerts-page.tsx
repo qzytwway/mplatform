@@ -8,12 +8,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { AlertDetail } from '@/components/observability/alert-detail'
 import { AlertList } from '@/components/observability/alert-list'
+import { AlertNotificationsPanel } from '@/components/observability/alert-notifications-panel'
 import { AlertRulesPanel } from '@/components/observability/alert-rules-panel'
 import { flattenAlerts } from '@/components/observability/alert-utils'
 import { ObservabilityUnavailable } from '@/components/observability/observability-unavailable'
 import { SilencesTable } from '@/components/observability/silences-table'
 
-const TABS = ['active', 'rules', 'silences'] as const
+const TABS = ['active', 'rules', 'silences', 'notifications'] as const
 type AlertsTab = (typeof TABS)[number]
 
 export function AlertsPage() {
@@ -123,6 +124,7 @@ export function AlertsPage() {
         ) : (
           <SilencesTable silences={silences} />
         ))}
+      {tab === 'notifications' && <AlertNotificationsPanel />}
     </div>
   )
 }

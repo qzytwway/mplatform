@@ -79,6 +79,34 @@ func (c *Client) ExpireSilence(ctx context.Context, id string) error {
 	return nil
 }
 
+type PostableAlert struct {
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	StartsAt    time.Time         `json:"startsAt"`
+	EndsAt      time.Time         `json:"endsAt"`
+}
+
+func (c *Client) PostAlerts(ctx context.Context, alerts []PostableAlert) error {
+	if err := c.do(ctx, http.MethodPost, "/api/v2/alerts", alerts, nil); err != nil {
+		return fmt.Errorf("failed to post alerts: %w", err)
+	}
+	return nil
+}
+
+// LoadedConfig returns the configuration Alertmanager runs with, its secrets
+// masked.
+func (c *Client) LoadedConfig(ctx context.Context) (string, error) {
+	var status struct {
+		Config struct {
+			Original string `json:"original"`
+		} `json:"config"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v2/status", nil, &status); err != nil {
+		return "", fmt.Errorf("failed to get status: %w", err)
+	}
+	return status.Config.Original, nil
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {

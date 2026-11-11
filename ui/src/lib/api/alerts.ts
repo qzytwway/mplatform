@@ -204,6 +204,105 @@ export function expireSilence(id: string): Promise<void> {
   )
 }
 
+// Alertmanager sends email, wechat and webhook channels itself; feishu and
+// bark go through the forwarder MPlatform deploys next to it.
+export type NotificationChannelType =
+  'email' | 'wechat' | 'webhook' | 'feishu' | 'bark'
+
+export type ChannelSettings = Record<string, string | boolean>
+
+// A channel keeps its settings under its type, e.g. email: { to, from, ... }.
+// Sensitive settings come back empty; configuredSecrets names the ones set,
+// and saving them empty keeps them.
+export type NotificationChannel = {
+  id: string
+  name: string
+  type: NotificationChannelType
+  sendResolved: boolean
+  configuredSecrets?: string[]
+} & Partial<Record<NotificationChannelType, ChannelSettings>>
+
+export type MatchOperator = '=' | '!=' | '=~' | '!~'
+
+export interface RouteMatcher {
+  name: string
+  operator: MatchOperator
+  value: string
+}
+
+// A route matches alerts by all of its conditions and refers to channels by
+// ID. Empty intervals use the routing defaults.
+export interface NotificationRoute {
+  receivers: string[]
+  severities: string[]
+  namespaces: string[]
+  matchers: RouteMatcher[]
+  continue: boolean
+  groupInterval: string
+  repeatInterval: string
+}
+
+export interface NotificationRouting {
+  // The channel ID unmatched alerts go to; empty drops them.
+  receiver: string
+  groupBy: string[]
+  groupWait: string
+  groupInterval: string
+  repeatInterval: string
+  routes: NotificationRoute[]
+}
+
+export interface NotificationConfig {
+  channels: NotificationChannel[]
+  routing: NotificationRouting
+}
+
+export interface AlertNotifications extends NotificationConfig {
+  // enabled: the cluster's kube-prometheus-stack runs an Alertmanager;
+  // managed: it loads the configuration managed here.
+  enabled: boolean
+  managed: boolean
+  reconcileError?: string
+}
+
+export function useAlertNotifications() {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['alert-notifications', currentCluster],
+    queryFn: () =>
+      apiClient.get<AlertNotifications>(
+        withCurrentClusterPath('/alertmanager/notifications', currentCluster)
+      ),
+    enabled: !!currentCluster,
+    retry: false,
+  })
+}
+
+export function updateAlertNotifications(
+  config: NotificationConfig
+): Promise<{ message: string }> {
+  return apiClient.put(
+    withCurrentClusterPath('/alertmanager/notifications'),
+    config
+  )
+}
+
+export function enableAlertmanager(): Promise<{ message: string }> {
+  return apiClient.post(
+    withCurrentClusterPath('/alertmanager/notifications/enable')
+  )
+}
+
+export function sendTestNotification(
+  channelId: string
+): Promise<{ message: string }> {
+  return apiClient.post(
+    withCurrentClusterPath(
+      `/alertmanager/notifications/channels/${encodeURIComponent(channelId)}/test`
+    )
+  )
+}
+
 // Mirrors Alertmanager matching: regex matchers are fully anchored and a
 // missing label matches as the empty string.
 export function silenceMatches(
