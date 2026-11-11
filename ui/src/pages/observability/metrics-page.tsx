@@ -1,21 +1,22 @@
 import { useState } from 'react'
-import { BarChart3, Code2, Search } from 'lucide-react'
+import {
+  BarChart3,
+  ChartLine,
+  ChevronDown,
+  ChevronRight,
+  Code2,
+  Folder,
+  Search,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 
 import { useDashboards, type DashboardSummary } from '@/lib/api/dashboards'
 import { usePrometheusQuery } from '@/lib/api/prometheus'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import {
   dashboardPath,
   urlVariables,
@@ -25,25 +26,24 @@ import { PromQLExplorer } from '@/components/observability/promql-explorer'
 import { TimeWindowControls } from '@/components/observability/time-window-controls'
 import { useTimeWindow } from '@/components/observability/use-time-window'
 
-// Splits titles such as "Kubernetes / Compute Resources / Pod" into their
-// group and name, and sorts by group with ungrouped dashboards last.
-function dashboardRows(dashboards: DashboardSummary[]) {
-  return dashboards
-    .map((dashboard) => {
-      const [group, ...rest] = dashboard.title.split(' / ')
-      return rest.length
-        ? { dashboard, group, name: rest.join(' / ') }
-        : { dashboard, group: '', name: dashboard.title }
-    })
-    .sort((a, b) =>
-      a.group === b.group
-        ? a.name.localeCompare(b.name)
-        : a.group === ''
-          ? 1
-          : b.group === ''
-            ? -1
-            : a.group.localeCompare(b.group)
-    )
+interface GroupedDashboard {
+  dashboard: DashboardSummary
+  name: string
+}
+
+// Groups dashboards by the first part of titles such as
+// "Kubernetes / Compute Resources / Pod", with ungrouped dashboards last.
+function groupDashboards(dashboards: DashboardSummary[]) {
+  const groups = new Map<string, GroupedDashboard[]>()
+  for (const dashboard of dashboards) {
+    const [group, ...rest] = dashboard.title.split(' / ')
+    const key = rest.length ? group : ''
+    const name = rest.length ? rest.join(' / ') : dashboard.title
+    groups.set(key, [...(groups.get(key) ?? []), { dashboard, name }])
+  }
+  return [...groups.entries()].sort(([a], [b]) =>
+    a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
+  )
 }
 
 export function MetricsPage() {
@@ -51,6 +51,7 @@ export function MetricsPage() {
   const [params, setParams] = useSearchParams()
   const timeWindow = useTimeWindow()
   const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const isQueryMode = params.get('mode') === 'query'
   const probe = usePrometheusQuery('vector(1)', { staleTime: 60000 })
   const dashboards = useDashboards()
@@ -92,33 +93,81 @@ export function MetricsPage() {
             : t('observability.dashboards.empty')}
         </p>
       )
+    const groups = groupDashboards(matched)
+    const allExpanded = groups.every(([group]) => expanded.has(group))
+    const toggleGroup = (group: string) =>
+      setExpanded((current) => {
+        const next = new Set(current)
+        if (next.has(group)) next.delete(group)
+        else next.add(group)
+        return next
+      })
     return (
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader className="bg-muted">
-            <TableRow>
-              <TableHead>{t('common.fields.name')}</TableHead>
-              <TableHead>{t('observability.dashboards.group')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {dashboardRows(matched).map(({ dashboard, group, name }) => (
-              <TableRow key={dashboard.uid}>
-                <TableCell>
-                  <Link
-                    to={dashboardPath(dashboard.uid)}
-                    className="font-medium app-link"
-                  >
-                    {name}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+          <span>
+            {keyword
+              ? t('observability.dashboards.found', { count: matched.length })
+              : t('observability.dashboards.summary', {
+                  groups: groups.length,
+                  count: matched.length,
+                })}
+          </span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0"
+            onClick={() =>
+              setExpanded(
+                allExpanded
+                  ? new Set()
+                  : new Set(groups.map(([group]) => group))
+              )
+            }
+          >
+            {allExpanded
+              ? t('observability.dashboards.collapseAll')
+              : t('observability.dashboards.expandAll')}
+          </Button>
+        </div>
+        <div className="divide-y overflow-hidden rounded-md border">
+          {groups.map(([group, items]) => {
+            // Searching shows every group with a match.
+            const open = keyword !== '' || expanded.has(group)
+            const Chevron = open ? ChevronDown : ChevronRight
+            return (
+              <div key={group || 'other'}>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => toggleGroup(group)}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/50"
+                >
+                  <Chevron className="size-4 text-muted-foreground" />
+                  <Folder className="size-4 text-muted-foreground" />
                   {group || t('observability.dashboards.other')}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  <Badge variant="outline" className="tabular-nums">
+                    {items.length}
+                  </Badge>
+                </button>
+                {open &&
+                  items.map(({ dashboard, name }) => (
+                    <Link
+                      key={dashboard.uid}
+                      to={dashboardPath(dashboard.uid)}
+                      className="flex items-center justify-between gap-3 border-t py-2 pr-4 pl-11 text-sm transition-colors hover:bg-muted/50"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ChartLine className="size-4 text-muted-foreground" />
+                        {name}
+                      </span>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </Link>
+                  ))}
+              </div>
+            )
+          })}
+        </div>
       </div>
     )
   }

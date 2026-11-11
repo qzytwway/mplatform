@@ -2068,7 +2068,10 @@
       "title": "Logs"
     },
     "dashboards": {
-      "group": "Group",
+      "summary": "Groups: {{groups}} · Dashboards: {{count}}",
+      "found": "Matches: {{count}}",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
       "search": "Search dashboards",
       "noMatch": "No dashboards match your search.",
       "empty": "No dashboards yet.",

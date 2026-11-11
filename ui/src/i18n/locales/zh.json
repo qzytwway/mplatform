@@ -2155,7 +2155,10 @@
       "title": "日志"
     },
     "dashboards": {
-      "group": "分组",
+      "summary": "共 {{groups}} 个分组，{{count}} 个仪表盘",
+      "found": "找到 {{count}} 个仪表盘",
+      "expandAll": "全部展开",
+      "collapseAll": "全部收起",
       "search": "搜索仪表盘",
       "noMatch": "没有匹配的仪表盘。",
       "empty": "暂无仪表盘。",
