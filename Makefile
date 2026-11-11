@@ -1,5 +1,5 @@
 # Makefile for MPlatform project
-.PHONY: help dev build clean test docker-build docker-run frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed
+.PHONY: help dev build clean test docker-build docker-run frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed e2e-model-serving-up e2e-model-serving-run e2e-model-serving-down
 
 # Variables
 BINARY_NAME=mplatform
@@ -15,6 +15,9 @@ E2E_LDAP_CONTAINER ?= mplatform-e2e-ldap
 E2E_LDAP_PORT ?= 3389
 E2E_DEX_CONTAINER ?= mplatform-e2e-dex
 E2E_OAUTH_PORT ?= 5556
+E2E_MS_KIND_NAME ?= mplatform-model-serving
+E2E_MS_PORT ?= 38090
+E2E_MS_KUBECONFIG ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}mplatform-model-serving.kubeconfig")
 SPEC ?=
 
 # Version information
@@ -230,6 +233,16 @@ e2e-run: e2e-kind-up e2e-stop-app ## Run e2e tests against the local kind cluste
 e2e-run-headed: e2e-kind-up e2e-stop-app ## Run e2e tests in headed mode against the local kind cluster
 	@echo "🧪 Running headed e2e tests..."
 	cd $(E2E_DIR) && KUBECONFIG="$(E2E_KUBECONFIG)" MPLATFORM_E2E_CLUSTER_NAME="$(E2E_KIND_NAME)" MPLATFORM_E2E_PORT="$(E2E_PORT)" pnpm exec playwright test --headed $(SPEC)
+
+e2e-model-serving-up: ## Prepare the multi-node kind cluster, fake GPUs and images for model serving e2e
+	E2E_MS_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_MS_KUBECONFIG="$(E2E_MS_KUBECONFIG)" ./scripts/e2e-model-serving-up.sh
+
+e2e-model-serving-run: e2e-model-serving-up ## Run the model serving e2e tests against their own kind cluster
+	$(MAKE) e2e-run E2E_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_KUBECONFIG="$(E2E_MS_KUBECONFIG)" E2E_PORT="$(E2E_MS_PORT)" \
+		SPEC="$(or $(SPEC),specs/model-serving.spec.ts)" MPLATFORM_E2E_MODEL_SERVING=true
+
+e2e-model-serving-down: ## Delete the kind cluster used by model serving e2e
+	$(MAKE) e2e-kind-down E2E_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_KUBECONFIG="$(E2E_MS_KUBECONFIG)"
 
 e2e-test: e2e-install e2e-install-browser e2e-run ## Run e2e tests against the local kind cluster
 

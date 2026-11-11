@@ -9,5 +9,11 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["env.ts", "playwright.config.ts", "setup/**/*.ts", "specs/**/*.ts"]
+  "include": [
+    "env.ts",
+    "playwright.config.ts",
+    "helpers/**/*.ts",
+    "setup/**/*.ts",
+    "specs/**/*.ts"
+  ]
 }
