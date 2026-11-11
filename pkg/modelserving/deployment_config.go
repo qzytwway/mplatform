@@ -112,9 +112,12 @@ func readPDConfig(config *deploymentConfig, workload *unstructured.Unstructured,
 	annotations := workload.GetAnnotations()
 	config.TransferBackend, config.IBDevices = annotations[transferBackendAnnotation], annotations[ibDevicesAnnotation]
 	// Both roles get the same transfer settings; prefill has them unless
-	// the template was edited away.
+	// the template was edited away. A vLLM template that names no connector
+	// leaves the recorded one.
 	if pods := config.Roles[0].Pods; len(pods) > 0 {
-		config.TransferBackend, config.IBDevices = readTransfer(pods[0])
+		if backend, ibDevices := readTransfer(annotations[runtimeAnnotation], pods[0]); backend != "" {
+			config.TransferBackend, config.IBDevices = backend, ibDevices
+		}
 	}
 	config.RouterPolicy = annotations[routerPolicyAnnotation]
 	if router != nil {
@@ -290,28 +293,38 @@ func isRDMAResource(name string) bool {
 	return strings.Contains(name, "/") && !strings.HasPrefix(name, "kubernetes.io/")
 }
 
-// readTransfer reads the KV transfer backend and RDMA devices of a pd role.
-// vLLM names its connector in --kv-transfer-config, shown as is unless it is
-// NIXL's, and an unreadable config as none. SGLang transfers with Mooncake
-// unless told otherwise.
-func readTransfer(pod podConfig) (backend, ibDevices string) {
-	if config := argValue(pod.Args, "--kv-transfer-config"); config != "" {
-		var transfer struct {
-			Connector string `json:"kv_connector"`
-		}
-		if err := json.Unmarshal([]byte(config), &transfer); err != nil {
-			return "", ""
-		}
-		if transfer.Connector == nixlConnector {
-			return transferNIXL, ""
-		}
-		return transfer.Connector, ""
+// readTransfer reads the KV transfer backend and RDMA devices of a pd role of
+// the given runtime. pd workloads without a runtime annotation predate vLLM
+// pd and run SGLang, which transfers with Mooncake unless told otherwise.
+func readTransfer(runtime string, pod podConfig) (backend, ibDevices string) {
+	if runtime == runtimeVLLM {
+		return readVLLMConnector(pod.Args), ""
 	}
 	backend = cmp.Or(argValue(pod.Args, "--disaggregation-transfer-backend"), transferMooncake)
 	if backend == "mooncake_tcp" || (backend == transferMooncake && envValue(pod.Env, "MC_FORCE_TCP") == "1") {
 		backend = transferMooncakeTCP
 	}
 	return backend, argValue(pod.Args, "--disaggregation-ib-device")
+}
+
+// readVLLMConnector reads the kv_connector of --kv-transfer-config, given as
+// JSON or as the dotted --kv-transfer-config.kv_connector, which vLLM merges
+// over the JSON. NIXL's connector shows as nixl and others by name; none, or
+// JSON that does not parse, reads as empty.
+func readVLLMConnector(args []string) string {
+	connector := argValue(args, "--kv-transfer-config.kv_connector")
+	if config := argValue(args, "--kv-transfer-config"); connector == "" && config != "" {
+		var transfer struct {
+			Connector string `json:"kv_connector"`
+		}
+		if json.Unmarshal([]byte(config), &transfer) == nil {
+			connector = transfer.Connector
+		}
+	}
+	if connector == nixlConnector {
+		return transferNIXL
+	}
+	return connector
 }
 
 // argValue returns what the last occurrence of flag sets, as "flag value" or

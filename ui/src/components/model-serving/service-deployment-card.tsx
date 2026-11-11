@@ -71,9 +71,12 @@ export function ServiceDeploymentCard({
                     { defaultValue: config.transferBackend || '-' }
                   )}
                 </DetailItem>
-                <DetailItem label={t('modelServing.services.ibDevices')}>
-                  <span className="font-mono">{config.ibDevices || '-'}</span>
-                </DetailItem>
+                {/* Only Mooncake over RDMA picks its devices. */}
+                {config.transferBackend === 'mooncake' && (
+                  <DetailItem label={t('modelServing.services.ibDevices')}>
+                    <span className="font-mono">{config.ibDevices || '-'}</span>
+                  </DetailItem>
+                )}
                 <DetailItem label={t('modelServing.services.routerPolicy')}>
                   {t(
                     `modelServing.services.routerPolicies.${config.routerPolicy || 'default'}`,

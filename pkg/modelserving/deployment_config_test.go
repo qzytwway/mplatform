@@ -243,22 +243,34 @@ func vllmContainerSpec(args ...any) map[string]any {
 	}
 }
 
-func TestReadDeploymentConfigOfOldVLLMDisaggregatedSet(t *testing.T) {
+func TestReadDeploymentConfigOfVLLMTemplates(t *testing.T) {
 	producer := `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`
 	consumer := `{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}`
 	tests := []struct {
-		name    string
-		prefill []any
-		backend string
+		name     string
+		prefill  []any
+		recorded string
+		backend  string
 	}{
 		{name: "nixl", prefill: []any{"/models/qwen", "--kv-transfer-config", producer}, backend: transferNIXL},
 		{name: "nixl in key=value form", prefill: []any{"--kv-transfer-config=" + producer}, backend: transferNIXL},
+		{name: "nixl in dotted form", prefill: []any{"--kv-transfer-config.kv_connector=NixlConnector"}, backend: transferNIXL},
 		{
-			name:    "extra arguments override the connector",
-			prefill: []any{"--kv-transfer-config", producer, "--kv-transfer-config", `{"kv_connector":"MooncakeConnector","kv_role":"kv_producer"}`},
+			name:    "the dotted connector over the json",
+			prefill: []any{"--kv-transfer-config", producer, "--kv-transfer-config.kv_connector", "MooncakeConnector"},
 			backend: "MooncakeConnector",
 		},
-		{name: "an unreadable config", prefill: []any{"--kv-transfer-config", "{kv_connector:NixlConnector}"}, backend: ""},
+		{
+			name:     "extra arguments override the connector",
+			prefill:  []any{"--kv-transfer-config", producer, "--kv-transfer-config", `{"kv_connector":"MooncakeConnector","kv_role":"kv_producer"}`},
+			recorded: transferNIXL,
+			backend:  "MooncakeConnector",
+		},
+		{name: "an unreadable config leaves the recorded backend", prefill: []any{"--kv-transfer-config", "{kv_connector:NixlConnector}"}, recorded: transferNIXL, backend: transferNIXL},
+		{name: "no config leaves the recorded backend", prefill: []any{"/models/qwen"}, recorded: transferNIXL, backend: transferNIXL},
+		// Not SGLang's default, mooncake.
+		{name: "no config and no record", prefill: []any{"/models/qwen"}, backend: ""},
+		{name: "SGLang flags are not vLLM's", prefill: []any{"--disaggregation-transfer-backend", "mooncake"}, backend: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -266,6 +278,11 @@ func TestReadDeploymentConfigOfOldVLLMDisaggregatedSet(t *testing.T) {
 				singlePodRole(vllmContainerSpec(tt.prefill...), nil),
 				singlePodRole(vllmContainerSpec("--kv-transfer-config", consumer), nil),
 			)
+			annotations := map[string]string{runtimeAnnotation: runtimeVLLM}
+			if tt.recorded != "" {
+				annotations[transferBackendAnnotation] = tt.recorded
+			}
+			workload.SetAnnotations(annotations)
 
 			config, err := readDeploymentConfig(workload, nil)
 
@@ -561,8 +578,8 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 
 		recorded, err := readDeploymentConfig(workload, router)
 		require.NoError(t, err)
-		// Workloads without the annotations read the same from their pods.
-		workload.SetAnnotations(nil)
+		// Workloads without the recorded settings read the same from their pods.
+		workload.SetAnnotations(map[string]string{runtimeAnnotation: runtimeVLLM})
 		inferred, err := readDeploymentConfig(workload, router)
 		require.NoError(t, err)
 

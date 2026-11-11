@@ -2226,6 +2226,7 @@
       },
       "roleImageHint": "Leave empty to use the service image.",
       "roleImagesDiffer": "Prefill and decode run different images. KV transfer needs the same engine version on both sides.",
+      "roleImagesMustMatchVLLM": "vLLM requires prefill and decode to run the same image, so the service cannot be created until they match.",
       "routerCacheWarning": "Router replicas do not share their cache trees, so cache hits drop with more than one replica.",
       "transferBackendNeedsRDMA": "Mooncake over RDMA needs an RDMA network. Configure one below or choose Mooncake (TCP).",
       "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name.",
@@ -2245,7 +2246,7 @@
         "nixl": "Needs NIXL in the image. UCX picks RDMA or TCP depending on the network."
       },
       "transferBackendHintVLLM": "vLLM transfers the KV cache with its NIXL connector, the only one vllm-router supports for the pods it discovers. Official vLLM images include NIXL, and UCX picks RDMA or TCP depending on the network.",
-      "ucxTCPHint": "Without an RDMA network, UCX transfers over TCP. Add UCX_TLS=tcp,cuda_copy to the environment variables, and raise UCX_TCP_TX_SEG_SIZE and UCX_TCP_RX_SEG_SIZE, for example to 256k, for faster transfers.",
+      "ucxTCPHint": "Without an RDMA network, UCX transfers over TCP, which suits functional checks or small models only; configure RDMA for production. Add UCX_TLS=tcp,cuda_copy to the environment variables, and raise UCX_TCP_TX_SEG_SIZE and UCX_TCP_RX_SEG_SIZE, for example to 256k, for faster transfers.",
       "ibDevices": "RDMA devices",
       "ibDevicesHint": "Optional, comma-separated, such as mlx5_0,mlx5_1. Leave empty to detect them.",
       "rdma": "RDMA network",

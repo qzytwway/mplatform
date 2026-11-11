@@ -46,7 +46,11 @@ import {
   type PDRoleValues,
   type ServiceModeValues,
 } from './service-mode-fields'
-import { MAX_PD_NAME_LENGTH, modeBlocker } from './service-modes'
+import {
+  MAX_PD_NAME_LENGTH,
+  modeBlocker,
+  pdRoleImagesDiffer,
+} from './service-modes'
 import {
   ServiceNetworkFields,
   type NetworkValues,
@@ -195,6 +199,9 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     models?.items.find((model) => String(model.id) === id)?.type
   const modelType = modelTypeOf(modelId)
   const hamiInstalled = !!gpuComponents?.hami.installed
+  // The backend rejects it; the PD fields say why.
+  const vllmImagesDiffer =
+    mode === 'pd' && runtime === 'vllm' && pdRoleImagesDiffer(modeValues, image)
   const modeNodes = gpuNodes?.items.filter((node) => node.mode === gpuType)
   const gpuCountLabel =
     gpuType === 'vgpu'
@@ -589,7 +596,10 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.actions.cancel')}
           </Button>
-          <Button type="submit" disabled={isCreating || !modelId || !namespace}>
+          <Button
+            type="submit"
+            disabled={isCreating || !modelId || !namespace || vllmImagesDiffer}
+          >
             {isCreating
               ? t('common.messages.creating')
               : t('common.actions.create')}

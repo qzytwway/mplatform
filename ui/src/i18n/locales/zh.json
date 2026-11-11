@@ -2313,6 +2313,7 @@
       },
       "roleImageHint": "留空则使用服务镜像。",
       "roleImagesDiffer": "Prefill 与 Decode 使用了不同的镜像。KV 传输要求两侧推理引擎版本一致。",
+      "roleImagesMustMatchVLLM": "vLLM 下 Prefill 与 Decode 必须使用相同镜像，否则创建会被拒绝。",
       "routerCacheWarning": "各路由副本的缓存树不共享，多于一个副本时缓存命中率会下降。",
       "transferBackendNeedsRDMA": "Mooncake (RDMA) 需要 RDMA 网络。请在下方配置，或改用 Mooncake (TCP)。",
       "roleEnvHint": "每行一个 KEY=VALUE，追加在服务级环境变量之后；与服务级同名的变量以这里为准。",
@@ -2332,7 +2333,7 @@
         "nixl": "需要镜像内置 NIXL，由 UCX 按网络情况选择 RDMA 或 TCP。"
       },
       "transferBackendHintVLLM": "vLLM 使用其 NIXL 连接器传输 KV Cache，这是 vllm-router 对自动发现的 Pod 唯一支持的方式。官方 vLLM 镜像已内置 NIXL，由 UCX 按网络情况选择 RDMA 或 TCP。",
-      "ucxTCPHint": "未配置 RDMA 网络时 UCX 走 TCP。可在环境变量中加入 UCX_TLS=tcp,cuda_copy，并调大 UCX_TCP_TX_SEG_SIZE 和 UCX_TCP_RX_SEG_SIZE（例如 256k）以加快传输。",
+      "ucxTCPHint": "未配置 RDMA 网络时 UCX 走 TCP，仅适合功能验证或小模型，生产环境请配置 RDMA。可在环境变量中加入 UCX_TLS=tcp,cuda_copy，并调大 UCX_TCP_TX_SEG_SIZE 和 UCX_TCP_RX_SEG_SIZE（例如 256k）以加快传输。",
       "ibDevices": "RDMA 网卡",
       "ibDevicesHint": "可选，逗号分隔，例如 mlx5_0,mlx5_1。留空则自动检测。",
       "rdma": "RDMA 网络",

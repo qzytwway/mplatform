@@ -25,7 +25,11 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { DEPLOYMENT_MODES, MAX_PD_ROLE_REPLICAS } from './service-modes'
+import {
+  DEPLOYMENT_MODES,
+  MAX_PD_ROLE_REPLICAS,
+  pdRoleImagesDiffer,
+} from './service-modes'
 
 // vllm-router finds the Mooncake bootstrap servers only of prefill servers
 // it is given at startup, not of the pods it discovers, so vLLM uses NIXL.
@@ -232,8 +236,6 @@ function PDFields({
   // The router's default policy is cache_aware.
   const cacheAware =
     values.routerPolicy === 'cache_aware' || values.routerPolicy === 'default'
-  const roleImage = (role: PDRole) =>
-    values[role].image.trim() || service.image.trim()
 
   return (
     <>
@@ -311,8 +313,9 @@ function PDFields({
           <Select
             key={runtime}
             value={values.transferBackend}
+            // Never empty, as a further guard against Radix's reset.
             onValueChange={(value) =>
-              update({ transferBackend: value as TransferBackend })
+              value && update({ transferBackend: value as TransferBackend })
             }
           >
             <SelectTrigger id="inference-transfer-backend" className="w-full">
@@ -338,7 +341,7 @@ function PDFields({
               {t('modelServing.services.transferBackendNeedsRDMA')}
             </p>
           )}
-          {isVLLM && !rdmaEnabled && (
+          {values.transferBackend === 'nixl' && !rdmaEnabled && (
             <p className="text-xs text-muted-foreground">
               {t('modelServing.services.ucxTCPHint')}
             </p>
@@ -362,9 +365,11 @@ function PDFields({
           </p>
         </div>
       )}
-      {roleImage('prefill') !== roleImage('decode') && (
+      {pdRoleImagesDiffer(values, service.image) && (
         <p className="text-xs text-destructive">
-          {t('modelServing.services.roleImagesDiffer')}
+          {isVLLM
+            ? t('modelServing.services.roleImagesMustMatchVLLM')
+            : t('modelServing.services.roleImagesDiffer')}
         </p>
       )}
       {(['prefill', 'decode'] as const).map((role) => (
@@ -438,10 +443,14 @@ function PDRoleFields({
             value={values.groupSize}
             onChange={(event) => onChange({ groupSize: event.target.value })}
             disabled={singleNode}
+            aria-describedby={singleNode ? id('group-size-hint') : undefined}
             required
           />
           {singleNode && (
-            <p className="text-xs text-muted-foreground">
+            <p
+              id={id('group-size-hint')}
+              className="text-xs text-muted-foreground"
+            >
               {t('modelServing.services.nodesPerReplicaVLLMHint')}
             </p>
           )}

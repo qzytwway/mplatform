@@ -116,7 +116,7 @@ describe('ServiceDeploymentCard', () => {
       hostNetwork: false,
       privileged: false,
     }
-    const { container } = render(
+    render(
       <ServiceDeploymentCard
         config={{
           rdma: 'none',
@@ -131,15 +131,33 @@ describe('ServiceDeploymentCard', () => {
     expect(
       screen.getByText('modelServing.services.transferBackends.nixl')
     ).toBeInTheDocument()
-    const [command, env] = container.querySelectorAll('pre')
-    expect(command).toHaveTextContent(
-      'vllm serve /models/qwen \\ --kv-transfer-config {"kv_connector":"NixlConnector","kv_role":"kv_producer"}',
-      { normalizeWhitespace: true }
+    expect(codeBlock('modelServing.deployment.command').textContent).toBe(
+      'vllm serve /models/qwen \\\n  --kv-transfer-config {"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
     )
-    expect(env.textContent).toBe(
+    expect(codeBlock('modelServing.services.env').textContent).toBe(
       'VLLM_NIXL_SIDE_CHANNEL_HOST=(fieldRef: status.podIP)'
     )
   })
+
+  it.each([
+    ['mooncake', true],
+    ['mooncake-tcp', false],
+    ['nixl', false],
+  ] as const)(
+    'shows RDMA devices only for %s over RDMA: %s',
+    (transferBackend, shown) => {
+      render(
+        <ServiceDeploymentCard
+          config={{ ...CONFIG, transferBackend, ibDevices: 'mlx5_0' }}
+          mode="pd"
+        />
+      )
+
+      expect(!!screen.queryByText('modelServing.services.ibDevices')).toBe(
+        shown
+      )
+    }
+  )
 
   it.each([
     ['single', false, false],

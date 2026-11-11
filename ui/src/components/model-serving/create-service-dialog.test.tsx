@@ -113,6 +113,37 @@ describe('CreateServiceDialog', () => {
     expect(prefillNodes()).toBeDisabled()
   })
 
+  it('blocks vLLM PD roles that run different images', () => {
+    const create = () =>
+      screen.getByRole('button', { name: 'common.actions.create' })
+    const advanced = (index: number) =>
+      fireEvent.click(
+        screen.getAllByText('common.fields.advancedSettings')[index]
+      )
+    const setImage = (role: string, value: string) =>
+      fireEvent.change(document.getElementById(`inference-${role}-image`)!, {
+        target: { value },
+      })
+    choose('modelServing.services.model', 'qwen (modelServing.modelTypes.chat)')
+    chooseMode('pd')
+    expect(create()).toBeEnabled()
+
+    advanced(0)
+    setImage('prefill', 'my/vllm:nixl')
+    expect(create()).toBeDisabled()
+
+    // Both roles may override the image, as long as they agree.
+    advanced(1)
+    setImage('decode', 'my/vllm:nixl')
+    expect(create()).toBeEnabled()
+
+    // SGLang only warns.
+    setImage('decode', '')
+    expect(create()).toBeDisabled()
+    chooseRuntime('SGLang')
+    expect(create()).toBeEnabled()
+  })
+
   it('creates a vLLM PD service over NIXL', async () => {
     fireEvent.change(document.getElementById('inference-name')!, {
       target: { value: 'qwen-pd' },

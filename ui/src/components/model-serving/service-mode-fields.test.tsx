@@ -48,6 +48,7 @@ const CACHE_WARNING = 'modelServing.services.routerCacheWarning'
 const NEEDS_RDMA = 'modelServing.services.transferBackendNeedsRDMA'
 const UCX_HINT = 'modelServing.services.ucxTCPHint'
 const SINGLE_NODE_HINT = 'modelServing.services.nodesPerReplicaVLLMHint'
+const VLLM_IMAGES_MUST_MATCH = 'modelServing.services.roleImagesMustMatchVLLM'
 
 function renderPD(
   patch: Partial<ServiceModeValues>,
@@ -157,6 +158,32 @@ describe('ServiceModeFields in PD mode', () => {
   })
 
   it.each([
+    ['prefill sets another image', { image: 'my/vllm:nixl' }, {}, true],
+    [
+      'both roles set the same other image',
+      { image: 'my/vllm:nixl' },
+      { image: 'my/vllm:nixl' },
+      false,
+    ],
+    ['decode repeats the service image', {}, { image: SERVICE_IMAGE }, false],
+  ])(
+    'says vLLM rejects differing role images: %s',
+    (_, prefill, decode, rejects) => {
+      renderPD(
+        {
+          ...VLLM_VALUES,
+          prefill: { ...ROLE, ...prefill },
+          decode: { ...ROLE, ...decode },
+        },
+        { runtime: 'vllm' }
+      )
+
+      expect(!!screen.queryByText(VLLM_IMAGES_MUST_MATCH)).toBe(rejects)
+      expect(screen.queryByText(IMAGES_DIFFER)).not.toBeInTheDocument()
+    }
+  )
+
+  it.each([
     ['default policy over two replicas', 'default', '2', true],
     ['cache_aware over two replicas', 'cache_aware', '2', true],
     ['cache_aware over one replica', 'cache_aware', '1', false],
@@ -216,16 +243,23 @@ describe('ServiceModeFields in PD mode', () => {
   it.each([
     ['sglang', false],
     ['vllm', true],
-  ] as const)('fixes nodes per replica of %s at 1: %s', (runtime, fixed) => {
+  ] as const)('locks nodes per replica of %s: %s', (runtime, locked) => {
     renderPD(runtime === 'vllm' ? VLLM_VALUES : {}, { runtime })
 
     for (const role of ['prefill', 'decode']) {
-      const input = document.getElementById(`inference-${role}-group-size`)
-      expect(input).toHaveValue(1)
-      if (fixed) expect(input).toBeDisabled()
-      else expect(input).toBeEnabled()
+      const input = screen.getByLabelText(
+        'modelServing.services.nodesPerReplica',
+        { selector: `#inference-${role}-group-size` }
+      )
+      if (locked) {
+        expect(input).toBeDisabled()
+        expect(input).toHaveAccessibleDescription(SINGLE_NODE_HINT)
+      } else {
+        expect(input).toBeEnabled()
+        expect(input).not.toHaveAttribute('aria-describedby')
+      }
     }
-    expect(screen.queryAllByText(SINGLE_NODE_HINT)).toHaveLength(fixed ? 2 : 0)
+    expect(screen.queryAllByText(SINGLE_NODE_HINT)).toHaveLength(locked ? 2 : 0)
   })
 
   it('offers the vllm-router image for the router of vLLM', () => {
@@ -242,7 +276,9 @@ describe('ServiceModeFields in PD mode', () => {
   it.each([
     ['vllm without rdma', 'vllm', 'nixl', false, true],
     ['vllm with rdma', 'vllm', 'nixl', true, false],
-    ['sglang nixl without rdma', 'sglang', 'nixl', false, false],
+    ['sglang nixl without rdma', 'sglang', 'nixl', false, true],
+    ['sglang nixl with rdma', 'sglang', 'nixl', true, false],
+    ['sglang mooncake over tcp', 'sglang', 'mooncake-tcp', false, false],
   ] as const)(
     'suggests UCX over TCP settings: %s',
     (_, runtime, transferBackend, rdmaEnabled, hints) => {
