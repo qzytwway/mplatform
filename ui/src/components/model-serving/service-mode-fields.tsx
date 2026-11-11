@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { DEPLOYMENT_MODES } from './service-modes'
+import { DEPLOYMENT_MODES, MAX_PD_ROLE_REPLICAS } from './service-modes'
 
 // vllm-router finds the Mooncake bootstrap servers only of prefill servers
 // it is given at startup, not of the pods it discovers, so vLLM uses NIXL.
@@ -89,6 +89,13 @@ export interface PDRoleValues {
   env: string
 }
 
+// The service settings PD roles use unless they set their own.
+export interface ServiceDefaults {
+  image: string
+  cpu: string
+  memory: string
+}
+
 export interface ServiceModeValues {
   replicas: string
   groupSize: string
@@ -110,8 +117,7 @@ interface ServiceModeFieldsProps {
   runtime: InferenceRuntime
   // Labels the per-pod GPU count of PD roles, which follows the GPU type.
   gpuCountLabel: string
-  // The service image, which PD roles use unless they set their own.
-  image: string
+  service: ServiceDefaults
   // Whether an RDMA network is chosen, which Mooncake over RDMA needs.
   rdmaEnabled: boolean
 }
@@ -124,7 +130,7 @@ export function ServiceModeFields({
   onValuesChange,
   runtime,
   gpuCountLabel,
-  image,
+  service,
   rdmaEnabled,
 }: ServiceModeFieldsProps) {
   const { t } = useTranslation()
@@ -163,7 +169,7 @@ export function ServiceModeFields({
           update={update}
           runtime={runtime}
           gpuCountLabel={gpuCountLabel}
-          image={image}
+          service={service}
           rdmaEnabled={rdmaEnabled}
         />
       ) : (
@@ -209,7 +215,7 @@ interface PDFieldsProps {
   update: (patch: Partial<ServiceModeValues>) => void
   runtime: InferenceRuntime
   gpuCountLabel: string
-  image: string
+  service: ServiceDefaults
   rdmaEnabled: boolean
 }
 
@@ -218,7 +224,7 @@ function PDFields({
   update,
   runtime,
   gpuCountLabel,
-  image,
+  service,
   rdmaEnabled,
 }: PDFieldsProps) {
   const { t } = useTranslation()
@@ -226,7 +232,8 @@ function PDFields({
   // The router's default policy is cache_aware.
   const cacheAware =
     values.routerPolicy === 'cache_aware' || values.routerPolicy === 'default'
-  const roleImage = (role: PDRole) => values[role].image.trim() || image.trim()
+  const roleImage = (role: PDRole) =>
+    values[role].image.trim() || service.image.trim()
 
   return (
     <>
@@ -239,7 +246,7 @@ function PDFields({
             id="inference-router-image"
             value={values.routerImage}
             onChange={(event) => update({ routerImage: event.target.value })}
-            placeholder={isVLLM ? VLLM_ROUTER_IMAGE : image}
+            placeholder={isVLLM ? VLLM_ROUTER_IMAGE : service.image}
           />
           <p className="text-xs text-muted-foreground">
             {t(`modelServing.services.routerImageHints.${runtime}`, {
@@ -370,7 +377,7 @@ function PDFields({
           }
           runtime={runtime}
           gpuCountLabel={gpuCountLabel}
-          image={image}
+          service={service}
         />
       ))}
     </>
@@ -383,7 +390,7 @@ interface PDRoleFieldsProps {
   onChange: (patch: Partial<PDRoleValues>) => void
   runtime: InferenceRuntime
   gpuCountLabel: string
-  image: string
+  service: ServiceDefaults
 }
 
 function PDRoleFields({
@@ -392,7 +399,7 @@ function PDRoleFields({
   onChange,
   runtime,
   gpuCountLabel,
-  image,
+  service,
 }: PDRoleFieldsProps) {
   const { t } = useTranslation()
   const id = (field: string) => `inference-${role}-${field}`
@@ -414,6 +421,7 @@ function PDRoleFields({
             id={id('replicas')}
             type="number"
             min={1}
+            max={MAX_PD_ROLE_REPLICAS}
             value={values.replicas}
             onChange={(event) => onChange({ replicas: event.target.value })}
             required
@@ -485,7 +493,7 @@ function PDRoleFields({
               id={id('image')}
               value={values.image}
               onChange={(event) => onChange({ image: event.target.value })}
-              placeholder={image}
+              placeholder={service.image}
             />
             <p className="text-xs text-muted-foreground">
               {t('modelServing.services.roleImageHint')}
@@ -498,7 +506,10 @@ function PDRoleFields({
                 id={id('cpu')}
                 value={values.cpu}
                 onChange={(event) => onChange({ cpu: event.target.value })}
-                placeholder={t('modelServing.services.inheritService')}
+                placeholder={
+                  service.cpu.trim() ||
+                  t('modelServing.services.inheritService')
+                }
               />
             </div>
             <div className="space-y-2">
@@ -507,7 +518,10 @@ function PDRoleFields({
                 id={id('memory')}
                 value={values.memory}
                 onChange={(event) => onChange({ memory: event.target.value })}
-                placeholder={t('modelServing.services.inheritService')}
+                placeholder={
+                  service.memory.trim() ||
+                  t('modelServing.services.inheritService')
+                }
               />
             </div>
           </div>

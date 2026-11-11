@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qzytwway/mplatform/pkg/cluster"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -63,6 +64,19 @@ type serviceDetail struct {
 // describeWorkload reports a LeaderWorkerSet or DisaggregatedSet as an
 // inference service, reading the pd roles' state from the cluster.
 func describeWorkload(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) (inferenceService, error) {
+	var router *appsv1.Deployment
+	if workload.GetKind() == disaggregatedSetGVK.Kind {
+		var err error
+		if router, err = getRouter(ctx, cs, workload); err != nil {
+			return inferenceService{}, err
+		}
+	}
+	return describeService(ctx, cs, workload, router)
+}
+
+// describeService is describeWorkload with the router of a pd service read
+// already; router is nil outside pd mode or when the router is missing.
+func describeService(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured, router *appsv1.Deployment) (inferenceService, error) {
 	annotations := workload.GetAnnotations()
 	service := inferenceService{
 		Name:       workload.GetName(),
@@ -78,7 +92,7 @@ func describeWorkload(ctx context.Context, cs *cluster.ClientSet, workload *unst
 	}
 	template, _, _ := unstructured.NestedMap(workload.Object, "spec", "leaderWorkerTemplate")
 	if workload.GetKind() == disaggregatedSetGVK.Kind {
-		roles, err := pdRoles(ctx, cs, workload)
+		roles, err := pdRoles(ctx, cs, workload, router)
 		if err != nil {
 			return service, err
 		}
@@ -141,7 +155,7 @@ func pdRoleSpecs(workload *unstructured.Unstructured) map[string]map[string]any 
 
 // pdRoles counts ready prefill and decode replicas on the child
 // LeaderWorkerSets, of which a role has one per revision during a rollout.
-func pdRoles(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) ([]serviceRole, error) {
+func pdRoles(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured, router *appsv1.Deployment) ([]serviceRole, error) {
 	children := &unstructured.UnstructuredList{}
 	children.SetGroupVersionKind(lwsGVK)
 	if err := cs.K8sClient.List(ctx, children, client.InNamespace(workload.GetNamespace()),
@@ -163,10 +177,6 @@ func pdRoles(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.
 		roles = append(roles, role)
 	}
 
-	router, err := getRouter(ctx, cs, workload)
-	if err != nil {
-		return nil, err
-	}
 	routerRole := serviceRole{Name: roleRouter}
 	if router != nil {
 		routerRole.ReadyReplicas = router.Status.ReadyReplicas

@@ -12,15 +12,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const maskedEnvValue = "******"
+const maskedValue = "******"
 
-// sensitiveEnvWords mark environment variables whose values are masked.
-var sensitiveEnvWords = []string{"TOKEN", "SECRET", "KEY", "PASSWORD"}
+var (
+	// sensitiveEnvWords mark environment variables whose values are masked
+	// wherever they appear in the name.
+	sensitiveEnvWords = []string{"TOKEN", "SECRET", "KEY", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH"}
+	// sensitiveFlagWords mark flags whose values are masked. They must be a
+	// whole word of the flag name, so --max-total-tokens and --tokenizer-path
+	// stay readable while --api-key and --hf-token do not.
+	sensitiveFlagWords = []string{"key", "apikey", "token", "secret", "password", "passwd", "credential", "credentials", "auth"}
+)
 
-// deploymentConfig is how a service is deployed. Settings the workload
-// records in annotations come from there; the rest, and everything on
-// workloads created before those annotations, is read back from the pod
-// templates of the workload and router.
+// deploymentConfig is how a service is deployed, read back from the pod
+// templates of its workload and router, which the YAML editor may have
+// changed since. The RDMA mode comes from the workload's annotation, which
+// is more reliable than inferring it, and annotations fill in the pd
+// settings when a template is missing.
 type deploymentConfig struct {
 	Roles []roleConfig `json:"roles"`
 	RDMA  string       `json:"rdma"`
@@ -84,11 +92,10 @@ func readDeploymentConfig(workload *unstructured.Unstructured, router *appsv1.De
 		return nil, err
 	}
 	config.RDMA = rdmaModeNone
-	if pods := config.Roles[0].Pods; len(pods) > 0 {
-		config.RDMA = readRDMA(pods[0])
-	}
 	if mode, ok := workload.GetAnnotations()[rdmaAnnotation]; ok {
 		config.RDMA = mode
+	} else if pods := config.Roles[0].Pods; len(pods) > 0 {
+		config.RDMA = readRDMA(pods[0])
 	}
 	return config, nil
 }
@@ -102,11 +109,14 @@ func readPDConfig(config *deploymentConfig, workload *unstructured.Unstructured,
 		}
 		config.Roles = append(config.Roles, role)
 	}
+	annotations := workload.GetAnnotations()
+	config.TransferBackend, config.IBDevices = annotations[transferBackendAnnotation], annotations[ibDevicesAnnotation]
 	// Both roles get the same transfer settings; prefill has them unless
 	// the template was edited away.
 	if pods := config.Roles[0].Pods; len(pods) > 0 {
 		config.TransferBackend, config.IBDevices = readTransfer(pods[0])
 	}
+	config.RouterPolicy = annotations[routerPolicyAnnotation]
 	if router != nil {
 		routerPod := readPodConfig("", &router.Spec.Template)
 		routerRole := roleConfig{Name: roleRouter, Pods: []podConfig{routerPod}}
@@ -115,16 +125,6 @@ func readPDConfig(config *deploymentConfig, workload *unstructured.Unstructured,
 		}
 		config.Roles = append(config.Roles, routerRole)
 		config.RouterPolicy = argValue(routerPod.Args, "--policy")
-	}
-	annotations := workload.GetAnnotations()
-	for key, field := range map[string]*string{
-		transferBackendAnnotation: &config.TransferBackend,
-		ibDevicesAnnotation:       &config.IBDevices,
-		routerPolicyAnnotation:    &config.RouterPolicy,
-	} {
-		if value, ok := annotations[key]; ok {
-			*field = value
-		}
 	}
 	return nil
 }
@@ -170,7 +170,7 @@ func readPodConfig(role string, template *corev1.PodTemplateSpec) podConfig {
 	container := template.Spec.Containers[0]
 	pod.Image = container.Image
 	pod.Command = append(pod.Command, container.Command...)
-	pod.Args = append(pod.Args, container.Args...)
+	pod.Args = maskArgs(container.Args)
 	for _, item := range container.Env {
 		pod.Env = append(pod.Env, readEnvVar(item))
 	}
@@ -186,7 +186,7 @@ func readEnvVar(item corev1.EnvVar) configEnvVar {
 	env := configEnvVar{Name: item.Name, Value: item.Value}
 	upper := strings.ToUpper(item.Name)
 	if env.Value != "" && slices.ContainsFunc(sensitiveEnvWords, func(word string) bool { return strings.Contains(upper, word) }) {
-		env.Value = maskedEnvValue
+		env.Value = maskedValue
 	}
 	source := item.ValueFrom
 	switch {
@@ -201,6 +201,30 @@ func readEnvVar(item corev1.EnvVar) configEnvVar {
 		env.ValueFrom = "configMapKeyRef: " + source.ConfigMapKeyRef.Name + "/" + source.ConfigMapKeyRef.Key
 	}
 	return env
+}
+
+// maskArgs masks the values of sensitive flags, given as "--flag value" or
+// "--flag=value". A flag followed by another flag has no value to mask.
+func maskArgs(args []string) []string {
+	masked := make([]string, 0, len(args))
+	for i, arg := range args {
+		name, _, inline := strings.Cut(arg, "=")
+		switch {
+		case inline && strings.HasPrefix(name, "-") && isSensitiveFlag(name):
+			masked = append(masked, name+"="+maskedValue)
+		case i > 0 && strings.HasPrefix(args[i-1], "-") && !strings.Contains(args[i-1], "=") &&
+			isSensitiveFlag(args[i-1]) && !strings.HasPrefix(arg, "--"):
+			masked = append(masked, maskedValue)
+		default:
+			masked = append(masked, arg)
+		}
+	}
+	return masked
+}
+
+func isSensitiveFlag(flag string) bool {
+	words := strings.FieldsFunc(strings.ToLower(flag), func(r rune) bool { return r == '-' || r == '_' })
+	return slices.ContainsFunc(words, func(word string) bool { return slices.Contains(sensitiveFlagWords, word) })
 }
 
 // readResources lists CPU and memory first, then the other resources by name.

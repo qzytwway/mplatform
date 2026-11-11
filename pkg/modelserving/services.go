@@ -163,22 +163,24 @@ func (h *Handler) GetService(c *gin.Context) {
 	if !ok {
 		return
 	}
-	service, err := describeWorkload(c.Request.Context(), cs, workload)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	pods, err := listServicePods(c.Request.Context(), cs, workload.GetNamespace(), workload.GetName())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	ctx := c.Request.Context()
 	var router *appsv1.Deployment
+	var err error
 	if workload.GetKind() == disaggregatedSetGVK.Kind {
-		if router, err = getRouter(c.Request.Context(), cs, workload); err != nil {
+		if router, err = getRouter(ctx, cs, workload); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+	}
+	service, err := describeService(ctx, cs, workload, router)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	pods, err := listServicePods(ctx, cs, workload.GetNamespace(), workload.GetName())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 	config, err := readDeploymentConfig(workload, router)
 	if err != nil {
@@ -372,13 +374,17 @@ func (h *Handler) ScaleService(c *gin.Context) {
 		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	if router != nil {
-		if err := scaleRouter(ctx, cs, router, *req.RouterReplicas); err != nil {
+	var service inferenceService
+	if router == nil {
+		service, err = describeWorkload(ctx, cs, scaled)
+	} else {
+		if router, err = scaleRouter(ctx, cs, router, *req.RouterReplicas); err != nil {
 			c.JSON(createErrorStatus(err), gin.H{"error": fmt.Sprintf("prefill and decode were scaled, but scaling the router failed: %v", err)})
 			return
 		}
+		// The patched router, since the informer cache may not have it yet.
+		service, err = describeService(ctx, cs, scaled, router)
 	}
-	service, err := describeWorkload(ctx, cs, scaled)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -398,6 +404,9 @@ func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*uns
 	}
 	if req.PrefillReplicas < 1 || req.DecodeReplicas < 1 {
 		return nil, fmt.Errorf("prefillReplicas and decodeReplicas must be at least 1")
+	}
+	if req.PrefillReplicas > maxPDRoleReplicas || req.DecodeReplicas > maxPDRoleReplicas {
+		return nil, fmt.Errorf("prefillReplicas and decodeReplicas must be at most %d", maxPDRoleReplicas)
 	}
 	if req.RouterReplicas != nil && *req.RouterReplicas < 1 {
 		return nil, fmt.Errorf("routerReplicas must be at least 1")

@@ -171,9 +171,13 @@ func getRouter(ctx context.Context, cs *cluster.ClientSet, workload *unstructure
 }
 
 // scaleRouter patches only the replicas, so it cannot undo concurrent
-// changes to the rest of the router.
-func scaleRouter(ctx context.Context, cs *cluster.ClientSet, router *appsv1.Deployment, replicas int32) error {
+// changes to the rest of the router, and returns the router the API server
+// answers with.
+func scaleRouter(ctx context.Context, cs *cluster.ClientSet, router *appsv1.Deployment, replicas int32) (*appsv1.Deployment, error) {
 	scaled := router.DeepCopy()
 	scaled.Spec.Replicas = new(replicas)
-	return cs.K8sClient.Patch(ctx, scaled, client.MergeFrom(router))
+	if err := cs.K8sClient.Patch(ctx, scaled, client.MergeFrom(router)); err != nil {
+		return nil, err
+	}
+	return scaled, nil
 }

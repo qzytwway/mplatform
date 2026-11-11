@@ -5,15 +5,13 @@ import (
 	"testing"
 
 	"github.com/qzytwway/mplatform/pkg/cluster"
-	"github.com/qzytwway/mplatform/pkg/kube"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func builtWorkloads(t *testing.T) (lws, pd *unstructured.Unstructured) {
@@ -54,6 +52,16 @@ func TestScaleWorkload(t *testing.T) {
 			wantErr: "routerReplicas must be at least 1",
 		},
 		{
+			name: "pd over the replica cap", workload: pd,
+			req:     scaleRequest{PrefillReplicas: maxPDRoleReplicas + 1, DecodeReplicas: 1},
+			wantErr: "prefillReplicas and decodeReplicas must be at most 100",
+		},
+		{
+			name: "pd at the replica cap", workload: pd,
+			req:  scaleRequest{PrefillReplicas: maxPDRoleReplicas, DecodeReplicas: maxPDRoleReplicas},
+			want: map[string]int64{rolePrefill: maxPDRoleReplicas, roleDecode: maxPDRoleReplicas},
+		},
+		{
 			name: "pd without decode replicas", workload: pd,
 			req:     scaleRequest{PrefillReplicas: 2, RouterReplicas: new(int32(1))},
 			wantErr: "prefillReplicas and decodeReplicas must be at least 1",
@@ -87,10 +95,7 @@ func TestScaleWorkload(t *testing.T) {
 
 func fakeClientSet(t *testing.T, objects ...client.Object) *cluster.ClientSet {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	require.NoError(t, appsv1.AddToScheme(scheme))
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	return &cluster.ClientSet{Name: "test", K8sClient: &kube.K8sClient{Client: fakeClient}}
+	return newFakeClientSet(t, interceptor.Funcs{}, objects...)
 }
 
 func TestGetRouter(t *testing.T) {
@@ -128,8 +133,10 @@ func TestScaleRouter(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
-	require.NoError(t, scaleRouter(ctx, cs, router, 3))
+	patched, err := scaleRouter(ctx, cs, router, 3)
 
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), *patched.Spec.Replicas)
 	var scaled appsv1.Deployment
 	require.NoError(t, cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: "qwen-pd-router"}, &scaled))
 	assert.Equal(t, int32(3), *scaled.Spec.Replicas)

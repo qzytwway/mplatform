@@ -104,7 +104,9 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		{"decode negative cpu", pdBody(), func(r *serviceRequest) { r.PD.Decode.CPU = "-1" }, "pd.decode.cpu must be a positive quantity"},
 		{"prefill invalid memory", pdBody(), func(r *serviceRequest) { r.PD.Prefill.Memory = "lots" }, "pd.prefill.memory must be a positive quantity"},
 		{"decode invalid env name", pdBody(), func(r *serviceRequest) { r.PD.Decode.Env = []envVar{{Name: "1ST"}} }, `pd.decode.env name "1ST" is not a valid`},
-		{"invalid router image", pdBody(), func(r *serviceRequest) { r.PD.RouterImage = "Not An Image" }, "pd.routerImage must be a valid image reference"},
+		{"invalid router image", pdBody(), func(r *serviceRequest) { r.PD.RouterImage = "my/router:" }, "pd.routerImage must be a valid image reference"},
+		{"prefill over the replica cap", pdBody(), func(r *serviceRequest) { r.PD.Prefill.Replicas = maxPDRoleReplicas + 1 }, "pd.prefill replicas must be at most 100"},
+		{"decode over the replica cap", pdBody(), func(r *serviceRequest) { r.PD.Decode.Replicas = maxPDRoleReplicas + 1 }, "pd.decode replicas must be at most 100"},
 		{"negative router replicas", pdBody(), func(r *serviceRequest) { r.PD.RouterReplicas = -1 }, "pd.routerReplicas must be at least 1"},
 		{"unknown router policy", pdBody(), func(r *serviceRequest) { r.PD.RouterPolicy = "least_load" }, "pd.routerPolicy must be one of cache_aware, power_of_two, round_robin, random"},
 		{"unknown transfer backend", pdBody(), func(r *serviceRequest) { r.PD.TransferBackend = "rdma" }, "pd.transferBackend must be"},
@@ -125,6 +127,7 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		}, "pd.prefill and pd.decode must use the same image"},
 		{"vllm invalid router image", vllmPDBody(), func(r *serviceRequest) { r.PD.RouterImage = "vllm/vllm-router:" }, "pd.routerImage must be a valid image reference"},
 		{"vllm name too long", vllmPDBody(), func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength+1) }, "name must be at most 30 characters in pd mode"},
+		{"vllm decode over the replica cap", vllmPDBody(), func(r *serviceRequest) { r.PD.Decode.Replicas = maxPDRoleReplicas + 1 }, "pd.decode replicas must be at most 100"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -196,13 +199,6 @@ func TestParsePDRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "the router runs from the service image by default",
-			edit: func(r *serviceRequest) { r.PD.RouterImage = " " },
-			check: func(t *testing.T, pd *pdRequest) {
-				assert.Equal(t, "lmsysorg/sglang:latest", pd.RouterImage)
-			},
-		},
-		{
 			name: "role images may differ",
 			edit: func(r *serviceRequest) { r.PD.Prefill.Image = "my/sglang:prefill" },
 			check: func(t *testing.T, pd *pdRequest) {
@@ -249,6 +245,29 @@ func TestParsePDRequest(t *testing.T) {
 			name:  "name of the longest pd length",
 			edit:  func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength) },
 			check: func(*testing.T, *pdRequest) {},
+		},
+		{
+			name: "router image defaults to the service image",
+			edit: func(r *serviceRequest) { r.PD.RouterImage = " " },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, "lmsysorg/sglang:latest", pd.RouterImage)
+			},
+		},
+		{
+			name: "router image is kept",
+			edit: func(r *serviceRequest) { r.PD.RouterImage = " lmsysorg/sglang-router:v0.2 " },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, "lmsysorg/sglang-router:v0.2", pd.RouterImage)
+			},
+		},
+		{
+			name: "replicas at the cap",
+			edit: func(r *serviceRequest) {
+				r.PD.Prefill.Replicas, r.PD.Decode.Replicas = maxPDRoleReplicas, maxPDRoleReplicas
+			},
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, int32(maxPDRoleReplicas), pd.Prefill.Replicas)
+			},
 		},
 		{
 			name: "mooncake over tcp needs no rdma",
