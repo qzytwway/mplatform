@@ -2,6 +2,7 @@ package modelserving
 
 import (
 	"cmp"
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -264,8 +265,22 @@ func isRDMAResource(name string) bool {
 }
 
 // readTransfer reads the KV transfer backend and RDMA devices of a pd role.
-// SGLang transfers with Mooncake unless told otherwise.
+// vLLM names its connector in --kv-transfer-config, shown as is unless it is
+// NIXL's, and an unreadable config as none. SGLang transfers with Mooncake
+// unless told otherwise.
 func readTransfer(pod podConfig) (backend, ibDevices string) {
+	if config := argValue(pod.Args, "--kv-transfer-config"); config != "" {
+		var transfer struct {
+			Connector string `json:"kv_connector"`
+		}
+		if err := json.Unmarshal([]byte(config), &transfer); err != nil {
+			return "", ""
+		}
+		if transfer.Connector == nixlConnector {
+			return transferNIXL, ""
+		}
+		return transfer.Connector, ""
+	}
 	backend = cmp.Or(argValue(pod.Args, "--disaggregation-transfer-backend"), transferMooncake)
 	if backend == "mooncake_tcp" || (backend == transferMooncake && envValue(pod.Env, "MC_FORCE_TCP") == "1") {
 		backend = transferMooncakeTCP

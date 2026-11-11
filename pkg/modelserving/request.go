@@ -1,6 +1,7 @@
 package modelserving
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -19,6 +20,9 @@ const (
 	// characters, which a longer name reaches with the prefill role at two
 	// digit replica counts.
 	maxPDServiceNameLength = 30
+	// vLLM images do not include vllm-router, so its router runs from the
+	// router's own image unless told otherwise.
+	defaultVLLMRouterImage = "vllm/vllm-router:v0.1.17"
 )
 
 type serviceRequest struct {
@@ -66,10 +70,12 @@ type rdmaRequest struct {
 }
 
 type pdRequest struct {
-	Prefill         pdRoleRequest `json:"prefill"`
-	Decode          pdRoleRequest `json:"decode"`
-	RouterImage     string        `json:"routerImage"`
-	TransferBackend string        `json:"transferBackend"`
+	Prefill pdRoleRequest `json:"prefill"`
+	Decode  pdRoleRequest `json:"decode"`
+	// RouterImage defaults to the service image with SGLang, whose images
+	// include its router, and to defaultVLLMRouterImage with vLLM.
+	RouterImage     string `json:"routerImage"`
+	TransferBackend string `json:"transferBackend"`
 	// IBDevices names the HCAs Mooncake transfers over; empty lets it detect them.
 	IBDevices      string `json:"ibDevices"`
 	RouterReplicas int32  `json:"routerReplicas"`
@@ -99,7 +105,8 @@ type scaleRequest struct {
 	RouterReplicas  *int32 `json:"routerReplicas"`
 }
 
-// routerPolicies are the --policy values of sglang_router.launch_router.
+// routerPolicies are --policy values that sglang_router.launch_router and
+// vllm-router both take.
 var routerPolicies = []string{"cache_aware", "power_of_two", "round_robin", "random"}
 
 func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
@@ -193,9 +200,6 @@ func parseServiceMode(req serviceRequest) (serviceRequest, error) {
 }
 
 func parsePDRequest(req serviceRequest) (serviceRequest, error) {
-	if req.Runtime != runtimeSGLang {
-		return req, fmt.Errorf("%s mode requires the %s runtime", modePD, runtimeSGLang)
-	}
 	if req.PD == nil {
 		return req, fmt.Errorf("pd is required in %s mode", modePD)
 	}
@@ -219,6 +223,17 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 		RouterReplicas:  req.PD.RouterReplicas,
 		RouterPolicy:    req.PD.RouterPolicy,
 	}
+	if req.Runtime == runtimeVLLM {
+		if err := validateVLLMRoles(req.Image, prefill, decode); err != nil {
+			return req, err
+		}
+	}
+	if pd.RouterImage == "" {
+		pd.RouterImage = req.Image
+		if req.Runtime == runtimeVLLM {
+			pd.RouterImage = defaultVLLMRouterImage
+		}
+	}
 	if _, err := reference.ParseNormalizedNamed(pd.RouterImage); err != nil {
 		return req, fmt.Errorf("pd.routerImage must be a valid image reference")
 	}
@@ -231,16 +246,9 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	if pd.RouterPolicy != "" && !slices.Contains(routerPolicies, pd.RouterPolicy) {
 		return req, fmt.Errorf("pd.routerPolicy must be one of %s", strings.Join(routerPolicies, ", "))
 	}
-	switch pd.TransferBackend {
-	case "":
-		pd.TransferBackend = transferMooncake
-	case transferMooncake, transferMooncakeTCP, transferNIXL:
-	default:
-		return req, fmt.Errorf("pd.transferBackend must be %s, %s or %s", transferMooncake, transferMooncakeTCP, transferNIXL)
-	}
-	// parseServiceMode has parsed rdma already.
-	if pd.TransferBackend == transferMooncake && req.RDMA == nil {
-		return req, fmt.Errorf("pd.transferBackend %s transfers over RDMA; configure rdma or use %s", transferMooncake, transferMooncakeTCP)
+	pd.TransferBackend, err = parseTransferBackend(req.Runtime, pd.TransferBackend, req.RDMA)
+	if err != nil {
+		return req, err
 	}
 	if pd.TransferBackend != transferMooncake {
 		pd.IBDevices = ""
@@ -286,6 +294,47 @@ func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
 		return role, err
 	}
 	return role, validateEnv(field+".env", role.Env)
+}
+
+// validateVLLMRoles keeps vLLM pd roles to what is known to work. Prefill and
+// decode refuse to transfer KV between different vLLM or NIXL connector
+// versions. Groups of several nodes pipeline the model, which the NIXL
+// connector rejects for models with hybrid KV cache layouts and which has not
+// been verified for the others.
+func validateVLLMRoles(image string, prefill, decode pdRoleRequest) error {
+	switch {
+	case prefill.GroupSize != 1:
+		return fmt.Errorf("pd.prefill.groupSize must be 1 with the %s runtime", runtimeVLLM)
+	case decode.GroupSize != 1:
+		return fmt.Errorf("pd.decode.groupSize must be 1 with the %s runtime", runtimeVLLM)
+	case cmp.Or(prefill.Image, image) != cmp.Or(decode.Image, image):
+		return fmt.Errorf("pd.prefill and pd.decode must use the same image with the %s runtime", runtimeVLLM)
+	}
+	return nil
+}
+
+// parseTransferBackend defaults and checks the KV transfer backend of a pd
+// service, given its parsed rdma. vLLM transfers with NIXL only: vllm-router
+// asks Mooncake prefill servers for their bootstrap details only when it is
+// given their URLs at startup, not for the pods it discovers.
+func parseTransferBackend(runtime, backend string, rdma *rdmaRequest) (string, error) {
+	if runtime == runtimeVLLM {
+		if backend != "" && backend != transferNIXL {
+			return "", fmt.Errorf("pd.transferBackend must be %s with the %s runtime", transferNIXL, runtimeVLLM)
+		}
+		return transferNIXL, nil
+	}
+	switch backend {
+	case "":
+		backend = transferMooncake
+	case transferMooncake, transferMooncakeTCP, transferNIXL:
+	default:
+		return "", fmt.Errorf("pd.transferBackend must be %s, %s or %s", transferMooncake, transferMooncakeTCP, transferNIXL)
+	}
+	if backend == transferMooncake && rdma == nil {
+		return "", fmt.Errorf("pd.transferBackend %s transfers over RDMA; configure rdma or use %s", transferMooncake, transferMooncakeTCP)
+	}
+	return backend, nil
 }
 
 func parseRDMARequest(body *rdmaRequest) (*rdmaRequest, error) {

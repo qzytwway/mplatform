@@ -52,6 +52,12 @@ const (
 	// transfer metadata from; the router reads it from bootstrapAnnotation.
 	pdBootstrapPort     = 8998
 	bootstrapAnnotation = "sglang.ai/bootstrap-port"
+	// vLLM pd servers transfer KV with the NIXL connector. Decode servers
+	// handshake with a prefill server on its side channel, at the address
+	// the prefill server reports from nixlSideChannelHostEnv.
+	nixlConnector          = "NixlConnector"
+	nixlSideChannelPort    = 5600
+	nixlSideChannelHostEnv = "VLLM_NIXL_SIDE_CHANNEL_HOST"
 
 	// KV transfer backends of pd mode. Mooncake transfers over RDMA unless
 	// forced to TCP, which works on any network but is much slower.
@@ -160,7 +166,7 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 	if pdRole != "" {
 		labels[roleLabel] = pdRole
 	}
-	if pdRole == rolePrefill {
+	if pdRole == rolePrefill && req.Runtime == runtimeSGLang {
 		annotations[bootstrapAnnotation] = fmt.Sprint(pdBootstrapPort)
 	}
 	if len(annotations) == 0 {
@@ -200,6 +206,9 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 		HTTPGet: &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(servingPort)},
 	}
 	container.Ports = []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
+	if pdRole != "" && req.Runtime == runtimeVLLM {
+		container.Ports = append(container.Ports, corev1.ContainerPort{Name: "nixl", ContainerPort: nixlSideChannelPort})
+	}
 	container.ReadinessProbe = &corev1.Probe{ProbeHandler: healthProbe, PeriodSeconds: probePeriodSeconds}
 	container.StartupProbe = &corev1.Probe{
 		ProbeHandler:     healthProbe,
@@ -255,7 +264,7 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount))
 	}
 	if pdRole != "" {
-		args = append(args, disaggregationArgs(req.PD, pdRole)...)
+		args = append(args, disaggregationArgs(req.Runtime, req.PD, pdRole)...)
 	}
 	if served.Type != modelTypeEmbedding {
 		return args
@@ -267,9 +276,17 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 }
 
 // disaggregationArgs makes a pd role's server prefill or decode and pick the
-// KV transfer backend. Every node of a prefill group registers with the
-// bootstrap server its leader runs on the given port.
-func disaggregationArgs(pd *pdRequest, pdRole string) []string {
+// KV transfer backend. With SGLang, every node of a prefill group registers
+// with the bootstrap server its leader runs on the given port. vLLM prefill
+// servers produce the KV cache that decode servers pull over NIXL.
+func disaggregationArgs(runtime string, pd *pdRequest, pdRole string) []string {
+	if runtime == runtimeVLLM {
+		kvRole := "kv_consumer"
+		if pdRole == rolePrefill {
+			kvRole = "kv_producer"
+		}
+		return []string{"--kv-transfer-config", fmt.Sprintf(`{"kv_connector":"%s","kv_role":"%s"}`, nixlConnector, kvRole)}
+	}
 	args := []string{"--disaggregation-mode", pdRole}
 	if pdRole == rolePrefill {
 		args = append(args, "--disaggregation-bootstrap-port", fmt.Sprint(pdBootstrapPort))
@@ -291,6 +308,12 @@ func runtimeEnv(req *serviceRequest) []corev1.EnvVar {
 	var env []corev1.EnvVar
 	if req.PD != nil && req.PD.TransferBackend == transferMooncakeTCP {
 		env = append(env, corev1.EnvVar{Name: "MOONCAKE_PROTOCOL", Value: "tcp"}, corev1.EnvVar{Name: "MC_FORCE_TCP", Value: "1"})
+	}
+	// Left unset, the address is localhost and decode servers reach themselves.
+	if req.PD != nil && req.Runtime == runtimeVLLM {
+		env = append(env, corev1.EnvVar{Name: nixlSideChannelHostEnv, ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+		}})
 	}
 	for _, item := range req.Env {
 		env = append(env, corev1.EnvVar{Name: item.Name, Value: item.Value})
