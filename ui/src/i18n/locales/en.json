@@ -2106,8 +2106,6 @@
       "uninstallNote": "VictoriaLogs and Vector are removed. The log data volume is kept and must be deleted manually."
     },
     "search": {
-      "pod": "Pod",
-      "podPlaceholder": "Pod name prefix",
       "container": "Container",
       "containerPlaceholder": "Container",
       "keyword": "Keyword",

@@ -2193,8 +2193,6 @@
       "uninstallNote": "会删除 VictoriaLogs 和 Vector，日志数据卷会保留，需要手动删除。"
     },
     "search": {
-      "pod": "Pod",
-      "podPlaceholder": "Pod 名称前缀",
       "container": "容器",
       "containerPlaceholder": "容器",
       "keyword": "关键词",

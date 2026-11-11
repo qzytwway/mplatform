@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 
+import { useResources } from '@/lib/api'
 import {
   useLogHits,
   useLogs,
@@ -10,6 +11,7 @@ import {
   type LogHits,
   type LogQueryParams,
 } from '@/lib/api/logging'
+import { toSimpleContainer } from '@/lib/k8s'
 import { formatDate, translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,7 +22,9 @@ import {
 } from '@/components/ui/chart'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ContainerSelector } from '@/components/selector/container-selector'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
+import { PodSelector } from '@/components/selector/pod-selector'
 
 import { TimeWindowControls } from './time-window-controls'
 import { useTimeWindow } from './use-time-window'
@@ -54,6 +58,18 @@ export function LogSearch() {
   )
   const logsQuery = useLogs(params, true)
   const hitsQuery = useLogHits(params, true)
+  const podsQuery = useResources('pods', draft.namespace)
+  const pods = podsQuery.data ?? []
+  const selectedPod = pods.find((pod) => pod.metadata?.name === draft.pod)
+  const containers = useMemo(
+    () =>
+      toSimpleContainer(
+        selectedPod?.spec?.initContainers,
+        selectedPod?.spec?.containers,
+        selectedPod?.spec?.ephemeralContainers
+      ),
+    [selectedPod]
+  )
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -76,26 +92,39 @@ export function LogSearch() {
       >
         <NamespaceSelector
           value={draft.namespace}
-          onChange={(namespace) => setDraft({ ...draft, namespace })}
+          onChange={(namespace) =>
+            setDraft({ ...draft, namespace, pod: '', container: '' })
+          }
           showAll
           triggerClassName="w-48"
         />
-        <Input
-          className="w-44"
-          value={draft.pod}
-          onChange={(event) => setDraft({ ...draft, pod: event.target.value })}
-          placeholder={t('logging.search.podPlaceholder')}
-          aria-label={t('logging.search.pod')}
-        />
-        <Input
-          className="w-36"
-          value={draft.container}
-          onChange={(event) =>
-            setDraft({ ...draft, container: event.target.value })
+        <PodSelector
+          pods={pods}
+          selectedPod={draft.pod || undefined}
+          onPodChange={(pod) =>
+            setDraft({ ...draft, pod: pod ?? '', container: '' })
           }
-          placeholder={t('logging.search.containerPlaceholder')}
-          aria-label={t('logging.search.container')}
+          showAllOption
         />
+        {selectedPod ? (
+          <ContainerSelector
+            containers={containers}
+            selectedContainer={draft.container || undefined}
+            onContainerChange={(container) =>
+              setDraft({ ...draft, container: container ?? '' })
+            }
+          />
+        ) : (
+          <Input
+            className="w-36"
+            value={draft.container}
+            onChange={(event) =>
+              setDraft({ ...draft, container: event.target.value })
+            }
+            placeholder={t('logging.search.containerPlaceholder')}
+            aria-label={t('logging.search.container')}
+          />
+        )}
         <Input
           className="min-w-48 flex-1"
           value={draft.keyword}
