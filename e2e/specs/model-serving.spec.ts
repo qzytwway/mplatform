@@ -11,11 +11,13 @@ import {
   deleteServicesQuietly,
   engineBootstraps,
   engineDist,
+  engineKVTransfers,
   engineLaunch,
   engineRequests,
   envOf,
   expectJSON,
   getObject,
+  installPrometheusCRDs,
   kubectl,
   kubectlJSON,
   modelServing,
@@ -24,6 +26,7 @@ import {
   podMonitorCRD,
   podURL,
   postFromPod,
+  removePrometheusCRDs,
   roleLabel,
   serviceGet,
   serviceLabel,
@@ -88,6 +91,7 @@ function pdService(
       routerImage: modelServing.routerImage,
       ...pd,
     },
+    rdma: { mode: 'device-plugin', resource: 'rdma/hca', resourceCount: 1 },
     ...overrides,
   })
 }
@@ -383,6 +387,7 @@ test.describe('model serving', () => {
               '0.0.0.0',
               '--port',
               '8000',
+              '--enable-metrics',
               '--tp',
               '2',
             ])
@@ -604,6 +609,7 @@ test.describe('model serving', () => {
         '0.0.0.0',
         '--port',
         '8000',
+        '--enable-metrics',
       ]
       expect
         .soft(prefillRun.argv)
@@ -644,15 +650,13 @@ test.describe('model serving', () => {
       // The router and the RBAC its pod discovery needs.
       const routerName = `${req.name}-router`
       const role = getObject<{ rules: unknown }>('role', namespace, routerName)
-      expect
-        .soft(role?.rules)
-        .toEqual([
-          {
-            apiGroups: [''],
-            resources: ['pods'],
-            verbs: ['get', 'list', 'watch'],
-          },
-        ])
+      expect.soft(role?.rules).toEqual([
+        {
+          apiGroups: [''],
+          resources: ['pods'],
+          verbs: ['get', 'list', 'watch'],
+        },
+      ])
       expect.soft(getObject('rolebinding', namespace, routerName)).toBeTruthy()
       expect
         .soft(getObject('serviceaccount', namespace, routerName))
@@ -672,18 +676,16 @@ test.describe('model serving', () => {
         prefill: 1,
         decode: 1,
       })
-      expect
-        .soft(workers)
-        .toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              type: 'prefill',
-              url: podURL(prefill[0]),
-              bootstrapPort: 8998,
-            }),
-            expect.objectContaining({ type: 'decode', url: podURL(decode[0]) }),
-          ])
-        )
+      expect.soft(workers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'prefill',
+            url: podURL(prefill[0]),
+            bootstrapPort: 8998,
+          }),
+          expect.objectContaining({ type: 'decode', url: podURL(decode[0]) }),
+        ])
+      )
       const routerLog = kubectl(['logs', '-n', namespace, router.metadata.name])
       expect.soft(routerLog).not.toMatch(/forbidden/i)
 
@@ -716,15 +718,13 @@ test.describe('model serving', () => {
         bootstrap_port: 8998,
       })
       const bootstraps = engineBootstraps(namespace, decode[0].metadata.name)
-      expect
-        .soft(bootstraps)
-        .toEqual([
-          expect.objectContaining({
-            host: prefill[0].status.podIP,
-            port: 8998,
-            status: 200,
-          }),
-        ])
+      expect.soft(bootstraps).toEqual([
+        expect.objectContaining({
+          host: prefill[0].status.podIP,
+          port: 8998,
+          status: 200,
+        }),
+      ])
       expect
         .soft(
           prefillRequests
@@ -840,24 +840,22 @@ test.describe('model serving', () => {
         await api.getService(namespace, req.name),
         200
       )
-      expect
-        .soft(detail.roles)
-        .toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              name: 'prefill',
-              groupSize: 2,
-              gpuCount: 1,
-              readyReplicas: 1,
-            }),
-            expect.objectContaining({
-              name: 'decode',
-              groupSize: 1,
-              gpuCount: 1,
-              readyReplicas: 1,
-            }),
-          ])
-        )
+      expect.soft(detail.roles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'prefill',
+            groupSize: 2,
+            gpuCount: 1,
+            readyReplicas: 1,
+          }),
+          expect.objectContaining({
+            name: 'decode',
+            groupSize: 1,
+            gpuCount: 1,
+            readyReplicas: 1,
+          }),
+        ])
+      )
       expect
         .soft(detail.pods?.map((pod) => pod.role).sort())
         .toEqual(['decode', 'prefill', 'prefill-worker', 'router'])
@@ -1137,7 +1135,8 @@ test.describe('model serving', () => {
   })
 
   test('deleting a pd service of an s3 model removes everything created for it', async () => {
-    // Later features add PodMonitors; deleting must work without their CRD.
+    // Deleting must also work in clusters without the PodMonitor CRD.
+    removePrometheusCRDs()
     expect(crdInstalled(podMonitorCRD)).toBe(false)
     await expectJSON(
       await api.request.put('/api/v1/admin/model-serving/storage', {
@@ -1280,33 +1279,265 @@ test.describe('model serving', () => {
     }
   })
 
-  // Checks of features that are not merged yet; enable each with its feature.
-  test.fixme('pd service names longer than 30 characters are rejected', async () => {
+  test('pd service names longer than 30 characters are rejected', async () => {
     const response = await api.createService(
       pdService('pd-name-that-is-31-characters-x')
     )
     expect(response.status(), await response.text()).toBe(400)
   })
 
-  test.fixme('mooncake over rdma is rejected without rdma', async () => {
+  test('mooncake over rdma is rejected without rdma', async () => {
     const response = await api.createService(
-      pdService('pd-no-rdma', { transferBackend: 'mooncake' })
+      pdService(
+        'pd-no-rdma',
+        { transferBackend: 'mooncake' },
+        { rdma: undefined }
+      )
     )
     expect(response.status(), await response.text()).toBe(400)
   })
 
-  test.fixme('the router scales apart from the pd roles', async () => {
-    // Create a pd service with two router replicas, scale the router through
-    // the scale API, and expect every router pod to discover the same
-    // workers through waitForRouterWorkers.
+  test('the router scales apart from the pd roles', async () => {
+    const req = pdService('pd-router', { routerReplicas: 2 })
+    const routerName = `${req.name}-router`
+    const routerReplicas = () =>
+      getObject('deployment', namespace, routerName)?.spec.replicas
+    // Every router replica finds the same workers on its own.
+    const expectEachRouterFinds = async (expected: {
+      prefill: number
+      decode: number
+    }) => {
+      for (const router of servicePods(
+        namespace,
+        req.name,
+        `${roleLabel}=router`
+      )) {
+        await waitForRouterWorkers(namespace, req.name, expected, {
+          pod: router.metadata.name,
+        })
+      }
+    }
+    try {
+      await createReadyService(api, req, { pods: 4 })
+      expect.soft(routerReplicas()).toBe(2)
+      await expectEachRouterFinds({ prefill: 1, decode: 1 })
+
+      // Leaving routerReplicas out leaves the router alone.
+      await expectJSON(
+        await api.scaleService(namespace, req.name, {
+          prefillReplicas: 1,
+          decodeReplicas: 2,
+        }),
+        200
+      )
+      await waitForServiceReady(api, namespace, req.name, { pods: 5 })
+      expect.soft(routerReplicas()).toBe(2)
+      await expectEachRouterFinds({ prefill: 1, decode: 2 })
+
+      const scaled = await expectJSON<InferenceService>(
+        await api.scaleService(namespace, req.name, {
+          prefillReplicas: 1,
+          decodeReplicas: 2,
+          routerReplicas: 1,
+        }),
+        200
+      )
+      expect
+        .soft(scaled.roles)
+        .toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ name: 'router', replicas: 1 }),
+          ])
+        )
+      expect.soft(routerReplicas()).toBe(1)
+      await waitForServiceReady(api, namespace, req.name, { pods: 4 })
+      await expectEachRouterFinds({ prefill: 1, decode: 2 })
+
+      const invalid = await api.scaleService(namespace, req.name, {
+        prefillReplicas: 1,
+        decodeReplicas: 2,
+        routerReplicas: 0,
+      })
+      expect.soft(invalid.status(), await invalid.text()).toBe(400)
+
+      // Without its router, a service cannot scale one, and nothing changes.
+      kubectl(['delete', 'deployment', routerName, '-n', namespace])
+      const missing = await api.scaleService(namespace, req.name, {
+        prefillReplicas: 2,
+        decodeReplicas: 2,
+        routerReplicas: 2,
+      })
+      expect.soft(missing.status(), await missing.text()).toBe(400)
+      expect
+        .soft(
+          getObject('disaggregatedset', namespace, req.name)?.spec.roles.map(
+            (role: { name: string; spec: { replicas: number } }) =>
+              `${role.name}=${role.spec.replicas}`
+          )
+        )
+        .toEqual(['prefill=1', 'decode=2'])
+
+      await deleteServiceAndWaitGone(api, namespace, req.name)
+    } finally {
+      await deleteServicesQuietly(api, namespace, [req.name])
+    }
   })
 
-  test.fixme('vllm pd hands the KV cache from prefill to decode', async () => {
-    // Create a vllm pd service with the vllm/vllm-router:v0.1.17 router image.
-    // After a request through the Service, engineRequests(prefill) shows
-    // kv_transfer_params.do_remote_decode, engineKVTransfers(decode) shows
-    // { host: <prefill pod IP>, port: 5600, connected: true }, and
-    // engineLaunch(...).env.VLLM_NIXL_SIDE_CHANNEL_HOST is the pod's own IP
-    // from the downward API.
+  test('a cluster with the PodMonitor CRD gets a PodMonitor per service that scrapes leaders', async () => {
+    installPrometheusCRDs()
+    // PodMonitors take the labels the cluster's Prometheus selects them by.
+    kubectl(
+      ['apply', '-n', namespace, '-f', '-'],
+      JSON.stringify({
+        apiVersion: 'monitoring.coreos.com/v1',
+        kind: 'Prometheus',
+        metadata: { name: 'e2e-prometheus' },
+        spec: { podMonitorSelector: { matchLabels: { prometheus: 'e2e' } } },
+      })
+    )
+    const req = pdService('pd-metrics', {
+      prefill: { replicas: 1, groupSize: 2, gpuCount: 1 },
+      decode: { replicas: 1, groupSize: 1, gpuCount: 1 },
+    })
+    try {
+      await createReadyService(api, req, { pods: 4 })
+      const monitor = getObject('podmonitor', namespace, req.name)
+      expect(monitor).toBeTruthy()
+      expect.soft(monitor?.metadata.labels).toEqual({
+        ...managedBy,
+        [serviceLabel]: req.name,
+        release: 'kube-prometheus-stack',
+        prometheus: 'e2e',
+      })
+      const selector = monitor?.spec.selector.matchLabels as Record<
+        string,
+        string
+      >
+      expect
+        .soft(selector)
+        .toEqual({
+          ...managedBy,
+          [serviceLabel]: req.name,
+          [workerIndexLabel]: '0',
+        })
+      expect
+        .soft(monitor?.spec.podMetricsEndpoints)
+        .toEqual([expect.objectContaining({ port: 'http', path: '/metrics' })])
+
+      // It selects the prefill and decode leaders: not the prefill worker,
+      // which serves no HTTP, nor the router.
+      const selected = kubectlJSON<{ items: Pod[] }>([
+        'get',
+        'pods',
+        '-n',
+        namespace,
+        '-l',
+        Object.entries(selector)
+          .map(([key, value]) => `${key}=${value}`)
+          .join(','),
+      ]).items
+      const leaders = [
+        leaderOf(servicePods(namespace, req.name, `${roleLabel}=prefill`)),
+        ...servicePods(namespace, req.name, `${roleLabel}=decode`),
+      ]
+      expect
+        .soft(selected.map((pod) => pod.metadata.name).sort())
+        .toEqual(leaders.map((pod) => pod.metadata.name).sort())
+      // What they serve there is what the inference dashboards query.
+      for (const pod of selected) {
+        const metrics = kubectl([
+          'get',
+          '--raw',
+          `/api/v1/namespaces/${namespace}/pods/${pod.metadata.name}:8000/proxy/metrics`,
+        ])
+        expect.soft(metrics).toContain('sglang:num_running_reqs')
+        expect
+          .soft(metrics)
+          .toContain('sglang:time_to_first_token_seconds_bucket')
+      }
+
+      // The PodMonitor goes with the service; deleteServiceAndWaitGone checks
+      // PodMonitors whenever their CRD is installed.
+      await deleteServiceAndWaitGone(api, namespace, req.name)
+      expect(getObject('podmonitor', namespace, req.name)).toBeUndefined()
+    } finally {
+      await deleteServicesQuietly(api, namespace, [req.name])
+      removePrometheusCRDs()
+    }
+  })
+
+  test('vllm pd hands the KV cache from prefill to decode', async () => {
+    const req = pdService(
+      'vllm-pd',
+      { routerImage: modelServing.vllmRouterImage, transferBackend: 'nixl' },
+      { runtime: 'vllm', rdma: undefined }
+    )
+    try {
+      await createReadyService(api, req, { pods: 3 })
+      const [prefill] = servicePods(namespace, req.name, `${roleLabel}=prefill`)
+      const [decode] = servicePods(namespace, req.name, `${roleLabel}=decode`)
+      for (const [pod, kvRole] of [
+        [prefill, 'kv_producer'],
+        [decode, 'kv_consumer'],
+      ] as const) {
+        const run = engineLaunch(namespace, pod.metadata.name)
+        expect
+          .soft(JSON.parse(argValue(run.argv, '--kv-transfer-config') ?? '{}'))
+          .toEqual({ kv_connector: 'NixlConnector', kv_role: kvRole })
+        expect.soft(run.env.VLLM_NIXL_SIDE_CHANNEL_HOST).toBe(pod.status.podIP)
+        expect
+          .soft(runtimeContainer(pod).ports?.map((port) => port.containerPort))
+          .toEqual([8000, 5600])
+      }
+      const [router] = servicePods(namespace, req.name, `${roleLabel}=router`)
+      expect.soft(runtimeContainer(router).command).toEqual(['vllm-router'])
+      expect.soft(runtimeContainer(router).env).toBeUndefined()
+
+      const workers = await waitForRouterWorkers(namespace, req.name, {
+        prefill: 1,
+        decode: 1,
+      })
+      expect
+        .soft(workers.map((item) => item.url).sort())
+        .toEqual([podURL(prefill), podURL(decode)].sort())
+
+      const reply = JSON.parse(
+        postFromPod(
+          namespace,
+          prefill.metadata.name,
+          `http://${req.name}.${namespace}.svc:8000/v1/chat/completions`,
+          {
+            model: modelName,
+            messages: [{ role: 'user', content: 'hello' }],
+            max_tokens: 4,
+          }
+        )
+      )
+      expect
+        .soft(reply.choices?.[0]?.message?.content)
+        .toBe('fake engine reply')
+      const prefillChat = engineRequests(namespace, prefill.metadata.name).find(
+        (item) => item.path === '/v1/chat/completions'
+      )
+      expect
+        .soft(prefillChat?.body?.kv_transfer_params)
+        .toMatchObject({ do_remote_decode: true })
+      expect
+        .soft(engineKVTransfers(namespace, decode.metadata.name))
+        .toEqual([
+          expect.objectContaining({
+            host: prefill.status.podIP,
+            port: 5600,
+            connected: true,
+          }),
+        ])
+      const routerLog = kubectl(['logs', '-n', namespace, router.metadata.name])
+      expect.soft(routerLog).not.toMatch(/forbidden/i)
+      expect.soft(routerLog).not.toMatch(/huggingface|tokenizer/i)
+
+      await deleteServiceAndWaitGone(api, namespace, req.name)
+    } finally {
+      await deleteServicesQuietly(api, namespace, [req.name])
+    }
   })
 })

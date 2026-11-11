@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Prepares the kind cluster that model serving e2e runs against: two worker
 # nodes that advertise fake GPUs and RDMA NICs, a model directory on every
-# node, the fake engine and real SGLang router images, and the LWS chart in
-# the local chart directory. Safe to rerun.
+# node, the fake engine and real SGLang and vLLM router images, and the LWS
+# and kube-prometheus-stack charts in the local chart directory. Safe to rerun.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,10 +12,12 @@ KUBECONFIG="${E2E_MS_KUBECONFIG:-${TMPDIR:-/tmp/}mplatform-model-serving.kubecon
 ENGINE_IMAGE="${E2E_MS_ENGINE_IMAGE:-mplatform-e2e/fake-engine:0.1}"
 ROUTER_VERSION="${E2E_MS_ROUTER_VERSION:-0.3.2}"
 ROUTER_IMAGE="${E2E_MS_ROUTER_IMAGE:-mplatform-e2e/sglang-router:${ROUTER_VERSION}}"
+VLLM_ROUTER_IMAGE="${E2E_MS_VLLM_ROUTER_IMAGE:-vllm/vllm-router:v0.1.17}"
 MODEL_DIR="${E2E_MS_MODEL_DIR:-/data/models/e2e-chat}"
 GPUS_PER_NODE="${E2E_MS_GPUS_PER_NODE:-8}"
 RDMA_PER_NODE="${E2E_MS_RDMA_PER_NODE:-8}"
 LWS_CHART_VERSION="v1.0.0"
+PROMETHEUS_CHART_VERSION="93.1.1"
 export KUBECONFIG
 
 if kind get clusters | grep -qx "${KIND_NAME}"; then
@@ -49,15 +51,31 @@ docker build --provenance=false -t "${ENGINE_IMAGE}" "${FIXTURES}/engine"
 docker build --provenance=false --build-arg "SGLANG_ROUTER_VERSION=${ROUTER_VERSION}" -t "${ROUTER_IMAGE}" "${FIXTURES}/router"
 kind load docker-image --name "${KIND_NAME}" "${ENGINE_IMAGE}" "${ROUTER_IMAGE}"
 
+# vllm-router is a multi-platform image, which kind load docker-image cannot
+# import from Docker's containerd image store; an archive of the node
+# platform alone can.
+docker image inspect "${VLLM_ROUTER_IMAGE}" >/dev/null 2>&1 || docker pull "${VLLM_ROUTER_IMAGE}"
+archive="$(mktemp)"
+docker save --platform "linux/$(docker version --format '{{.Server.Arch}}')" -o "${archive}" "${VLLM_ROUTER_IMAGE}"
+kind load image-archive --name "${KIND_NAME}" "${archive}"
+rm -f "${archive}"
+
 # The platform installs LWS from the local chart directory, which is not
 # committed; the registry.k8s.io chart is the one model serving ships with.
-if ! ls "${ROOT_DIR}"/chart-packages/lws-*.tgz >/dev/null 2>&1; then
-  echo "📦 Pulling the LWS ${LWS_CHART_VERSION} chart into chart-packages..."
+# The PodMonitor scenario takes its CRDs from kube-prometheus-stack.
+pull_chart() {
+  local pattern="$1" ref="$2" version="$3" name="$4"
+  ls "${ROOT_DIR}"/chart-packages/${pattern} >/dev/null 2>&1 && return
+  echo "📦 Pulling ${ref}:${version} into chart-packages..."
   mkdir -p "${ROOT_DIR}/chart-packages"
+  local pull_dir
   pull_dir="$(mktemp -d)"
-  helm pull oci://registry.k8s.io/lws/charts/lws --version "${LWS_CHART_VERSION}" -d "${pull_dir}"
-  mv "${pull_dir}/lws-${LWS_CHART_VERSION}.tgz" "${ROOT_DIR}/chart-packages/lws-${LWS_CHART_VERSION#v}.tgz"
+  helm pull "oci://${ref}" --version "${version}" -d "${pull_dir}"
+  mv "${pull_dir}"/*.tgz "${ROOT_DIR}/chart-packages/${name}"
   rmdir "${pull_dir}"
-fi
+}
+pull_chart 'lws-*.tgz' registry.k8s.io/lws/charts/lws "${LWS_CHART_VERSION}" "lws-${LWS_CHART_VERSION#v}.tgz"
+pull_chart 'kube-prometheus-stack-*.tgz' ghcr.io/prometheus-community/charts/kube-prometheus-stack \
+  "${PROMETHEUS_CHART_VERSION}" "kube-prometheus-stack-${PROMETHEUS_CHART_VERSION}.tgz"
 
 echo "✅ Model serving e2e cluster ${KIND_NAME} is ready (KUBECONFIG=${KUBECONFIG})"

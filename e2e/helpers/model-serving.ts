@@ -1,4 +1,7 @@
 import { execFileSync } from 'node:child_process'
+import { readdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   expect,
   type APIRequestContext,
@@ -13,6 +16,8 @@ export const modelServing = {
     process.env.E2E_MS_ENGINE_IMAGE || 'mplatform-e2e/fake-engine:0.1',
   routerImage:
     process.env.E2E_MS_ROUTER_IMAGE || 'mplatform-e2e/sglang-router:0.3.2',
+  vllmRouterImage:
+    process.env.E2E_MS_VLLM_ROUTER_IMAGE || 'vllm/vllm-router:v0.1.17',
   modelDir: process.env.E2E_MS_MODEL_DIR || '/data/models/e2e-chat',
   namespace: process.env.E2E_MS_NAMESPACE || 'mplatform-ms-e2e',
 }
@@ -249,6 +254,7 @@ export interface ServiceRequest {
     prefill: PDRole
     decode: PDRole
     routerImage: string
+    routerReplicas?: number
     transferBackend?: 'mooncake' | 'mooncake-tcp' | 'nixl'
     ibDevices?: string
   }
@@ -378,6 +384,7 @@ export class ModelServingAPI {
       replicas?: number
       prefillReplicas?: number
       decodeReplicas?: number
+      routerReplicas?: number
     }
   ) {
     return this.request.put(`${this.servicePath(namespace, name)}/scale`, {
@@ -546,6 +553,56 @@ export async function deleteServiceAndWaitGone(
     },
     { timeout: 2 * minute }
   )
+}
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const prometheusCRDs = {
+  'podmonitors.monitoring.coreos.com': 'crd-podmonitors.yaml',
+  'prometheuses.monitoring.coreos.com': 'crd-prometheuses.yaml',
+}
+
+/**
+ * Installs the PodMonitor and Prometheus CRDs, without Prometheus Operator,
+ * from the kube-prometheus-stack chart in the local chart directory that
+ * scripts/e2e-model-serving-up.sh provides.
+ */
+export function installPrometheusCRDs() {
+  const charts = resolve(repoRoot, 'chart-packages')
+  const chart = readdirSync(charts).find((file) =>
+    /^kube-prometheus-stack-.*\.tgz$/.test(file)
+  )
+  if (!chart) {
+    throw new Error(`no kube-prometheus-stack chart in ${charts}`)
+  }
+  for (const file of Object.values(prometheusCRDs)) {
+    const crd = execFileSync(
+      'tar',
+      [
+        '-xzOf',
+        resolve(charts, chart),
+        `kube-prometheus-stack/charts/crds/crds/${file}`,
+      ],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
+    )
+    // Server-side, since the Prometheus CRD is too large for the annotation
+    // a client-side apply keeps.
+    kubectl(['apply', '--server-side', '-f', '-'], crd)
+  }
+  kubectl([
+    'wait',
+    '--for=condition=Established',
+    ...Object.keys(prometheusCRDs).map((name) => `crd/${name}`),
+  ])
+}
+
+/** Removes the CRDs installPrometheusCRDs installs, with their objects. */
+export function removePrometheusCRDs() {
+  kubectl([
+    'delete',
+    'crd',
+    ...Object.keys(prometheusCRDs),
+    '--ignore-not-found',
+  ])
 }
 
 export function crdInstalled(name: string) {
@@ -803,9 +860,19 @@ export interface RouterWorker {
   healthy: boolean | undefined
 }
 
-/** Reads the workers the SGLang router discovered, through its Service. */
-export function routerWorkers(namespace: string, name: string) {
-  const body = JSON.parse(serviceGet(namespace, name, '/workers')) as {
+/**
+ * Reads the workers the router discovered, through the service's Service, or
+ * from one router pod when given.
+ */
+export function routerWorkers(namespace: string, name: string, pod?: string) {
+  const raw = pod
+    ? kubectl([
+        'get',
+        '--raw',
+        `/api/v1/namespaces/${namespace}/pods/${pod}:8000/proxy/workers`,
+      ])
+    : serviceGet(namespace, name, '/workers')
+  const body = JSON.parse(raw) as {
     workers: Record<string, any>[]
   }
   return body.workers.map((worker): RouterWorker => {
@@ -828,17 +895,20 @@ export function routerWorkers(namespace: string, name: string) {
   })
 }
 
-/** Waits until the router has discovered exactly the given worker counts. */
+/**
+ * Waits until the router, or the given router pod, has discovered exactly
+ * the given worker counts.
+ */
 export function waitForRouterWorkers(
   namespace: string,
   name: string,
   expected: { prefill: number; decode: number },
-  timeout = 2 * minute
+  { timeout = 2 * minute, pod }: { timeout?: number; pod?: string } = {}
 ) {
   return waitFor(
-    `router of ${name} to discover ${expected.prefill} prefill and ${expected.decode} decode workers`,
+    `router ${pod ?? `of ${name}`} to discover ${expected.prefill} prefill and ${expected.decode} decode workers`,
     () => {
-      const workers = routerWorkers(namespace, name)
+      const workers = routerWorkers(namespace, name, pod)
       const count = (type: RouterWorker['type']) =>
         workers.filter((worker) => worker.type === type).length
       if (
