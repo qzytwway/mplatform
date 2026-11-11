@@ -202,7 +202,8 @@ export function assertDedicatedCluster() {
       `context ${kubeContext} reaches ${server}, not a local kind cluster`
     )
   }
-  const pattern = new RegExp(`^${kindName}-(control-plane|worker\\d*)$`)
+  const escaped = kindName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`^${escaped}-(control-plane|worker\\d*)$`)
   const nodes = kubectlJSON<{ items: KubeObject[] }>(['get', 'nodes']).items
   const foreign = nodes.filter(
     (node) =>
@@ -226,7 +227,10 @@ function assertSuiteNamespace(namespace: string) {
   const existing = getObject('namespace', undefined, namespace)
   if (existing && existing.metadata.labels?.[ownerLabel] !== ownerValue) {
     throw new Error(
-      `namespace ${namespace} exists without ${ownerLabel}=${ownerValue}`
+      `namespace ${namespace} exists without ${ownerLabel}=${ownerValue}; ` +
+        `if it is a leftover of this suite, delete it with ` +
+        `kubectl --context ${kubeContext} delete namespace ${namespace}, ` +
+        `or start over with make e2e-model-serving-down`
     )
   }
   return existing
@@ -277,7 +281,9 @@ export function installPrometheusCRDs() {
   const existing = Object.keys(prometheusCRDs).filter(crdInstalled)
   if (existing.length > 0) {
     throw new Error(
-      `${existing.join(', ')} already exist; the suite only uses CRDs it installs`
+      `${existing.join(', ')} already exist; the suite only uses CRDs it installs. ` +
+        `If they are leftovers of this suite, delete them with ` +
+        `kubectl --context ${kubeContext} delete crd ${existing.join(' ')}`
     )
   }
   const charts = resolve(repoRoot, 'chart-packages')
@@ -287,27 +293,40 @@ export function installPrometheusCRDs() {
   if (!chart) {
     throw new Error(`no kube-prometheus-stack chart in ${charts}`)
   }
-  for (const file of Object.values(prometheusCRDs)) {
-    const crd = execFileSync(
-      'tar',
-      [
-        '-xzOf',
-        resolve(charts, chart),
-        `kube-prometheus-stack/charts/crds/crds/${file}`,
-      ],
-      { encoding: 'utf8', timeout: defaultTimeout, maxBuffer: 64 * 1024 * 1024 }
-    )
-    // Server-side, since the Prometheus CRD is too large for the annotation
-    // a client-side apply keeps.
-    kubectl(['apply', '--server-side', '-f', '-'], { input: crd })
-  }
   const names = Object.keys(prometheusCRDs)
-  kubectl(['label', 'crd', ...names, `${ownerLabel}=${ownerValue}`])
-  kubectl([
-    'wait',
-    '--for=condition=Established',
-    ...names.map((name) => `crd/${name}`),
-  ])
+  try {
+    for (const file of Object.values(prometheusCRDs)) {
+      const crd = execFileSync(
+        'tar',
+        [
+          '-xzOf',
+          resolve(charts, chart),
+          `kube-prometheus-stack/charts/crds/crds/${file}`,
+        ],
+        {
+          encoding: 'utf8',
+          timeout: defaultTimeout,
+          maxBuffer: 64 * 1024 * 1024,
+        }
+      )
+      // Server-side, since the Prometheus CRD is too large for the
+      // annotation a client-side apply keeps.
+      kubectl(['apply', '--server-side', '-f', '-'], { input: crd })
+    }
+    kubectl(['label', 'crd', ...names, `${ownerLabel}=${ownerValue}`])
+    kubectl([
+      'wait',
+      '--for=condition=Established',
+      ...names.map((name) => `crd/${name}`),
+    ])
+  } catch (error) {
+    // Neither existed before, so whatever is there now is ours; left
+    // unlabeled, it would block every later run.
+    kubectl(['delete', 'crd', ...names, '--ignore-not-found'], {
+      timeout: 3 * minute,
+    })
+    throw error
+  }
 }
 
 /** Removes the CRDs installPrometheusCRDs installed, with their objects. */

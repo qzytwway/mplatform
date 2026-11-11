@@ -3,7 +3,9 @@
 # nodes that advertise fake GPUs and RDMA NICs, a model directory on every
 # node, the fake engine and real SGLang and vLLM router images, and the LWS
 # and kube-prometheus-stack charts in the local chart directory. Safe to rerun.
-# make e2e-model-serving-up runs it with every variable below set.
+# make e2e-model-serving-up passes the E2E_MS_* directory, cluster, kubeconfig
+# and image variables; the model directory and resource counts keep the
+# defaults below unless set.
 set -euo pipefail
 
 for tool in kind kubectl helm docker; do

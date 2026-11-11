@@ -256,13 +256,20 @@ e2e-model-serving-up: ## Prepare the multi-node kind cluster, fake GPUs and imag
 	@mkdir -p "$(E2E_MS_TMPDIR)/tmp" "$(E2E_MS_TMPDIR)/home"
 	$(E2E_MS_ENV) ./scripts/e2e-model-serving-up.sh
 
-e2e-model-serving-run: e2e-model-serving-up ## Run the model serving e2e tests against their own kind cluster
+e2e-model-serving-run: e2e-model-serving-install-browser e2e-model-serving-up ## Run the model serving e2e tests against their own kind cluster
 	$(E2E_MS_ENV) $(MAKE) e2e-run E2E_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_KUBECONFIG="$(E2E_MS_KUBECONFIG)" E2E_PORT="$(E2E_MS_PORT)" \
 		SPEC="$(or $(SPEC),specs/model-serving.spec.ts)" MPLATFORM_E2E_MODEL_SERVING=true
 
+# The kubeconfig is removed only when it lives under E2E_MS_TMPDIR; one passed
+# in from elsewhere stays.
 e2e-model-serving-down: ## Delete the kind cluster used by model serving e2e
-	kind delete cluster --name "$(E2E_MS_KIND_NAME)" --kubeconfig "$(E2E_MS_KUBECONFIG)"
-	rm -f "$(E2E_MS_KUBECONFIG)"
+	@if kind get clusters | grep -qx "$(E2E_MS_KIND_NAME)"; then \
+		echo "🧹 Deleting kind cluster $(E2E_MS_KIND_NAME)..."; \
+		kind delete cluster --name "$(E2E_MS_KIND_NAME)" --kubeconfig "$(E2E_MS_KUBECONFIG)"; \
+	else \
+		echo "ℹ️ kind cluster $(E2E_MS_KIND_NAME) does not exist"; \
+	fi
+	@case "$(abspath $(E2E_MS_KUBECONFIG))" in "$(abspath $(E2E_MS_TMPDIR))"/*) rm -f "$(E2E_MS_KUBECONFIG)";; esac
 
 e2e-test: e2e-install e2e-install-browser e2e-run ## Run e2e tests against the local kind cluster
 

@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test'
 
-import { authFile, kindClusterName } from '../env'
+import { authFile } from '../env'
 import {
   assertDedicatedCluster,
   crdInstalled,
   ensureNamespace,
   getObject,
   installPrometheusCRDs,
+  kubeContext,
   kubectl,
   kubectlJSON,
   namespaceDiagnostics,
@@ -53,9 +54,10 @@ import {
   type ServiceRequest,
 } from '../helpers/model-serving'
 
-const clusterName = kindClusterName.startsWith('kind-')
-  ? kindClusterName
-  : `kind-${kindClusterName}`
+// The platform names a cluster imported from a kubeconfig after its context.
+const clusterName = kubeContext
+const installTitle =
+  'installs LeaderWorkerSet with DisaggregatedSet from the local chart'
 const { namespace } = modelServing
 const modelName = 'e2e-chat'
 const modelMount = `/models/${modelName}`
@@ -214,8 +216,7 @@ test.describe('model serving', () => {
     !modelServing.enabled,
     'needs the cluster from make e2e-model-serving-run'
   )
-  // Later scenarios need LWS, so a failure stops the run.
-  test.describe.configure({ mode: 'serial', timeout: 12 * 60_000 })
+  test.describe.configure({ timeout: 12 * 60_000 })
 
   test.beforeAll(async ({ playwright }, testInfo) => {
     if (process.env.MPLATFORM_E2E_BASE_URL) {
@@ -238,21 +239,37 @@ test.describe('model serving', () => {
     })
   })
 
+  // Every other scenario needs LWS; without it they are skipped rather than
+  // failing one by one.
+  test.beforeEach(async ({}, testInfo) => {
+    if (testInfo.title === installTitle) {
+      return
+    }
+    const status = await api.status()
+    test.skip(
+      !(status.installed && status.lws && status.disaggregatedSet),
+      'LWS is not installed: the installation scenario failed'
+    )
+  })
+
   test.afterEach(async ({}, testInfo) => {
     if (testInfo.status !== testInfo.expectedStatus) {
       for (const { name, body } of namespaceDiagnostics(namespace)) {
         await testInfo.attach(name, { body, contentType: 'text/plain' })
       }
     }
-    await deleteNamespaceServices(api, namespace)
-    removePrometheusCRDs()
+    try {
+      await deleteNamespaceServices(api, namespace)
+    } finally {
+      removePrometheusCRDs()
+    }
   })
 
   test.afterAll(async () => {
     await api?.request.dispose()
   })
 
-  test('installs LeaderWorkerSet with DisaggregatedSet from the local chart', async () => {
+  test(installTitle, async () => {
     // Uninstalling refuses while services exist, so start from an empty
     // namespace; this also clears whatever a failed run left behind.
     resetNamespace(namespace)
