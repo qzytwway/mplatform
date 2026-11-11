@@ -51,8 +51,8 @@ func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, stora
 	return newWorkload(disaggregatedSetGVK, workloadMeta(req, served), map[string]any{"roles": roles})
 }
 
-// routerObjects returns the SGLang router with the RBAC objects its pod
-// discovery needs, in creation order.
+// routerObjects returns the router with the RBAC objects its pod discovery
+// needs, in creation order.
 func routerObjects(req *serviceRequest) []client.Object {
 	meta := metav1.ObjectMeta{Name: req.Name + routerSuffix, Namespace: req.Namespace, Labels: serviceLabels(req.Name)}
 	return []client.Object{
@@ -73,6 +73,10 @@ func routerObjects(req *serviceRequest) []client.Object {
 func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment {
 	labels := serviceLabels(req.Name)
 	labels[roleLabel] = roleRouter
+	command := []string{"python3", "-m", "sglang_router.launch_router"}
+	if req.Runtime == runtimeVLLM {
+		command = []string{"vllm-router"}
+	}
 	return &appsv1.Deployment{
 		ObjectMeta: meta,
 		Spec: appsv1.DeploymentSpec{
@@ -96,7 +100,7 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 					Containers: []corev1.Container{{
 						Name:    roleRouter,
 						Image:   req.PD.RouterImage,
-						Command: []string{"python3", "-m", "sglang_router.launch_router"},
+						Command: command,
 						Args:    routerArgs(req),
 						// The router looks up the tokenizer of the model path
 						// its workers report, a path in their pods that is never
@@ -133,20 +137,24 @@ func routerProbe(path string) corev1.ProbeHandler {
 
 // routerArgs lets the router find prefill and decode pods by label, so it
 // follows scaling and rollouts without being reconfigured. Only group leaders
-// serve HTTP.
+// serve HTTP. vllm-router is a fork of the SGLang router and discovers pods
+// with the same flags.
 func routerArgs(req *serviceRequest) []string {
 	service := serviceLabel + "=" + req.Name
 	leader := lwsWorkerIndexLabel + "=0"
-	args := []string{
-		"--pd-disaggregation",
+	args := []string{"--pd-disaggregation"}
+	if req.Runtime == runtimeVLLM {
+		args = []string{"--vllm-pd-disaggregation", "--kv-connector", transferNIXL}
+	}
+	args = append(args,
 		"--service-discovery",
 		"--service-discovery-namespace", req.Namespace,
 		"--service-discovery-port", fmt.Sprint(servingPort),
-		"--prefill-selector", service, roleLabel + "=" + rolePrefill, leader,
-		"--decode-selector", service, roleLabel + "=" + roleDecode, leader,
+		"--prefill-selector", service, roleLabel+"="+rolePrefill, leader,
+		"--decode-selector", service, roleLabel+"="+roleDecode, leader,
 		"--host", "0.0.0.0",
 		"--port", fmt.Sprint(servingPort),
-	}
+	)
 	if req.PD.RouterPolicy != "" {
 		args = append(args, "--policy", req.PD.RouterPolicy)
 	}

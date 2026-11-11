@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -319,6 +320,10 @@ func TestBuildDisaggregatedSetCrossNode(t *testing.T) {
 	}
 	assertArgs(t, leader.Spec.Containers[0].Args, []string{"--host", "0.0.0.0", "--port", "8000"})
 	assert.NotContains(t, worker.Spec.Containers[0].Args, "--host")
+	// The NIXL side channel and its address are vLLM's.
+	assert.Equal(t, []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}, leader.Spec.Containers[0].Ports)
+	assert.Empty(t, leader.Spec.Containers[0].Env)
+	assert.NotContains(t, leader.Spec.Containers[0].Args, "--kv-transfer-config")
 
 	replicas, template = pdRoleTemplate(t, workload, roleDecode)
 	assert.Equal(t, int64(3), replicas)
@@ -412,6 +417,135 @@ func TestBuildDisaggregatedSetTransferBackends(t *testing.T) {
 	}
 }
 
+func TestBuildDisaggregatedSetVLLM(t *testing.T) {
+	podIP := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
+	body := vllmPDBody()
+	body.ExtraArgs = []string{"--max-model-len", "8192"}
+	body.Env = []envVar{{Name: "UCX_TLS", Value: "tcp,cuda_copy"}}
+	body.PD.Prefill = pdRoleRequest{Replicas: 2, GroupSize: 1, GPUCount: 4, ExtraArgs: []string{"--max-num-batched-tokens", "16384"}}
+	body.PD.Decode = pdRoleRequest{
+		Replicas: 3, GroupSize: 1, GPUCount: 1,
+		Env: []envVar{{Name: nixlSideChannelHostEnv, Value: "10.0.0.5"}},
+	}
+	req := parseTestRequest(t, body)
+
+	workload, err := buildDisaggregatedSet(&req, chatModel(), nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, disaggregatedSetGVK, workload.GroupVersionKind())
+	assert.Equal(t, runtimeVLLM, workload.GetAnnotations()[runtimeAnnotation])
+	tests := []struct {
+		role     string
+		replicas int64
+		want     [][]string
+		absent   []string
+		roleArgs []string
+		env      []corev1.EnvVar
+	}{
+		{
+			role:     rolePrefill,
+			replicas: 2,
+			want: [][]string{
+				{"/models/qwen", "--served-model-name", "qwen", "--host", "0.0.0.0", "--port", "8000"},
+				{"--tensor-parallel-size", "4"},
+				{"--kv-transfer-config", `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`},
+			},
+			roleArgs: []string{"--max-num-batched-tokens", "16384"},
+			env:      []corev1.EnvVar{{Name: nixlSideChannelHostEnv, ValueFrom: podIP}, {Name: "UCX_TLS", Value: "tcp,cuda_copy"}},
+		},
+		{
+			role:     roleDecode,
+			replicas: 3,
+			want:     [][]string{{"--kv-transfer-config", `{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}`}},
+			absent:   []string{"--tensor-parallel-size"},
+			// The role's own value replaces the pod address in place.
+			env: []corev1.EnvVar{{Name: nixlSideChannelHostEnv, Value: "10.0.0.5"}, {Name: "UCX_TLS", Value: "tcp,cuda_copy"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.role, func(t *testing.T) {
+			replicas, template := pdRoleTemplate(t, workload, tt.role)
+			assert.Equal(t, tt.replicas, replicas)
+			assert.Equal(t, int64(1), template["size"])
+			leader, pod := groupPods(t, template)
+			assert.Nil(t, leader)
+			container := pod.Spec.Containers[0]
+			assert.Equal(t, vllmPDImage, container.Image)
+			assert.Equal(t, []string{"vllm", "serve"}, container.Command)
+			assertArgs(t, container.Args, tt.want...)
+			// One --kv-transfer-config, and none of SGLang's flags.
+			kvConfigs := slices.DeleteFunc(slices.Clone(container.Args), func(arg string) bool { return arg != "--kv-transfer-config" })
+			assert.Len(t, kvConfigs, 1)
+			for _, flag := range append([]string{
+				"--model-path", "--tp", "--nnodes", "--headless", "--enable-metrics",
+				"--disaggregation-mode", "--disaggregation-bootstrap-port", "--disaggregation-transfer-backend", "--disaggregation-ib-device",
+			}, tt.absent...) {
+				assert.NotContains(t, container.Args, flag)
+			}
+			// Service arguments come before the role's, which override them.
+			assert.Equal(t, append([]string{"--max-model-len", "8192"}, tt.roleArgs...), container.Args[len(container.Args)-2-len(tt.roleArgs):])
+			assert.Equal(t, tt.env, container.Env)
+			assert.Equal(t, []corev1.ContainerPort{
+				{Name: "http", ContainerPort: servingPort},
+				{Name: "nixl", ContainerPort: nixlSideChannelPort},
+			}, container.Ports)
+			assert.NotNil(t, container.ReadinessProbe)
+			assert.Equal(t, tt.role, pod.Labels[roleLabel])
+			// vllm-router reads no SGLang bootstrap port.
+			assert.NotContains(t, pod.Annotations, bootstrapAnnotation)
+			assert.False(t, pod.Spec.HostNetwork)
+			assert.Nil(t, container.SecurityContext)
+		})
+	}
+}
+
+func TestBuildDisaggregatedSetVLLMOverRDMA(t *testing.T) {
+	tests := []struct {
+		name  string
+		rdma  rdmaRequest
+		check func(*testing.T, *corev1.PodTemplateSpec)
+	}{
+		{
+			name: "host network",
+			rdma: rdmaRequest{Mode: rdmaModeHost},
+			check: func(t *testing.T, pod *corev1.PodTemplateSpec) {
+				assert.True(t, pod.Spec.HostNetwork)
+				assert.Equal(t, &corev1.SecurityContext{Privileged: new(true)}, pod.Spec.Containers[0].SecurityContext)
+				// No annotations at all: neither Multus nor SGLang's bootstrap port.
+				assert.Nil(t, pod.Annotations)
+			},
+		},
+		{
+			name: "device plugin",
+			rdma: rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1, Networks: "default/rdma-net"},
+			check: func(t *testing.T, pod *corev1.PodTemplateSpec) {
+				container := pod.Spec.Containers[0]
+				assert.Equal(t, []corev1.Capability{"IPC_LOCK"}, container.SecurityContext.Capabilities.Add)
+				assert.Equal(t, resource.MustParse("1"), container.Resources.Limits["rdma/hca"])
+				assert.Equal(t, map[string]string{multusAnnotation: "default/rdma-net"}, pod.Annotations)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := vllmPDBody()
+			body.RDMA = &tt.rdma
+			req := parseTestRequest(t, body)
+
+			workload, err := buildDisaggregatedSet(&req, chatModel(), nil)
+
+			require.NoError(t, err)
+			for _, role := range []string{rolePrefill, roleDecode} {
+				_, template := pdRoleTemplate(t, workload, role)
+				_, pod := groupPods(t, template)
+				tt.check(t, pod)
+				assertArgs(t, pod.Spec.Containers[0].Args, []string{"--kv-transfer-config"})
+				assert.Equal(t, nixlSideChannelHostEnv, pod.Spec.Containers[0].Env[0].Name)
+			}
+		})
+	}
+}
+
 func routerDeployment(t *testing.T, req *serviceRequest) *appsv1.Deployment {
 	t.Helper()
 	objects := routerObjects(req)
@@ -481,12 +615,84 @@ func TestRouter(t *testing.T) {
 	}
 }
 
+func TestVLLMRouter(t *testing.T) {
+	tests := []struct {
+		name   string
+		edit   func(*serviceRequest)
+		image  string
+		policy []string
+	}{
+		{name: "defaults", edit: func(*serviceRequest) {}, image: defaultVLLMRouterImage},
+		{
+			name:   "image and policy",
+			edit:   func(r *serviceRequest) { r.PD.RouterImage, r.PD.RouterPolicy = "my/vllm-router:dev", "round_robin" },
+			image:  "my/vllm-router:dev",
+			policy: []string{"--policy", "round_robin"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := vllmPDBody()
+			tt.edit(&body)
+			req := parseTestRequest(t, body)
+
+			objects := routerObjects(&req)
+
+			require.Len(t, objects, 4)
+			account, ok := objects[0].(*corev1.ServiceAccount)
+			require.True(t, ok)
+			assert.Equal(t, "qwen-pd-router", account.Name)
+			role, ok := objects[1].(*rbacv1.Role)
+			require.True(t, ok)
+			assert.Equal(t, []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch"}}}, role.Rules)
+			binding, ok := objects[2].(*rbacv1.RoleBinding)
+			require.True(t, ok)
+			assert.Equal(t, rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: "qwen-pd-router"}, binding.RoleRef)
+			assert.Equal(t, []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: "qwen-pd-router", Namespace: "default"}}, binding.Subjects)
+
+			router := routerDeployment(t, &req)
+			assert.Equal(t, "qwen-pd-router", router.Spec.Template.Spec.ServiceAccountName)
+			assert.Equal(t, roleRouter, router.Spec.Template.Labels[roleLabel])
+			container := router.Spec.Template.Spec.Containers[0]
+			assert.Equal(t, tt.image, container.Image)
+			assert.Equal(t, []string{"vllm-router"}, container.Command)
+			service := serviceLabel + "=qwen-pd"
+			leader := lwsWorkerIndexLabel + "=0"
+			assert.Equal(t, append([]string{
+				"--vllm-pd-disaggregation", "--kv-connector", "nixl",
+				"--service-discovery", "--service-discovery-namespace", "default", "--service-discovery-port", "8000",
+				"--prefill-selector", service, roleLabel + "=prefill", leader,
+				"--decode-selector", service, roleLabel + "=decode", leader,
+				// vllm-router listens on 127.0.0.1 unless told otherwise.
+				"--host", "0.0.0.0", "--port", "8000",
+			}, tt.policy...), container.Args)
+			assert.Equal(t, []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}, container.Ports)
+			assert.Equal(t, &corev1.HTTPGetAction{Path: "/readiness", Port: intstr.FromInt32(servingPort)}, container.ReadinessProbe.HTTPGet)
+			assert.Equal(t, &corev1.HTTPGetAction{Path: "/liveness", Port: intstr.FromInt32(servingPort)}, container.LivenessProbe.HTTPGet)
+		})
+	}
+}
+
+func TestSGLangRouterKeepsItsCommand(t *testing.T) {
+	req := parseTestRequest(t, pdBody())
+
+	container := routerDeployment(t, &req).Spec.Template.Spec.Containers[0]
+
+	assert.Equal(t, []string{"python3", "-m", "sglang_router.launch_router"}, container.Command)
+	assert.Equal(t, "--pd-disaggregation", container.Args[0])
+	assert.NotContains(t, container.Args, "--vllm-pd-disaggregation")
+	assert.NotContains(t, container.Args, "--kv-connector")
+}
+
 func TestBuildServiceSelectsServingPods(t *testing.T) {
 	pd := parseTestRequest(t, pdBody())
+	vllmPD := parseTestRequest(t, vllmPDBody())
 	single := parseTestRequest(t, singleBody())
 
-	assert.Equal(t, roleRouter, buildService(&pd).Spec.Selector[roleLabel])
-	assert.NotContains(t, buildService(&pd).Spec.Selector, lwsWorkerIndexLabel)
+	for _, req := range []serviceRequest{pd, vllmPD} {
+		assert.Equal(t, roleRouter, buildService(&req).Spec.Selector[roleLabel])
+		assert.NotContains(t, buildService(&req).Spec.Selector, lwsWorkerIndexLabel)
+	}
 	assert.Equal(t, "0", buildService(&single).Spec.Selector[lwsWorkerIndexLabel])
 }
 
@@ -556,6 +762,8 @@ func TestWorkloadAnnotations(t *testing.T) {
 	pdTCP.RDMA, pdTCP.PD.TransferBackend = nil, transferMooncakeTCP
 	pdRDMA := pdBody()
 	pdRDMA.PD.IBDevices, pdRDMA.PD.RouterPolicy = "mlx5_0", "cache_aware"
+	vllmPD := vllmPDBody()
+	vllmPD.PD.IBDevices = "mlx5_0"
 	tests := []struct {
 		name string
 		body serviceRequest
@@ -572,6 +780,11 @@ func TestWorkloadAnnotations(t *testing.T) {
 			name: "pd over rdma",
 			body: pdRDMA,
 			want: map[string]string{rdmaAnnotation: rdmaModeDevicePlugin, transferBackendAnnotation: transferMooncake, ibDevicesAnnotation: "mlx5_0", routerPolicyAnnotation: "cache_aware"},
+		},
+		{
+			name: "vllm pd records nixl",
+			body: vllmPD,
+			want: map[string]string{rdmaAnnotation: rdmaModeNone, transferBackendAnnotation: transferNIXL, ibDevicesAnnotation: "", routerPolicyAnnotation: ""},
 		},
 	}
 	for _, tt := range tests {

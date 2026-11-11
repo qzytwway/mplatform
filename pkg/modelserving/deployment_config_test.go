@@ -230,6 +230,73 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 	}
 }
 
+func vllmContainerSpec(args ...any) map[string]any {
+	return map[string]any{
+		"name":    "vllm",
+		"image":   "vllm/vllm-openai:v0.33.0",
+		"command": []any{"vllm", "serve"},
+		"args":    args,
+		"env": []any{map[string]any{
+			"name":      nixlSideChannelHostEnv,
+			"valueFrom": map[string]any{"fieldRef": map[string]any{"apiVersion": "v1", "fieldPath": "status.podIP"}},
+		}},
+	}
+}
+
+func TestReadDeploymentConfigOfVLLMTemplates(t *testing.T) {
+	producer := `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`
+	consumer := `{"kv_connector":"NixlConnector","kv_role":"kv_consumer"}`
+	tests := []struct {
+		name     string
+		prefill  []any
+		recorded string
+		backend  string
+	}{
+		{name: "nixl", prefill: []any{"/models/qwen", "--kv-transfer-config", producer}, backend: transferNIXL},
+		{name: "nixl in key=value form", prefill: []any{"--kv-transfer-config=" + producer}, backend: transferNIXL},
+		{name: "nixl in dotted form", prefill: []any{"--kv-transfer-config.kv_connector=NixlConnector"}, backend: transferNIXL},
+		{
+			name:    "the dotted connector over the json",
+			prefill: []any{"--kv-transfer-config", producer, "--kv-transfer-config.kv_connector", "MooncakeConnector"},
+			backend: "MooncakeConnector",
+		},
+		{
+			name:     "extra arguments override the connector",
+			prefill:  []any{"--kv-transfer-config", producer, "--kv-transfer-config", `{"kv_connector":"MooncakeConnector","kv_role":"kv_producer"}`},
+			recorded: transferNIXL,
+			backend:  "MooncakeConnector",
+		},
+		{name: "an unreadable config leaves the recorded backend", prefill: []any{"--kv-transfer-config", "{kv_connector:NixlConnector}"}, recorded: transferNIXL, backend: transferNIXL},
+		{name: "no config leaves the recorded backend", prefill: []any{"/models/qwen"}, recorded: transferNIXL, backend: transferNIXL},
+		// Not SGLang's default, mooncake.
+		{name: "no config and no record", prefill: []any{"/models/qwen"}, backend: ""},
+		{name: "SGLang flags are not vLLM's", prefill: []any{"--disaggregation-transfer-backend", "mooncake"}, backend: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workload := pdWorkload(
+				singlePodRole(vllmContainerSpec(tt.prefill...), nil),
+				singlePodRole(vllmContainerSpec("--kv-transfer-config", consumer), nil),
+			)
+			annotations := map[string]string{runtimeAnnotation: runtimeVLLM}
+			if tt.recorded != "" {
+				annotations[transferBackendAnnotation] = tt.recorded
+			}
+			workload.SetAnnotations(annotations)
+
+			config, err := readDeploymentConfig(workload, nil)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.backend, config.TransferBackend)
+			assert.Empty(t, config.IBDevices)
+			assert.Equal(t, rdmaModeNone, config.RDMA)
+			for _, role := range config.Roles {
+				assert.Equal(t, []configEnvVar{{Name: nixlSideChannelHostEnv, ValueFrom: "fieldRef: status.podIP"}}, role.Pods[0].Env)
+			}
+		})
+	}
+}
+
 func oldRouter(args ...string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "old-pd-router", Namespace: "default"},
@@ -345,6 +412,21 @@ func TestMaskArgs(t *testing.T) {
 			name: "words inside other words stay readable",
 			args: []string{"--max-total-tokens", "8192", "--tokenizer-path", "/models/tok", "--author", "me"},
 			want: []string{"--max-total-tokens", "8192", "--tokenizer-path", "/models/tok", "--author", "me"},
+		},
+		{
+			name: "fields of vLLM json flags in dotted form",
+			args: []string{
+				"--kv-transfer-config.kv_connector_extra_config.token=abc",
+				"--kv-transfer-config.kv_connector_extra_config.api_key", "xyz",
+				"--kv-transfer-config.kv_connector_extra_config.backends", "UCX",
+				"--kv-transfer-config", `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`,
+			},
+			want: []string{
+				"--kv-transfer-config.kv_connector_extra_config.token=" + maskedValue,
+				"--kv-transfer-config.kv_connector_extra_config.api_key", maskedValue,
+				"--kv-transfer-config.kv_connector_extra_config.backends", "UCX",
+				"--kv-transfer-config", `{"kv_connector":"NixlConnector","kv_role":"kv_producer"}`,
+			},
 		},
 		{
 			name: "a flag after a sensitive flag is not its value",
@@ -483,5 +565,43 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 		router := config.Roles[2]
 		assert.Equal(t, int32(2), router.Replicas)
 		assert.Equal(t, "lmsysorg/sglang-router:latest", router.Pods[0].Image)
+	})
+
+	t.Run("vllm pd over nixl", func(t *testing.T) {
+		body := vllmPDBody()
+		body.Env = []envVar{{Name: "UCX_TLS", Value: "tcp,cuda_copy"}}
+		body.PD.RouterPolicy = "power_of_two"
+		req := parseTestRequest(t, body)
+		workload, err := buildDisaggregatedSet(&req, chatModel(), nil)
+		require.NoError(t, err)
+		router := routerDeployment(t, &req)
+
+		recorded, err := readDeploymentConfig(workload, router)
+		require.NoError(t, err)
+		// Workloads without the recorded settings read the same from their pods.
+		workload.SetAnnotations(map[string]string{runtimeAnnotation: runtimeVLLM})
+		inferred, err := readDeploymentConfig(workload, router)
+		require.NoError(t, err)
+
+		for _, config := range []*deploymentConfig{recorded, inferred} {
+			assert.Equal(t, rdmaModeNone, config.RDMA)
+			assert.Equal(t, transferNIXL, config.TransferBackend)
+			assert.Empty(t, config.IBDevices)
+			assert.Equal(t, "power_of_two", config.RouterPolicy)
+			require.Len(t, config.Roles, 3)
+			for _, role := range config.Roles[:2] {
+				require.Len(t, role.Pods, 1)
+				pod := role.Pods[0]
+				assert.Equal(t, vllmPDImage, pod.Image)
+				assert.Equal(t, []string{"vllm", "serve"}, pod.Command)
+				assert.Equal(t, []configEnvVar{
+					{Name: nixlSideChannelHostEnv, ValueFrom: "fieldRef: status.podIP"},
+					{Name: "UCX_TLS", Value: "tcp,cuda_copy"},
+				}, pod.Env)
+			}
+			routerPod := config.Roles[2].Pods[0]
+			assert.Equal(t, defaultVLLMRouterImage, routerPod.Image)
+			assert.Equal(t, []string{"vllm-router"}, routerPod.Command)
+		}
 	})
 }

@@ -46,6 +46,17 @@ func pdBody() serviceRequest {
 	}
 }
 
+const vllmPDImage = "vllm/vllm-openai:v0.33.0"
+
+// vllmPDBody is a vLLM pd service, which transfers over NIXL and so needs no
+// RDMA, and leaves the router image to its default.
+func vllmPDBody() serviceRequest {
+	body := pdBody()
+	body.Runtime, body.Image, body.RDMA = runtimeVLLM, vllmPDImage, nil
+	body.PD.RouterImage = ""
+	return body
+}
+
 func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -80,7 +91,6 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		{"rdma resource count zero", multiBody(), func(r *serviceRequest) {
 			r.RDMA = &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca"}
 		}, "rdma.resourceCount must be at least 1"},
-		{"pd with vllm", pdBody(), func(r *serviceRequest) { r.Runtime = runtimeVLLM }, "pd mode requires the sglang runtime"},
 		{"pd without pd", pdBody(), func(r *serviceRequest) { r.PD = nil }, "pd is required in pd mode"},
 		{"pd name too long", pdBody(), func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength+1) }, "name must be at most 30 characters in pd mode"},
 		{"mooncake without rdma", pdBody(), func(r *serviceRequest) { r.RDMA = nil }, "pd.transferBackend mooncake transfers over RDMA; configure rdma or use mooncake-tcp"},
@@ -101,6 +111,23 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		{"unknown router policy", pdBody(), func(r *serviceRequest) { r.PD.RouterPolicy = "least_load" }, "pd.routerPolicy must be one of cache_aware, power_of_two, round_robin, random"},
 		{"unknown transfer backend", pdBody(), func(r *serviceRequest) { r.PD.TransferBackend = "rdma" }, "pd.transferBackend must be"},
 		{"ib devices with spaces", pdBody(), func(r *serviceRequest) { r.PD.IBDevices = "mlx5_0, mlx5_1" }, "pd.ibDevices must be comma-separated"},
+		{"vllm over mooncake", vllmPDBody(), func(r *serviceRequest) { r.PD.TransferBackend = transferMooncake }, "pd.transferBackend must be nixl with the vllm runtime"},
+		{"vllm over mooncake with rdma", vllmPDBody(), func(r *serviceRequest) {
+			r.PD.TransferBackend, r.RDMA = transferMooncake, &rdmaRequest{Mode: rdmaModeHost}
+		}, "pd.transferBackend must be nixl with the vllm runtime"},
+		{"vllm over mooncake tcp", vllmPDBody(), func(r *serviceRequest) { r.PD.TransferBackend = transferMooncakeTCP }, "pd.transferBackend must be nixl with the vllm runtime"},
+		{"vllm unknown transfer backend", vllmPDBody(), func(r *serviceRequest) { r.PD.TransferBackend = "rdma" }, "pd.transferBackend must be nixl with the vllm runtime"},
+		{"vllm prefill over two nodes", vllmPDBody(), func(r *serviceRequest) { r.PD.Prefill.GroupSize = 2 }, "pd.prefill.groupSize must be 1 with the vllm runtime"},
+		{"vllm decode over two nodes", vllmPDBody(), func(r *serviceRequest) { r.PD.Decode.GroupSize = 2 }, "pd.decode.groupSize must be 1 with the vllm runtime"},
+		{"vllm decode without nodes", vllmPDBody(), func(r *serviceRequest) { r.PD.Decode.GroupSize = 0 }, "pd.decode replicas, groupSize and gpuCount must be at least 1"},
+		{"vllm prefill image differs", vllmPDBody(), func(r *serviceRequest) { r.PD.Prefill.Image = "vllm/vllm-openai:v0.32.0" }, "pd.prefill and pd.decode must use the same image with the vllm runtime"},
+		{"vllm decode image differs", vllmPDBody(), func(r *serviceRequest) { r.PD.Decode.Image = "my/vllm:nixl" }, "pd.prefill and pd.decode must use the same image"},
+		{"vllm role images differ from each other", vllmPDBody(), func(r *serviceRequest) {
+			r.PD.Prefill.Image, r.PD.Decode.Image = "my/vllm:a", "my/vllm:b"
+		}, "pd.prefill and pd.decode must use the same image"},
+		{"vllm invalid router image", vllmPDBody(), func(r *serviceRequest) { r.PD.RouterImage = "vllm/vllm-router:" }, "pd.routerImage must be a valid image reference"},
+		{"vllm name too long", vllmPDBody(), func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength+1) }, "name must be at most 30 characters in pd mode"},
+		{"vllm decode over the replica cap", vllmPDBody(), func(r *serviceRequest) { r.PD.Decode.Replicas = maxPDRoleReplicas + 1 }, "pd.decode replicas must be at most 100"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,6 +195,22 @@ func TestParsePDRequest(t *testing.T) {
 				assert.Equal(t, int32(1), pd.RouterReplicas)
 				assert.Empty(t, pd.RouterPolicy)
 				assert.Equal(t, transferMooncake, pd.TransferBackend)
+				assert.Equal(t, "lmsysorg/sglang-router:latest", pd.RouterImage)
+			},
+		},
+		{
+			name: "role images may differ",
+			edit: func(r *serviceRequest) { r.PD.Prefill.Image = "my/sglang:prefill" },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, "my/sglang:prefill", pd.Prefill.Image)
+			},
+		},
+		{
+			name: "groups of several nodes",
+			edit: func(r *serviceRequest) { r.PD.Prefill.GroupSize, r.PD.Decode.GroupSize = 2, 3 },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, int32(2), pd.Prefill.GroupSize)
+				assert.Equal(t, int32(3), pd.Decode.GroupSize)
 			},
 		},
 		{
@@ -262,6 +305,96 @@ func TestParsePDRequest(t *testing.T) {
 			assert.Equal(t, int64(0), req.GPUCount)
 			require.NotNil(t, req.PD)
 			tt.check(t, req.PD)
+		})
+	}
+}
+
+func TestParseVLLMPDRequest(t *testing.T) {
+	tests := []struct {
+		name  string
+		edit  func(*serviceRequest)
+		check func(*testing.T, serviceRequest)
+	}{
+		{
+			name: "defaults to nixl and the vllm router image",
+			edit: func(*serviceRequest) {},
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Equal(t, transferNIXL, req.PD.TransferBackend)
+				assert.Equal(t, defaultVLLMRouterImage, req.PD.RouterImage)
+				assert.Equal(t, int32(1), req.PD.RouterReplicas)
+				assert.Empty(t, req.PD.RouterPolicy)
+				assert.Nil(t, req.RDMA)
+			},
+		},
+		{
+			name: "nixl over rdma",
+			edit: func(r *serviceRequest) {
+				r.PD.TransferBackend = transferNIXL
+				r.RDMA = &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1}
+			},
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Equal(t, transferNIXL, req.PD.TransferBackend)
+				assert.Equal(t, &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1}, req.RDMA)
+			},
+		},
+		{
+			name: "ib devices are dropped",
+			edit: func(r *serviceRequest) { r.PD.IBDevices = "mlx5_0,mlx5_1" },
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Empty(t, req.PD.IBDevices)
+			},
+		},
+		{
+			name: "a router image and policy are kept",
+			edit: func(r *serviceRequest) {
+				r.PD.RouterImage, r.PD.RouterPolicy, r.PD.RouterReplicas = " my/vllm-router:dev ", "round_robin", 2
+			},
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Equal(t, "my/vllm-router:dev", req.PD.RouterImage)
+				assert.Equal(t, "round_robin", req.PD.RouterPolicy)
+				assert.Equal(t, int32(2), req.PD.RouterReplicas)
+			},
+		},
+		{
+			name: "a role repeating the service image",
+			edit: func(r *serviceRequest) { r.PD.Prefill.Image = " " + vllmPDImage },
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Equal(t, vllmPDImage, req.PD.Prefill.Image)
+				assert.Empty(t, req.PD.Decode.Image)
+			},
+		},
+		{
+			name: "both roles overriding the image alike",
+			edit: func(r *serviceRequest) { r.PD.Prefill.Image, r.PD.Decode.Image = "my/vllm:nixl", "my/vllm:nixl" },
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Equal(t, "my/vllm:nixl", req.PD.Prefill.Image)
+				assert.Equal(t, "my/vllm:nixl", req.PD.Decode.Image)
+			},
+		},
+		{
+			name: "roles size their gpus and other resources apart",
+			edit: func(r *serviceRequest) {
+				r.PD.Prefill = pdRoleRequest{Replicas: 2, GroupSize: 1, GPUCount: 8, CPU: "32"}
+				r.PD.Decode = pdRoleRequest{Replicas: 4, GroupSize: 1, GPUCount: 2, Memory: "256Gi"}
+			},
+			check: func(t *testing.T, req serviceRequest) {
+				assert.Equal(t, pdRoleRequest{Replicas: 2, GroupSize: 1, GPUCount: 8, CPU: "32"}, req.PD.Prefill)
+				assert.Equal(t, pdRoleRequest{Replicas: 4, GroupSize: 1, GPUCount: 2, Memory: "256Gi"}, req.PD.Decode)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := vllmPDBody()
+			tt.edit(&body)
+
+			req, err := parseServiceRequest(&body)
+
+			require.NoError(t, err)
+			assert.Equal(t, runtimeVLLM, req.Runtime)
+			assert.Equal(t, int32(1), req.GroupSize)
+			require.NotNil(t, req.PD)
+			tt.check(t, req)
 		})
 	}
 }

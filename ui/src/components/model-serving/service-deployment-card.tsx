@@ -15,7 +15,7 @@ import { DetailItem } from './detail-item'
 // Long values wrap rather than widen the card; the lines a command is laid
 // out in stay.
 const CODE_BLOCK_CLASS =
-  'overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all'
+  'rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap'
 
 const quote = (word: string) =>
   word === '' || /\s/.test(word) ? JSON.stringify(word) : word
@@ -71,9 +71,12 @@ export function ServiceDeploymentCard({
                     { defaultValue: config.transferBackend || '-' }
                   )}
                 </DetailItem>
-                <DetailItem label={t('modelServing.services.ibDevices')}>
-                  <span className="font-mono">{config.ibDevices || '-'}</span>
-                </DetailItem>
+                {/* Only Mooncake over RDMA picks its devices. */}
+                {config.transferBackend === 'mooncake' && (
+                  <DetailItem label={t('modelServing.services.ibDevices')}>
+                    <span className="font-mono">{config.ibDevices || '-'}</span>
+                  </DetailItem>
+                )}
                 <DetailItem label={t('modelServing.services.routerPolicy')}>
                   {t(
                     `modelServing.services.routerPolicies.${config.routerPolicy || 'default'}`,
@@ -180,7 +183,7 @@ function PodConfigView({ pod }: { pod: PodConfig }) {
         <DetailItem label={t('modelServing.deployment.command')}>
           {/* Empty when the image's own entrypoint runs. */}
           {pod.command.length + pod.args.length > 0 ? (
-            <pre className={CODE_BLOCK_CLASS} tabIndex={0}>
+            <pre className={CODE_BLOCK_CLASS}>
               {formatCommand(pod.command, pod.args)}
             </pre>
           ) : (
@@ -189,7 +192,7 @@ function PodConfigView({ pod }: { pod: PodConfig }) {
         </DetailItem>
         <DetailItem label={t('modelServing.services.env')}>
           {pod.env.length > 0 ? (
-            <pre className={CODE_BLOCK_CLASS} tabIndex={0}>
+            <pre className={CODE_BLOCK_CLASS}>
               {pod.env
                 .map(
                   (item) =>

@@ -84,15 +84,6 @@ describe('ServiceDeploymentCard', () => {
     )
   })
 
-  it('lets the keyboard reach code blocks', () => {
-    render(<ServiceDeploymentCard config={CONFIG} mode="multi" />)
-
-    expect(codeBlock('modelServing.deployment.command')).toHaveAttribute(
-      'tabindex',
-      '0'
-    )
-  })
-
   it('tells requests from limits and shows pod settings', () => {
     render(<ServiceDeploymentCard config={CONFIG} mode="multi" />)
 
@@ -104,6 +95,69 @@ describe('ServiceDeploymentCard', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText('IPC_LOCK')).not.toBeInTheDocument()
   })
+
+  it('shows a vLLM PD service over NIXL', () => {
+    const vllm: PodConfig = {
+      ...POD,
+      image: 'vllm/vllm-openai:v0.33.0',
+      command: ['vllm', 'serve'],
+      args: [
+        '/models/qwen',
+        '--kv-transfer-config',
+        '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}',
+      ],
+      env: [
+        {
+          name: 'VLLM_NIXL_SIDE_CHANNEL_HOST',
+          value: '',
+          valueFrom: 'fieldRef: status.podIP',
+        },
+      ],
+      hostNetwork: false,
+      privileged: false,
+    }
+    render(
+      <ServiceDeploymentCard
+        config={{
+          rdma: 'none',
+          transferBackend: 'nixl',
+          ibDevices: '',
+          roles: [{ name: 'prefill', replicas: 1, groupSize: 1, pods: [vllm] }],
+        }}
+        mode="pd"
+      />
+    )
+
+    expect(
+      screen.getByText('modelServing.services.transferBackends.nixl')
+    ).toBeInTheDocument()
+    expect(codeBlock('modelServing.deployment.command').textContent).toBe(
+      'vllm serve /models/qwen \\\n  --kv-transfer-config {"kv_connector":"NixlConnector","kv_role":"kv_producer"}'
+    )
+    expect(codeBlock('modelServing.services.env').textContent).toBe(
+      'VLLM_NIXL_SIDE_CHANNEL_HOST=(fieldRef: status.podIP)'
+    )
+  })
+
+  it.each([
+    ['mooncake', true],
+    ['mooncake-tcp', false],
+    ['nixl', false],
+  ] as const)(
+    'shows RDMA devices only for %s over RDMA: %s',
+    (transferBackend, shown) => {
+      render(
+        <ServiceDeploymentCard
+          config={{ ...CONFIG, transferBackend, ibDevices: 'mlx5_0' }}
+          mode="pd"
+        />
+      )
+
+      expect(!!screen.queryByText('modelServing.services.ibDevices')).toBe(
+        shown
+      )
+    }
+  )
 
   it.each([
     ['single', false, false],
