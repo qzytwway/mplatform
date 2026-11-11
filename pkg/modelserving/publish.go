@@ -43,7 +43,7 @@ func isPublished(workload *unstructured.Unstructured) bool {
 }
 
 func listPublished(ctx context.Context, cs *cluster.ClientSet) ([]publishedService, error) {
-	workloads, err := listWorkloads(ctx, cs)
+	workloads, err := listWorkloads(ctx, cs, "")
 	if err != nil {
 		return nil, err
 	}

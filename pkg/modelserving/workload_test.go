@@ -286,6 +286,37 @@ func TestBuildLeaderWorkerSetRDMA(t *testing.T) {
 	}
 }
 
+func TestSharedSubdomain(t *testing.T) {
+	single := parseTestRequest(t, singleBody())
+	current, err := buildLeaderWorkerSet(&single, chatModel(), nil)
+	require.NoError(t, err)
+	shared := current.DeepCopy()
+	require.NoError(t, unstructured.SetNestedField(shared.Object, "Shared", "spec", "networkConfig", "subdomainPolicy"))
+	defaulted := current.DeepCopy()
+	unstructured.RemoveNestedField(defaulted.Object, "spec", "networkConfig")
+	pdRole := shared.DeepCopy()
+	pdRole.SetLabels(map[string]string{managedByLabel: managedByValue, disaggregatedSetNameLabel: "qwen-pd"})
+	pd := parseTestRequest(t, pdBody())
+	pdService, err := buildDisaggregatedSet(&pd, chatModel(), nil)
+	require.NoError(t, err)
+	tests := []struct {
+		name     string
+		workload *unstructured.Unstructured
+		want     bool
+	}{
+		{name: "a LeaderWorkerSet created before the fix", workload: shared, want: true},
+		{name: "a LeaderWorkerSet without a policy", workload: defaulted, want: true},
+		{name: "a LeaderWorkerSet created since the fix", workload: current},
+		{name: "a LeaderWorkerSet of a DisaggregatedSet", workload: pdRole},
+		{name: "a pd service", workload: pdService},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sharedSubdomain(tt.workload))
+		})
+	}
+}
+
 func TestBuildDisaggregatedSetCrossNode(t *testing.T) {
 	body := pdBody()
 	body.ExtraArgs = []string{"--mem-fraction-static", "0.8"}

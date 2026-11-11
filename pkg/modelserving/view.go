@@ -57,8 +57,9 @@ type servicePod struct {
 
 type serviceDetail struct {
 	inferenceService
-	Pods       []servicePod      `json:"pods"`
-	Deployment *deploymentConfig `json:"deployment"`
+	Pods            []servicePod      `json:"pods"`
+	Deployment      *deploymentConfig `json:"deployment"`
+	SharedSubdomain bool              `json:"sharedSubdomain,omitempty"`
 }
 
 // describeWorkload reports a LeaderWorkerSet or DisaggregatedSet as an

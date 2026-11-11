@@ -89,3 +89,15 @@ func buildLeaderWorkerSet(req *serviceRequest, served *model.ServedModel, storag
 		"networkConfig": map[string]any{"subdomainPolicy": "UniquePerReplica"},
 	})
 }
+
+// sharedSubdomain reports a LeaderWorkerSet of a single or multi-node service
+// created before buildLeaderWorkerSet set UniquePerReplica, which never
+// becomes ready. LeaderWorkerSet defaults the policy to Shared. The
+// LeaderWorkerSets of a DisaggregatedSet are named apart from its Service.
+func sharedSubdomain(workload *unstructured.Unstructured) bool {
+	if workload.GetKind() != lwsGVK.Kind || workload.GetLabels()[disaggregatedSetNameLabel] != "" {
+		return false
+	}
+	policy, _, _ := unstructured.NestedString(workload.Object, "spec", "networkConfig", "subdomainPolicy")
+	return policy == "" || policy == "Shared"
+}

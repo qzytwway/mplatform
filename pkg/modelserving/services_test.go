@@ -280,7 +280,7 @@ func TestGroupNameConflict(t *testing.T) {
 	}
 }
 
-func TestCreateServiceRejectsGroupNames(t *testing.T) {
+func TestCreateServiceChecksGroupNames(t *testing.T) {
 	setupHistoryDB(t)
 	require.NoError(t, model.DB.AutoMigrate(&model.ServedModel{}))
 	served := chatModel()
@@ -289,26 +289,61 @@ func TestCreateServiceRejectsGroupNames(t *testing.T) {
 	existing := parseTestRequest(t, singleBody())
 	workload, err := buildLeaderWorkerSet(&existing, served, nil)
 	require.NoError(t, err)
-	var creates int
-	cs := newFakeClientSet(t, interceptor.Funcs{
-		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
-			creates++
-			return c.Create(ctx, obj, opts...)
+	tests := []struct {
+		name      string
+		failList  bool
+		status    int
+		wantError string
+	}{
+		{
+			name:      "rejects a group name of another service",
+			status:    http.StatusConflict,
+			wantError: "clashes with inference service qwen",
 		},
-	}, crdObject(lwsCRD), crdObject(disaggregatedSetCRD), workload)
-	handler := &Handler{cm: testClusters{"test": cs}}
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) { c.Set("user", model.User{Username: "admin"}) })
-	engine.POST("/clusters/:cluster/services", handler.CreateService)
-	body := singleBody()
-	body.Name, body.ModelID = "qwen-0", served.ID
-	raw, err := json.Marshal(body)
-	require.NoError(t, err)
-	recorder := httptest.NewRecorder()
+		{
+			name:      "creates nothing when services cannot be listed",
+			failList:  true,
+			status:    http.StatusInternalServerError,
+			wantError: "etcd is down",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var creates int
+			var listed []string
+			cs := newFakeClientSet(t, interceptor.Funcs{
+				Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					creates++
+					return c.Create(ctx, obj, opts...)
+				},
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					listed = append(listed, (&client.ListOptions{}).ApplyOptions(opts).Namespace)
+					if tt.failList {
+						return apierrors.NewInternalError(errors.New("etcd is down"))
+					}
+					return c.List(ctx, list, opts...)
+				},
+			}, crdObject(lwsCRD), crdObject(disaggregatedSetCRD), workload.DeepCopy())
+			handler := &Handler{cm: testClusters{"test": cs}}
+			engine := gin.New()
+			engine.Use(func(c *gin.Context) { c.Set("user", model.User{Username: "admin"}) })
+			engine.POST("/clusters/:cluster/services", handler.CreateService)
+			body := singleBody()
+			body.Name, body.ModelID = "qwen-0", served.ID
+			raw, err := json.Marshal(body)
+			require.NoError(t, err)
+			recorder := httptest.NewRecorder()
 
-	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/clusters/test/services", strings.NewReader(string(raw))))
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/clusters/test/services", strings.NewReader(string(raw))))
 
-	require.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
-	assert.Contains(t, recorder.Body.String(), "clashes with inference service qwen")
-	assert.Zero(t, creates)
+			require.Equal(t, tt.status, recorder.Code, recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), tt.wantError)
+			assert.Zero(t, creates)
+			// Only the namespace of the new service is searched for clashes.
+			require.NotEmpty(t, listed)
+			for _, namespace := range listed {
+				assert.Equal(t, body.Namespace, namespace)
+			}
+		})
+	}
 }
