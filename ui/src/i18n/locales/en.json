@@ -2213,7 +2213,19 @@
         "scaled": "Inference service scaled",
         "published": "Service published to the gateway",
         "unpublished": "Service unpublished"
-      }
+      },
+      "gpuType": "GPU type",
+      "gpuTypes": {
+        "whole": "Whole GPU",
+        "vgpu": "vGPU"
+      },
+      "vgpuUnavailable": "Install HAMi and switch nodes to vGPU mode on the GPU Resources page to use vGPUs.",
+      "vgpuCount": "vGPUs per pod",
+      "vgpuMemory": "Memory per vGPU",
+      "vgpuMemoryUnit": "Memory unit",
+      "vgpuMemoryHint": "Leave empty to take the whole memory of a GPU. A percentage is of the memory of the GPU assigned.",
+      "vgpuCores": "Cores per vGPU (%)",
+      "vgpuCoresHint": "Leave empty for no core limit."
     },
     "models": {
       "title": "Model Registry",
@@ -2258,9 +2270,64 @@
     "gpus": {
       "title": "GPU Resources",
       "empty": "No GPU nodes",
-      "emptyHint": "No node in this cluster reports nvidia.com/gpu capacity.",
+      "emptyHint": "No GPU nodes in this cluster. Once the GPU Operator is installed, nodes with NVIDIA GPUs appear here.",
       "product": "GPU model",
-      "allocated": "Allocated"
+      "allocated": "Allocated",
+      "countHint": "Whole-GPU nodes count physical GPUs; vGPU nodes count the vGPUs HAMi splits their GPUs into.",
+      "mode": "Mode",
+      "modes": {
+        "whole": "Whole GPU",
+        "vgpu": "vGPU"
+      },
+      "switchTo": {
+        "whole": "Switch to whole GPU",
+        "vgpu": "Switch to vGPU"
+      },
+      "switchTitle": "Switch GPU mode",
+      "switchDescription": "Switch node {{node}} to {{mode}} mode. Stop the pods using GPUs on it first; its device plugin takes a moment to report the GPUs again.",
+      "switchBlockers": {
+        "gpuOperator": "Install the GPU Operator first",
+        "hami": "Install HAMi first"
+      },
+      "messages": {
+        "modeChanged": "GPU mode switched"
+      }
+    },
+    "gpuComponents": {
+      "chartHint": "The chart is read from the local chart directory. Offline clusters also need the images below; the cluster pulls them from <registry>/<image>:<tag> using its image registry setting.",
+      "chartMissing": "Not in the local chart directory",
+      "install": "Install",
+      "installing": "Installing...",
+      "uninstall": "Uninstall"
+    },
+    "gpuOperator": {
+      "title": "GPU Operator",
+      "description": "The GPU Operator installs the driver, container toolkit, GPU Feature Discovery and DCGM monitoring on every GPU node, and serves the GPUs of nodes in whole-GPU mode.",
+      "driverPreinstalled": "The NVIDIA driver is preinstalled on the nodes",
+      "driverHint": "Unchecked, the driver container installs the driver; its image tag gets the node OS appended, such as -ubuntu22.04. Check it when the driver container does not support the node OS and install the driver on the nodes yourself.",
+      "installed": "GPU Operator installed",
+      "messages": {
+        "installed": "GPU Operator installed",
+        "uninstalled": "GPU Operator uninstalled",
+        "uninstallNote": "Uninstall HAMi and delete the inference services in this cluster first."
+      }
+    },
+    "hami": {
+      "title": "HAMi",
+      "description": "HAMi serves the nodes switched to vGPU mode, sharing each GPU by memory and cores among inference services.",
+      "requiresGPUOperator": "Install the GPU Operator first.",
+      "installed": "HAMi installed",
+      "messages": {
+        "installed": "HAMi installed",
+        "uninstalled": "HAMi uninstalled",
+        "uninstallNote": "Switch the nodes in vGPU mode back to whole-GPU mode first."
+      }
+    },
+    "vgpu": {
+      "count": "{{count}} × vGPU",
+      "memory": "memory {{value}}",
+      "fullMemory": "whole memory",
+      "cores": "cores {{value}}%"
     },
     "roles": {
       "default": "Default",

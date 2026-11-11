@@ -8,6 +8,16 @@ export type ModelType = 'chat' | 'embedding'
 export type ModelSourceType = 'local' | 's3'
 export type InferenceRuntime = 'vllm' | 'sglang'
 export type DeploymentMode = 'single' | 'multi' | 'pd'
+export type GPUMode = 'whole' | 'vgpu'
+
+// VGPUSpec sizes each vGPU: memory in MiB or as a percentage of the GPU,
+// cores as a percentage. Zero memory takes the whole GPU memory and zero
+// cores sets no core limit.
+export interface VGPUSpec {
+  memory: number
+  memoryPercentage: number
+  cores: number
+}
 
 export interface ModelStorage {
   id: number
@@ -58,6 +68,7 @@ export interface InferenceService {
   mode: DeploymentMode
   image: string
   gpuCount: number
+  vgpu?: VGPUSpec
   groupSize: number
   roles: InferenceServiceRole[]
   ready: boolean
@@ -117,6 +128,7 @@ export interface CreateInferenceServiceRequest {
     decodeReplicas: number
     routerImage: string
   }
+  vgpu?: VGPUSpec
 }
 
 export type ScaleInferenceServiceRequest =
@@ -125,10 +137,28 @@ export type ScaleInferenceServiceRequest =
 export interface GPUNode {
   name: string
   product: string
+  mode: GPUMode
+  // capacity, allocatable and allocated count whole GPUs or vGPUs, following
+  // the mode.
   capacity: number
   allocatable: number
   allocated: number
   ready: boolean
+}
+
+export interface GPUComponent {
+  installed: boolean
+  chart: {
+    name: string
+    version?: string
+    image?: string
+    images?: string[]
+  }
+}
+
+export interface GPUComponents {
+  gpuOperator: GPUComponent
+  hami: GPUComponent
 }
 
 const BASE = '/admin/model-serving'
@@ -277,4 +307,47 @@ export function useGPUNodes() {
       apiClient.get<{ items: GPUNode[] }>(clusterPath(currentCluster, '/gpus')),
     enabled: !!currentCluster,
   })
+}
+
+export function setGPUNodeMode(cluster: string, node: string, mode: GPUMode) {
+  return apiClient.put<{ message: string }>(
+    clusterPath(cluster, `/gpus/${encodeURIComponent(node)}/mode`),
+    { mode }
+  )
+}
+
+export function useGPUComponents() {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['model-serving-gpu-components', currentCluster],
+    queryFn: () =>
+      apiClient.get<GPUComponents>(
+        clusterPath(currentCluster, '/gpu-components')
+      ),
+    enabled: !!currentCluster,
+  })
+}
+
+export function installGPUOperator(
+  cluster: string,
+  driverPreinstalled: boolean
+) {
+  return apiClient.post<{ message: string }>(
+    clusterPath(cluster, '/gpu-operator'),
+    { driverPreinstalled }
+  )
+}
+
+export function uninstallGPUOperator(cluster: string) {
+  return apiClient.delete<{ message: string }>(
+    clusterPath(cluster, '/gpu-operator')
+  )
+}
+
+export function installHAMi(cluster: string) {
+  return apiClient.post<{ message: string }>(clusterPath(cluster, '/hami'), {})
+}
+
+export function uninstallHAMi(cluster: string) {
+  return apiClient.delete<{ message: string }>(clusterPath(cluster, '/hami'))
 }

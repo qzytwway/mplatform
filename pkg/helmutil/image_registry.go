@@ -26,9 +26,23 @@ var imageArgPrefixes = []string{
 	"--thanos-default-base-image=",
 }
 
+// imageEnvNames are container environment variables that name images the
+// container starts later, such as the GPU Operator's driver manager.
+var imageEnvNames = map[string]bool{
+	"DRIVER_MANAGER_IMAGE": true,
+	"VALIDATOR_IMAGE":      true,
+}
+
 // monitoringAPIGroup resources (Prometheus, Alertmanager, ThanosRuler...)
 // carry the image of the pods the operator creates in spec.image.
 const monitoringAPIGroup = "monitoring.coreos.com/"
+
+// The GPU Operator's ClusterPolicy names the image of each component it
+// deploys by separate repository, image and version fields.
+const (
+	clusterPolicyAPIVersion = "nvidia.com/v1"
+	clusterPolicyKind       = "ClusterPolicy"
+)
 
 // ValidateImageRegistry accepts a registry host with an optional path prefix,
 // such as harbor.example.com or harbor.example.com:8443/mirror.
@@ -52,8 +66,9 @@ func ClusterImageRegistry(clusterName string) (string, error) {
 }
 
 // imageRegistryPostRenderer moves every container image, image argument and
-// prometheus-operator resource image under imageRegistry, keeping only the
-// image name, tag and digest.
+// environment variable, prometheus-operator resource image and GPU Operator
+// ClusterPolicy image under imageRegistry, keeping only the image name, tag
+// and digest.
 type imageRegistryPostRenderer struct {
 	imageRegistry string
 }
@@ -73,6 +88,7 @@ func (r imageRegistryPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.
 		}
 		r.rewriteImages(&document)
 		r.rewriteMonitoringImage(&document)
+		r.rewriteClusterPolicy(&document)
 		if err := encoder.Encode(&document); err != nil {
 			return nil, fmt.Errorf("failed to write rendered manifests: %w", err)
 		}
@@ -103,6 +119,14 @@ func (r imageRegistryPostRenderer) rewriteContainerImage(container *yaml.Node) {
 	if image := mappingValue(container, "image"); image != nil && image.Kind == yaml.ScalarNode {
 		image.Value = RewriteImageRegistry(image.Value, r.imageRegistry)
 	}
+	if env := mappingValue(container, "env"); env != nil && env.Kind == yaml.SequenceNode {
+		for _, variable := range env.Content {
+			name, value := mappingValue(variable, "name"), mappingValue(variable, "value")
+			if name != nil && value != nil && value.Kind == yaml.ScalarNode && imageEnvNames[name.Value] {
+				value.Value = RewriteImageRegistry(value.Value, r.imageRegistry)
+			}
+		}
+	}
 	args := mappingValue(container, "args")
 	if args == nil || args.Kind != yaml.SequenceNode {
 		return
@@ -127,6 +151,34 @@ func (r imageRegistryPostRenderer) rewriteMonitoringImage(document *yaml.Node) {
 	}
 	if image := mappingValue(mappingValue(resource, "spec"), "image"); image != nil && image.Kind == yaml.ScalarNode {
 		image.Value = RewriteImageRegistry(image.Value, r.imageRegistry)
+	}
+}
+
+func (r imageRegistryPostRenderer) rewriteClusterPolicy(document *yaml.Node) {
+	if document.Kind != yaml.DocumentNode || len(document.Content) == 0 {
+		return
+	}
+	resource := document.Content[0]
+	apiVersion, kind := mappingValue(resource, "apiVersion"), mappingValue(resource, "kind")
+	if apiVersion == nil || kind == nil || apiVersion.Value != clusterPolicyAPIVersion || kind.Value != clusterPolicyKind {
+		return
+	}
+	r.rewriteRepositories(mappingValue(resource, "spec"))
+}
+
+// rewriteRepositories moves every repository and image pair under node, such
+// as spec.driver and spec.driver.manager, under imageRegistry.
+func (r imageRegistryPostRenderer) rewriteRepositories(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	repository, image := mappingValue(node, "repository"), mappingValue(node, "image")
+	if repository != nil && image != nil && repository.Kind == yaml.ScalarNode && image.Kind == yaml.ScalarNode && repository.Value != "" {
+		rewritten := RewriteImageRegistry(repository.Value+"/"+image.Value, r.imageRegistry)
+		repository.Value, image.Value = path.Dir(rewritten), path.Base(rewritten)
+	}
+	for _, child := range node.Content {
+		r.rewriteRepositories(child)
 	}
 }
 

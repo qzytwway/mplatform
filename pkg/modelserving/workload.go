@@ -62,7 +62,16 @@ const (
 	startupFailureThreshold = 180
 )
 
-const gpuResource corev1.ResourceName = "nvidia.com/gpu"
+const (
+	gpuResource corev1.ResourceName = "nvidia.com/gpu"
+	// HAMi serves vGPUs under its own count resource, so pods asking for
+	// whole GPUs stay with the default scheduler and the GPU Operator's
+	// device plugin.
+	vgpuResource                 corev1.ResourceName = "nvidia.com/vgpu"
+	vgpuMemoryResource           corev1.ResourceName = "nvidia.com/gpumem"
+	vgpuMemoryPercentageResource corev1.ResourceName = "nvidia.com/gpumem-percentage"
+	vgpuCoresResource            corev1.ResourceName = "nvidia.com/gpucores"
+)
 
 func serviceLabels(name string) map[string]string {
 	return map[string]string{managedByLabel: managedByValue, serviceLabel: name}
@@ -197,7 +206,20 @@ func runtimeResources(req *serviceRequest) corev1.ResourceRequirements {
 		requests[corev1.ResourceMemory] = resource.MustParse(req.Memory)
 	}
 	limits := requests.DeepCopy()
-	if req.GPUCount > 0 {
+	// HAMi's admission webhook sends pods asking for vGPUs to its scheduler.
+	switch {
+	case req.VGPU != nil:
+		limits[vgpuResource] = *resource.NewQuantity(req.GPUCount, resource.DecimalSI)
+		for name, value := range map[corev1.ResourceName]int64{
+			vgpuMemoryResource:           req.VGPU.Memory,
+			vgpuMemoryPercentageResource: req.VGPU.MemoryPercentage,
+			vgpuCoresResource:            req.VGPU.Cores,
+		} {
+			if value > 0 {
+				limits[name] = *resource.NewQuantity(value, resource.DecimalSI)
+			}
+		}
+	case req.GPUCount > 0:
 		limits[gpuResource] = *resource.NewQuantity(req.GPUCount, resource.DecimalSI)
 	}
 	return corev1.ResourceRequirements{Requests: requests, Limits: limits}

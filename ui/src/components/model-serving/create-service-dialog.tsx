@@ -5,10 +5,12 @@ import { toast } from 'sonner'
 
 import {
   createInferenceService,
+  useGPUComponents,
   useGPUNodes,
   useModelServingStatus,
   useServedModels,
   type DeploymentMode,
+  type GPUMode,
   type InferenceRuntime,
   type ModelType,
 } from '@/lib/api/model-serving'
@@ -48,6 +50,8 @@ const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
 // Radix Select items cannot have an empty value.
 const ANY_NODE = '__any__'
 
+type VGPUMemoryUnit = 'mib' | 'percentage'
+
 interface CreateServiceDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -73,6 +77,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
   const { data: models } = useServedModels()
   const { data: gpuNodes } = useGPUNodes()
   const { data: status } = useModelServingStatus()
+  const { data: gpuComponents } = useGPUComponents()
   const [name, setName] = useState('')
   const [namespace, setNamespace] = useState('default')
   const [modelId, setModelId] = useState('')
@@ -86,7 +91,11 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     decodeReplicas: '1',
     routerImage: DEFAULT_IMAGES.sglang,
   })
+  const [gpuType, setGpuType] = useState<GPUMode>('whole')
   const [gpuCount, setGpuCount] = useState('1')
+  const [vgpuMemoryUnit, setVgpuMemoryUnit] = useState<VGPUMemoryUnit>('mib')
+  const [vgpuMemory, setVgpuMemory] = useState('')
+  const [vgpuCores, setVgpuCores] = useState('')
   const [cpu, setCpu] = useState('')
   const [memory, setMemory] = useState('')
   const [nodeName, setNodeName] = useState(ANY_NODE)
@@ -96,6 +105,15 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
   const modelTypeOf = (id: string): ModelType | undefined =>
     models?.items.find((model) => String(model.id) === id)?.type
   const modelType = modelTypeOf(modelId)
+  const hamiInstalled = !!gpuComponents?.hami.installed
+  const modeNodes = gpuNodes?.items.filter((node) => node.mode === gpuType)
+
+  // A node serves either whole GPUs or vGPUs.
+  const handleGpuTypeChange = (value: string) => {
+    setGpuType(value as GPUMode)
+    setNodeName(ANY_NODE)
+    if (value === 'vgpu' && Number(gpuCount) < 1) setGpuCount('1')
+  }
 
   const handleRuntimeChange = (value: string) => {
     const next = value as InferenceRuntime
@@ -133,6 +151,14 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             prefillReplicas: Number(modeValues.prefillReplicas),
             decodeReplicas: Number(modeValues.decodeReplicas),
             routerImage: modeValues.routerImage.trim(),
+          },
+        }),
+        ...(gpuType === 'vgpu' && {
+          vgpu: {
+            memory: vgpuMemoryUnit === 'mib' ? Number(vgpuMemory) : 0,
+            memoryPercentage:
+              vgpuMemoryUnit === 'percentage' ? Number(vgpuMemory) : 0,
+            cores: Number(vgpuCores),
           },
         }),
       })
@@ -242,13 +268,97 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
+            <Label htmlFor="inference-gpu-type">
+              {t('modelServing.services.gpuType')}
+            </Label>
+            <Select value={gpuType} onValueChange={handleGpuTypeChange}>
+              <SelectTrigger id="inference-gpu-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="whole">
+                  {t('modelServing.services.gpuTypes.whole')}
+                </SelectItem>
+                <SelectItem value="vgpu" disabled={!hamiInstalled}>
+                  {t('modelServing.services.gpuTypes.vgpu')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {!hamiInstalled && (
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.vgpuUnavailable')}
+              </p>
+            )}
+          </div>
+          {gpuType === 'vgpu' && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="inference-vgpu-memory">
+                  {t('modelServing.services.vgpuMemory')}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="inference-vgpu-memory"
+                    type="number"
+                    min={1}
+                    max={vgpuMemoryUnit === 'percentage' ? 100 : undefined}
+                    value={vgpuMemory}
+                    onChange={(event) => setVgpuMemory(event.target.value)}
+                    placeholder={vgpuMemoryUnit === 'mib' ? '8192' : '50'}
+                  />
+                  <Select
+                    value={vgpuMemoryUnit}
+                    onValueChange={(value) =>
+                      setVgpuMemoryUnit(value as VGPUMemoryUnit)
+                    }
+                  >
+                    <SelectTrigger
+                      className="w-24 shrink-0"
+                      aria-label={t('modelServing.services.vgpuMemoryUnit')}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mib">MiB</SelectItem>
+                      <SelectItem value="percentage">%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t('modelServing.services.vgpuMemoryHint')}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="inference-vgpu-cores">
+                  {t('modelServing.services.vgpuCores')}
+                </Label>
+                <Input
+                  id="inference-vgpu-cores"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={vgpuCores}
+                  onChange={(event) => setVgpuCores(event.target.value)}
+                  placeholder="50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('modelServing.services.vgpuCoresHint')}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
             <Label htmlFor="inference-gpu-count">
-              {t('modelServing.services.gpuCount')}
+              {gpuType === 'vgpu'
+                ? t('modelServing.services.vgpuCount')
+                : t('modelServing.services.gpuCount')}
             </Label>
             <Input
               id="inference-gpu-count"
               type="number"
-              min={0}
+              min={gpuType === 'vgpu' ? 1 : 0}
               value={gpuCount}
               onChange={(event) => setGpuCount(event.target.value)}
               required
@@ -286,7 +396,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
                 <SelectItem value={ANY_NODE}>
                   {t('modelServing.services.anyNode')}
                 </SelectItem>
-                {gpuNodes?.items.map((node) => (
+                {modeNodes?.map((node) => (
                   <SelectItem key={node.name} value={node.name}>
                     {node.name}
                     {node.product ? ` (${node.product})` : ''}

@@ -34,6 +34,12 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g.DELETE("/clusters/:cluster/services/:namespace/:name", h.DeleteService)
 	g.PUT("/clusters/:cluster/services/:namespace/:name/publish", h.PublishService)
 	g.GET("/clusters/:cluster/gpus", h.ListGPUNodes)
+	g.PUT("/clusters/:cluster/gpus/:node/mode", h.SetGPUNodeMode)
+	g.GET("/clusters/:cluster/gpu-components", h.GetGPUComponents)
+	g.POST("/clusters/:cluster/gpu-operator", h.InstallGPUOperator)
+	g.DELETE("/clusters/:cluster/gpu-operator", h.UninstallGPUOperator)
+	g.POST("/clusters/:cluster/hami", h.InstallHAMi)
+	g.DELETE("/clusters/:cluster/hami", h.UninstallHAMi)
 
 	g.GET("/clusters/:cluster/gateway", h.GetGateway)
 	g.POST("/clusters/:cluster/gateway", h.InstallGateway)

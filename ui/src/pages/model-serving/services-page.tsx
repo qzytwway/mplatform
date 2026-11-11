@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { CreateServiceDialog } from '@/components/model-serving/create-service-dialog'
+import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { LWSCard } from '@/components/model-serving/lws-card'
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 
@@ -121,7 +122,7 @@ export function ServicesPage() {
         id: 'gpuCount',
         header: t('modelServing.services.gpuCount'),
         cell: ({ row: { original: service } }) => (
-          <span className="tabular-nums">{service.gpuCount}</span>
+          <span className="tabular-nums">{formatGPUSpec(service, t)}</span>
         ),
       },
       {

@@ -33,6 +33,7 @@ type inferenceService struct {
 	Mode       string        `json:"mode"`
 	Image      string        `json:"image"`
 	GPUCount   int64         `json:"gpuCount"`
+	VGPU       *vgpuRequest  `json:"vgpu,omitempty"`
 	GroupSize  int64         `json:"groupSize"`
 	Roles      []serviceRole `json:"roles"`
 	Ready      bool          `json:"ready"`
@@ -90,9 +91,22 @@ func describeWorkload(ctx context.Context, cs *cluster.ClientSet, workload *unst
 	if containers, _, _ := unstructured.NestedSlice(template, "workerTemplate", "spec", "containers"); len(containers) > 0 {
 		container, _ := containers[0].(map[string]any)
 		service.Image, _, _ = unstructured.NestedString(container, "image")
-		gpus, _, _ := unstructured.NestedString(container, "resources", "limits", string(gpuResource))
-		if quantity, err := resource.ParseQuantity(gpus); err == nil {
-			service.GPUCount = quantity.Value()
+		limits, _, _ := unstructured.NestedStringMap(container, "resources", "limits")
+		limit := func(name corev1.ResourceName) int64 {
+			quantity, err := resource.ParseQuantity(limits[string(name)])
+			if err != nil {
+				return 0
+			}
+			return quantity.Value()
+		}
+		service.GPUCount = limit(gpuResource)
+		if _, ok := limits[string(vgpuResource)]; ok {
+			service.GPUCount = limit(vgpuResource)
+			service.VGPU = &vgpuRequest{
+				Memory:           limit(vgpuMemoryResource),
+				MemoryPercentage: limit(vgpuMemoryPercentageResource),
+				Cores:            limit(vgpuCoresResource),
+			}
 		}
 	}
 	service.Ready = true

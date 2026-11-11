@@ -27,6 +27,16 @@ type serviceRequest struct {
 	NodeName  string     `json:"nodeName"`
 	ExtraArgs []string   `json:"extraArgs"`
 	PD        *pdRequest `json:"pd"`
+	// VGPU asks HAMi for GPUCount vGPUs; without it the pods get whole GPUs.
+	VGPU *vgpuRequest `json:"vgpu"`
+}
+
+// vgpuRequest sizes each vGPU. Memory is in MiB; zero memory means the whole
+// memory of a GPU, and zero cores sets no core limit.
+type vgpuRequest struct {
+	Memory           int64 `json:"memory"`
+	MemoryPercentage int64 `json:"memoryPercentage"`
+	Cores            int64 `json:"cores"`
 }
 
 type pdRequest struct {
@@ -57,6 +67,7 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 		NodeName:  strings.TrimSpace(body.NodeName),
 		ExtraArgs: body.ExtraArgs,
 		PD:        body.PD,
+		VGPU:      body.VGPU,
 	}
 	// A Service is created under the same name, which must start with a letter.
 	// LeaderWorkerSet and DisaggregatedSet append role, revision and index
@@ -155,6 +166,23 @@ func validateServiceResources(req *serviceRequest) error {
 		if quantity, err := resource.ParseQuantity(value); err != nil || quantity.Sign() <= 0 {
 			return fmt.Errorf("%s must be a positive quantity", field)
 		}
+	}
+	return validateVGPU(req)
+}
+
+func validateVGPU(req *serviceRequest) error {
+	vgpu := req.VGPU
+	switch {
+	case vgpu == nil:
+		return nil
+	case req.GPUCount < 1:
+		return fmt.Errorf("gpuCount must be at least 1 for vGPUs")
+	case vgpu.Memory < 0 || vgpu.MemoryPercentage < 0 || vgpu.Cores < 0:
+		return fmt.Errorf("vgpu memory, memoryPercentage and cores must not be negative")
+	case vgpu.Memory > 0 && vgpu.MemoryPercentage > 0:
+		return fmt.Errorf("set vgpu memory or memoryPercentage, not both")
+	case vgpu.MemoryPercentage > 100 || vgpu.Cores > 100:
+		return fmt.Errorf("vgpu memoryPercentage and cores must be at most 100")
 	}
 	return nil
 }

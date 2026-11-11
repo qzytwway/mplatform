@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { ErrorMessage } from '@/components/error-message'
+import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { ScaleServiceDialog } from '@/components/model-serving/scale-service-dialog'
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
@@ -158,7 +159,7 @@ export function ServiceDetailPage() {
               })}
             </DetailItem>
             <DetailItem label={t('modelServing.services.gpuCount')}>
-              {service.gpuCount}
+              {formatGPUSpec(service, t)}
             </DetailItem>
             <DetailItem label={t('modelServing.services.groupSize')}>
               {service.groupSize}

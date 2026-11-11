@@ -2300,7 +2300,19 @@
         "scaled": "推理服务已伸缩",
         "published": "服务已发布到网关",
         "unpublished": "服务已取消发布"
-      }
+      },
+      "gpuType": "GPU 类型",
+      "gpuTypes": {
+        "whole": "整卡",
+        "vgpu": "vGPU"
+      },
+      "vgpuUnavailable": "在 GPU 资源页安装 HAMi 并把节点切换为 vGPU 模式后可用。",
+      "vgpuCount": "每 Pod vGPU 数",
+      "vgpuMemory": "每个 vGPU 显存",
+      "vgpuMemoryUnit": "显存单位",
+      "vgpuMemoryHint": "留空则独占整卡显存。百分比按所分配 GPU 的显存计算。",
+      "vgpuCores": "每个 vGPU 算力 (%)",
+      "vgpuCoresHint": "留空则不限制算力。"
     },
     "models": {
       "title": "模型仓库",
@@ -2345,9 +2357,64 @@
     "gpus": {
       "title": "GPU 资源",
       "empty": "暂无 GPU 节点",
-      "emptyHint": "当前集群没有节点上报 nvidia.com/gpu 容量。",
+      "emptyHint": "当前集群没有 GPU 节点。安装 GPU Operator 后，带 NVIDIA GPU 的节点会显示在这里。",
       "product": "GPU 型号",
-      "allocated": "已分配"
+      "allocated": "已分配",
+      "countHint": "整卡节点按物理 GPU 计数，vGPU 节点按 HAMi 切分出的 vGPU 计数。",
+      "mode": "模式",
+      "modes": {
+        "whole": "整卡",
+        "vgpu": "vGPU"
+      },
+      "switchTo": {
+        "whole": "切换为整卡",
+        "vgpu": "切换为 vGPU"
+      },
+      "switchTitle": "切换 GPU 模式",
+      "switchDescription": "将节点 {{node}} 切换为「{{mode}}」模式。请先停止该节点上使用 GPU 的 Pod；切换后设备插件需要片刻重新上报 GPU。",
+      "switchBlockers": {
+        "gpuOperator": "请先安装 GPU Operator",
+        "hami": "请先安装 HAMi"
+      },
+      "messages": {
+        "modeChanged": "GPU 模式已切换"
+      }
+    },
+    "gpuComponents": {
+      "chartHint": "所需 Chart 从本地 Chart 目录读取。离线环境还需要准备下列镜像，集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
+      "chartMissing": "本地 Chart 目录中不存在",
+      "install": "安装",
+      "installing": "安装中...",
+      "uninstall": "卸载"
+    },
+    "gpuOperator": {
+      "title": "GPU Operator",
+      "description": "GPU Operator 在每个 GPU 节点上安装驱动、容器工具包、GPU 特性发现和 DCGM 监控，并为整卡模式的节点提供 GPU。",
+      "driverPreinstalled": "节点已预装 NVIDIA 驱动",
+      "driverHint": "不勾选时由驱动容器安装驱动，驱动镜像的 tag 会追加节点系统后缀，如 -ubuntu22.04。驱动容器不支持节点系统时请勾选，并在节点上自行安装驱动。",
+      "installed": "GPU Operator 已安装",
+      "messages": {
+        "installed": "GPU Operator 已安装",
+        "uninstalled": "GPU Operator 已卸载",
+        "uninstallNote": "请先卸载 HAMi，并删除当前集群中的所有推理服务。"
+      }
+    },
+    "hami": {
+      "title": "HAMi",
+      "description": "HAMi 负责切换为 vGPU 模式的节点，按显存和算力把一张 GPU 切分给多个推理服务。",
+      "requiresGPUOperator": "请先安装 GPU Operator。",
+      "installed": "HAMi 已安装",
+      "messages": {
+        "installed": "HAMi 已安装",
+        "uninstalled": "HAMi 已卸载",
+        "uninstallNote": "请先把所有 vGPU 节点切换回整卡模式。"
+      }
+    },
+    "vgpu": {
+      "count": "{{count}} × vGPU",
+      "memory": "显存 {{value}}",
+      "fullMemory": "整卡显存",
+      "cores": "算力 {{value}}%"
     },
     "roles": {
       "default": "默认",

@@ -210,6 +210,12 @@ func (h *Handler) CreateService(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+	if req.VGPU != nil {
+		if status, err := requireModeComponents(cs, gpuModeVGPU); err != nil {
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	objects, workload, err := buildServiceObjects(&req, served, storage)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
