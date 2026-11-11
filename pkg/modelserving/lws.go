@@ -79,5 +79,13 @@ func buildLeaderWorkerSet(req *serviceRequest, served *model.ServedModel, storag
 		"replicas":             int64(req.Replicas),
 		"rolloutStrategy":      noSurgeRollout(),
 		"leaderWorkerTemplate": template,
+		// The OpenAI Service takes the service's name, which the headless
+		// Service LeaderWorkerSet shares between groups by default also
+		// needs. LeaderWorkerSet then fails to reconcile: it never reports
+		// groups ready, and leaders that are not ready yet get no DNS record,
+		// so workers cannot join them. One headless Service per group is
+		// named <name>-<group index> and publishes not-ready leaders, which
+		// workers reach as <name>-<i>.<name>-<i>.<namespace>.
+		"networkConfig": map[string]any{"subdomainPolicy": "UniquePerReplica"},
 	})
 }
