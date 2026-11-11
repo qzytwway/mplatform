@@ -2,9 +2,12 @@ package monitoring
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"net/http"
 	"sort"
 	"strings"
@@ -26,6 +29,12 @@ import (
 
 // dashboardLabel marks the ConfigMaps the chart writes for Grafana's sidecar.
 const dashboardLabel = "grafana_dashboard"
+
+// builtinDashboardFiles are the dashboards of the platform's own features,
+// such as inference services, listed with the chart's.
+//
+//go:embed dashboards/*.json
+var builtinDashboardFiles embed.FS
 
 type dashboardSummary struct {
 	UID   string   `json:"uid"`
@@ -100,11 +109,39 @@ func loadDashboards() (*chartDashboards, error) {
 			dashboards.definitions[summary.UID] = json.RawMessage(definition)
 		}
 	}
+	builtins, definitions, err := builtinDashboards()
+	if err != nil {
+		return nil, err
+	}
+	dashboards.summaries = append(dashboards.summaries, builtins...)
+	maps.Copy(dashboards.definitions, definitions)
 	sort.Slice(dashboards.summaries, func(i, j int) bool {
 		return dashboards.summaries[i].Title < dashboards.summaries[j].Title
 	})
 	dashboardsCache = dashboards
 	return dashboards, nil
+}
+
+func builtinDashboards() ([]dashboardSummary, map[string]json.RawMessage, error) {
+	files, err := fs.Glob(builtinDashboardFiles, "dashboards/*.json")
+	if err != nil {
+		return nil, nil, err
+	}
+	var summaries []dashboardSummary
+	definitions := map[string]json.RawMessage{}
+	for _, file := range files {
+		definition, err := builtinDashboardFiles.ReadFile(file)
+		if err != nil {
+			return nil, nil, err
+		}
+		var summary dashboardSummary
+		if err := json.Unmarshal(definition, &summary); err != nil || summary.UID == "" {
+			return nil, nil, fmt.Errorf("built-in dashboard %s is not valid", file)
+		}
+		summaries = append(summaries, summary)
+		definitions[summary.UID] = definition
+	}
+	return summaries, definitions, nil
 }
 
 // clusterDashboards reads the dashboards that charts installed in the cluster

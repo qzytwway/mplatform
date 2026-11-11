@@ -17,6 +17,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -217,6 +218,9 @@ func (h *Handler) CreateService(c *gin.Context) {
 		}
 	}
 	objects, workload, err := buildServiceObjects(&req, served, storage)
+	if err == nil {
+		objects, err = withPodMonitor(ctx, cs, &req, objects)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -413,6 +417,7 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 		{networkingv1.SchemeGroupVersion.WithKind("Ingress"), name + ingressSuffix},
 		{corev1.SchemeGroupVersion.WithKind("Service"), name},
 		{corev1.SchemeGroupVersion.WithKind("Secret"), name + storageSecretSuffix},
+		{podMonitorGVK, name},
 	}
 	for _, companion := range companions {
 		// Unstructured reads skip the informer cache, which may not have seen
@@ -420,7 +425,8 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 		object := &unstructured.Unstructured{}
 		object.SetGroupVersionKind(companion.gvk)
 		err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: companion.name}, object)
-		if apierrors.IsNotFound(err) {
+		// The PodMonitor kind is missing from clusters without its CRD.
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
 			continue
 		} else if err != nil {
 			return err

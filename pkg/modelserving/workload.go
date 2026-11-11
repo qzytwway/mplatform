@@ -204,6 +204,10 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 	}
 	if !worker {
 		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
+		// vLLM always serves /metrics on its HTTP port; SGLang only when asked.
+		if req.Runtime == runtimeSGLang {
+			args = append(args, "--enable-metrics")
+		}
 	}
 	// Parallelism defaults to using every GPU of the group, as the examples
 	// do; extraArgs come later on the command line and override it. Groups
