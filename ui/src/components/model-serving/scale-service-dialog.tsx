@@ -64,6 +64,7 @@ function ScaleServiceDialogContent({
     roleReplicas('prefill')
   )
   const [decodeReplicas, setDecodeReplicas] = useState(roleReplicas('decode'))
+  const [routerReplicas, setRouterReplicas] = useState(roleReplicas('router'))
   const [isScaling, setIsScaling] = useState(false)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -79,6 +80,7 @@ function ScaleServiceDialogContent({
           ? {
               prefillReplicas: Number(prefillReplicas),
               decodeReplicas: Number(decodeReplicas),
+              routerReplicas: Number(routerReplicas),
             }
           : { replicas: Number(replicas) }
       )
@@ -106,7 +108,7 @@ function ScaleServiceDialogContent({
       </DialogHeader>
       <form onSubmit={handleSubmit} className="space-y-4">
         {isPD ? (
-          <div className="grid gap-4 grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="scale-prefill-replicas">
                 {t('modelServing.services.prefillReplicas')}
@@ -130,6 +132,19 @@ function ScaleServiceDialogContent({
                 min={1}
                 value={decodeReplicas}
                 onChange={(event) => setDecodeReplicas(event.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="scale-router-replicas">
+                {t('modelServing.services.routerReplicas')}
+              </Label>
+              <Input
+                id="scale-router-replicas"
+                type="number"
+                min={1}
+                value={routerReplicas}
+                onChange={(event) => setRouterReplicas(event.target.value)}
                 required
               />
             </div>

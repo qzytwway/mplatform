@@ -2202,6 +2202,26 @@
       "prefillReplicas": "Prefill replicas",
       "decodeReplicas": "Decode replicas",
       "routerImage": "Router image",
+      "routerReplicas": "Router replicas",
+      "routerReplicasHint": "Replicas prefer different nodes, so the router keeps serving when one node fails.",
+      "routerPolicy": "Routing policy",
+      "routerPolicies": {
+        "default": "Router default",
+        "cache_aware": "Cache aware",
+        "power_of_two": "Power of two",
+        "round_robin": "Round robin",
+        "random": "Random"
+      },
+      "routerPolicyHints": {
+        "default": "Leaves --policy unset, so the router uses the default policy of its version.",
+        "cache_aware": "Sends requests that share a prompt prefix to the server that has it cached, and balances load when servers become uneven.",
+        "power_of_two": "Picks the less loaded of two random servers.",
+        "round_robin": "Picks servers in turn.",
+        "random": "Picks a random server."
+      },
+      "roleImageHint": "Leave empty to use the service image.",
+      "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name.",
+      "inheritService": "Same as the service",
       "nodesPerReplica": "Nodes per replica",
       "extraArgsHintPD": "Appended to both the prefill and decode start commands; each role's own arguments come after them and can override them.",
       "transferBackend": "KV transfer",
@@ -2236,7 +2256,7 @@
       "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME.",
       "scaleTitle": "Scale inference service",
       "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
-      "scaleDescriptionPD": "Set the prefill and decode replicas. The router is not scalable.",
+      "scaleDescriptionPD": "Set the prefill, decode and router replicas.",
       "published": "Published",
       "publish": "Publish to gateway",
       "unpublish": "Unpublish",
@@ -2377,6 +2397,14 @@
       "router": "Router",
       "prefill-worker": "Prefill worker",
       "decode-worker": "Decode worker"
+    },
+    "deployment": {
+      "title": "Deployment configuration",
+      "command": "Command",
+      "podSettings": "Pod settings",
+      "hostNetwork": "Host network",
+      "privileged": "Privileged",
+      "requestLimit": "{{request}} (limit {{limit}})"
     },
     "lws": {
       "title": "LeaderWorkerSet",

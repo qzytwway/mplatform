@@ -99,6 +99,46 @@ export interface InferencePod {
 
 export interface InferenceServiceDetail extends InferenceService {
   pods: InferencePod[]
+  deployment?: DeploymentConfig
+}
+
+// DeploymentConfig is read back from the pod templates of a service's
+// workload and router.
+export interface DeploymentConfig {
+  roles: RoleConfig[]
+  // Set in PD mode only.
+  transferBackend?: string
+  ibDevices?: string
+  routerPolicy?: string
+}
+
+export interface RoleConfig {
+  name: string
+  replicas: number
+  groupSize?: number
+  // The leader and worker templates of groups that have both, otherwise the
+  // one template all pods use.
+  pods: PodConfig[]
+}
+
+export interface PodConfig {
+  role?: 'leader' | 'worker'
+  image: string
+  command: string[]
+  args: string[]
+  env: EnvVar[]
+  resources: ResourceQuantity[]
+  rdma: RDMAMode | 'none'
+  hostNetwork: boolean
+  privileged: boolean
+  ipcLock: boolean
+  networks?: string
+}
+
+export interface ResourceQuantity {
+  name: string
+  request?: string
+  limit?: string
 }
 
 export interface ModelServingStatus {
@@ -131,6 +171,9 @@ export interface CreateInferenceServiceRequest {
     prefill: PDRoleRequest
     decode: PDRoleRequest
     routerImage: string
+    routerReplicas: number
+    // Empty keeps the router's default policy.
+    routerPolicy?: RouterPolicy | ''
     transferBackend: TransferBackend
     ibDevices?: string
   }
@@ -140,13 +183,23 @@ export interface CreateInferenceServiceRequest {
 
 export type TransferBackend = 'mooncake' | 'mooncake-tcp' | 'nixl'
 
+// The --policy values of sglang_router.launch_router.
+export type RouterPolicy =
+  'cache_aware' | 'power_of_two' | 'round_robin' | 'random'
+
 export type RDMAMode = 'device-plugin' | 'host'
 
+// Empty image, cpu and memory keep the service's; env follows the service's
+// and overrides variables of the same name.
 export interface PDRoleRequest {
   replicas: number
   groupSize: number
   gpuCount: number
   extraArgs?: string[]
+  image?: string
+  cpu?: string
+  memory?: string
+  env?: EnvVar[]
 }
 
 export interface RDMARequest {
@@ -162,7 +215,8 @@ export interface EnvVar {
 }
 
 export type ScaleInferenceServiceRequest =
-  { replicas: number } | { prefillReplicas: number; decodeReplicas: number }
+  | { replicas: number }
+  | { prefillReplicas: number; decodeReplicas: number; routerReplicas: number }
 
 export interface GPUNode {
   name: string

@@ -64,6 +64,10 @@ const DEFAULT_PD_ROLE: PDRoleValues = {
   groupSize: '1',
   gpuCount: '1',
   extraArgs: '',
+  image: '',
+  cpu: '',
+  memory: '',
+  env: '',
 }
 
 type VGPUMemoryUnit = 'mib' | 'percentage'
@@ -76,6 +80,10 @@ function toPDRole(values: PDRoleValues): PDRoleRequest {
     groupSize: Number(values.groupSize),
     gpuCount: Number(values.gpuCount),
     extraArgs: splitArgs(values.extraArgs),
+    image: values.image.trim(),
+    cpu: values.cpu.trim(),
+    memory: values.memory.trim(),
+    env: parseEnv(values.env),
   }
 }
 
@@ -141,6 +149,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     prefill: DEFAULT_PD_ROLE,
     decode: DEFAULT_PD_ROLE,
     routerImage: DEFAULT_IMAGES.sglang,
+    routerReplicas: '1',
+    routerPolicy: 'default',
     transferBackend: 'mooncake',
     ibDevices: '',
   })
@@ -217,6 +227,11 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             prefill: toPDRole(modeValues.prefill),
             decode: toPDRole(modeValues.decode),
             routerImage: modeValues.routerImage.trim(),
+            routerReplicas: Number(modeValues.routerReplicas),
+            routerPolicy:
+              modeValues.routerPolicy === 'default'
+                ? ''
+                : modeValues.routerPolicy,
             transferBackend: modeValues.transferBackend,
             ibDevices:
               modeValues.transferBackend === 'mooncake'
@@ -336,6 +351,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           values={modeValues}
           onValuesChange={setModeValues}
           gpuCountLabel={gpuCountLabel}
+          image={image}
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
