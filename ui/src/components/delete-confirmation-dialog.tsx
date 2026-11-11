@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -25,6 +25,8 @@ interface DeleteConfirmationDialogProps {
   namespace?: string
   additionalNote?: string
   showAdditionalOptions?: boolean
+  // Extra options shown under the confirmation input.
+  children?: ReactNode
 }
 
 export function DeleteConfirmationDialog({
@@ -37,6 +39,7 @@ export function DeleteConfirmationDialog({
   namespace,
   additionalNote,
   showAdditionalOptions = false,
+  children,
 }: DeleteConfirmationDialogProps) {
   const { t } = useTranslation()
   const [confirmationInput, setConfirmationInput] = useState('')
@@ -162,6 +165,7 @@ export function DeleteConfirmationDialog({
               </p>
             </>
           )}
+          {children}
         </div>
 
         <DialogFooter>

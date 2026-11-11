@@ -724,3 +724,180 @@ export interface ResourceTemplate {
   description: string
   yaml: string
 }
+
+// Cluster provisioning: creating a cluster on hosts over SSH with kubeadm.
+export type ProvisionStatus =
+  'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'deleting'
+
+export type ProvisionStepName =
+  | 'precheck'
+  | 'prepare'
+  | 'init-control-plane'
+  | 'join-control-planes'
+  | 'join-workers'
+  | 'install-cni'
+  | 'wait-ready'
+  | 'register'
+
+export type ProvisionStepStatus =
+  'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+
+export type ProvisionNodeStatus = 'pending' | 'running' | 'succeeded' | 'failed'
+
+export type ControlPlaneMode = 'single' | 'kube-vip' | 'external-lb'
+
+export type ProvisionNodeRole = 'control-plane' | 'worker'
+
+export type SSHAuthType = 'key' | 'password'
+
+export interface ProvisionSSH {
+  user: string
+  port: number
+  authType: SSHAuthType
+  privateKey: string
+  password: string
+}
+
+export interface ProvisionNodeSpec {
+  ip: string
+  hostname: string
+  role: ProvisionNodeRole
+  ssh: ProvisionSSH | null
+}
+
+export interface RegistryMirror {
+  registry: string
+  endpoint: string
+}
+
+export interface ProvisionSpec {
+  name: string
+  description: string
+  kubernetesMinor: string
+  controlPlane: {
+    mode: ControlPlaneMode
+    endpoint: string
+    endpointPort: number
+  }
+  network: {
+    podCIDR: string
+    serviceCIDR: string
+    dnsDomain: string
+  }
+  sources: {
+    binaryMirror: string
+    imageRepository: string
+    registryMirrors: RegistryMirror[]
+  }
+  ssh: ProvisionSSH
+  nodes: ProvisionNodeSpec[]
+  schedulableControlPlane: boolean
+  isDefault: boolean
+}
+
+export interface KubernetesVersionOption {
+  minor: string
+  patch: string
+  error?: string
+}
+
+export interface KubernetesVersions {
+  default: string
+  versions: KubernetesVersionOption[]
+}
+
+export type PrecheckName =
+  | 'ssh'
+  | 'privilege'
+  | 'os'
+  | 'arch'
+  | 'cgroup'
+  | 'resources'
+  | 'disk'
+  | 'ports'
+  | 'residue'
+  | 'timeSync'
+  | 'download'
+  | 'unique'
+  | 'vip'
+
+export type PrecheckStatus = 'pass' | 'warn' | 'fail'
+
+export interface PrecheckItem {
+  name: PrecheckName
+  status: PrecheckStatus
+  message: string
+}
+
+export interface NodePrecheck {
+  ip: string
+  hostname: string
+  os: string
+  arch: string
+  cpu: number
+  memoryMiB: number
+  checks: PrecheckItem[]
+}
+
+export interface PrecheckResult {
+  passed: boolean
+  nodes: NodePrecheck[]
+}
+
+export interface ProvisionSummary {
+  id: number
+  name: string
+  description: string
+  kubernetesMinor: string
+  kubernetesVersion: string
+  controlPlaneMode: ControlPlaneMode
+  status: ProvisionStatus
+  currentStep: ProvisionStepName | ''
+  error: string
+  controlPlaneCount: number
+  workerCount: number
+  clusterId: number | null
+  createdBy: string
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export interface ProvisionStep {
+  name: ProvisionStepName
+  status: ProvisionStepStatus
+  startedAt: string | null
+  finishedAt: string | null
+  error: string
+}
+
+export interface ProvisionNode {
+  id: number
+  ip: string
+  hostname: string
+  role: ProvisionNodeRole
+  status: ProvisionNodeStatus
+  currentAction: string
+  error: string
+  precheck: NodePrecheck | null
+}
+
+export interface ProvisionDetail extends ProvisionSummary {
+  spec: ProvisionSpec
+  steps: ProvisionStep[]
+  nodes: ProvisionNode[]
+}
+
+export interface ProvisionLogLine {
+  id: number
+  nodeId: number | null
+  node: string
+  step: string
+  time: string
+  text: string
+}
+
+export interface ProvisionLogs {
+  lines: ProvisionLogLine[]
+  next: number
+}

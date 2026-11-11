@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Installs Calico through the tigera operator. Since Calico 3.30 the CRDs ship
+# separately and must be applied first; they exceed the client-side apply
+# annotation limit, hence --server-side.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+dir=/etc/kubernetes/mplatform/calico
+mkdir -p "$dir"
+echo "==> Downloading Calico manifests"
+curl -fsSL --retry 3 --connect-timeout 15 -o "$dir/operator-crds.yaml" {{ shq .CRDsURL }}
+curl -fsSL --retry 3 --connect-timeout 15 -o "$dir/tigera-operator.yaml" {{ shq .OperatorURL }}
+echo "==> Applying Calico"
+kubectl apply --server-side --force-conflicts -f "$dir/operator-crds.yaml" >/dev/null
+kubectl apply --server-side --force-conflicts -f "$dir/tigera-operator.yaml"
+kubectl wait --for=condition=Established --timeout=180s crd/installations.operator.tigera.io
+kubectl apply --server-side --force-conflicts -f "$dir/installation.yaml"

@@ -470,7 +470,8 @@
     "metrics": "Prometheus 指标",
     "logs": "日志",
     "alerts": "告警",
-    "modelUsage": "用量"
+    "modelUsage": "用量",
+    "platform": "平台"
   },
   "overview": {
     "title": "概览",
@@ -1052,6 +1053,300 @@
       "imageRegistryHint": "在此集群安装或升级 Chart 时，容器镜像改从该地址拉取，只保留镜像名和标签（如 docker.io/bitnami/redis:7 改为 <地址>/redis:7）。留空则不改写。",
       "discoveredUrl": "已自动发现：{{url}}，留空即使用该地址。",
       "autoDiscoverHint": "留空则自动发现集群内的服务，例如安装 kube-prometheus-stack 后会自动连接。"
+    }
+  },
+  "clusterProvision": {
+    "title": "集群管理",
+    "description": "查看平台接入的全部集群。可以在这里创建新集群，或把已有集群纳管进来。",
+    "settingsNotice": "在「集群管理」页面可以创建新集群，并统一查看平台下的所有集群。",
+    "settingsNoticeLink": "前往集群管理",
+    "default": "默认",
+    "actions": {
+      "create": "创建集群",
+      "import": "纳管集群",
+      "enter": "进入集群",
+      "viewProgress": "查看进度",
+      "viewLogs": "查看日志",
+      "viewDetails": "安装详情",
+      "retry": "重试",
+      "cancel": "取消创建",
+      "delete": "删除",
+      "precheck": "先做预检查",
+      "prechecking": "检查中...",
+      "submitting": "创建中..."
+    },
+    "stats": {
+      "total": "集群总数",
+      "totalDetail": "平台创建 {{created}} · 纳管 {{imported}}",
+      "running": "运行中",
+      "runningDetail": "连接正常，可切换进入",
+      "creating": "创建中",
+      "creatingDetail": "{{name}} · {{step}}",
+      "creatingNone": "没有正在创建的集群",
+      "abnormal": "异常",
+      "abnormalDetail": "{{failed}} 个创建失败 · {{disconnected}} 个已断开"
+    },
+    "filter": {
+      "all": "全部 {{count}}",
+      "created": "平台创建 {{count}}",
+      "imported": "已纳管 {{count}}",
+      "search": "按名称搜索集群"
+    },
+    "source": {
+      "created": "平台创建",
+      "imported": "纳管"
+    },
+    "method": {
+      "host": "主机安装",
+      "kubeconfig": "Kubeconfig",
+      "inCluster": "In-Cluster",
+      "clusterAgent": "Cluster Agent"
+    },
+    "columns": {
+      "name": "名称",
+      "source": "来源",
+      "method": "方式",
+      "version": "版本",
+      "nodes": "节点",
+      "status": "状态",
+      "createdAt": "创建/接入时间"
+    },
+    "status": {
+      "running": "运行中",
+      "creating": "创建中",
+      "succeeded": "已创建",
+      "failed": "创建失败",
+      "cancelled": "已取消",
+      "deleting": "删除中",
+      "disconnected": "已断开",
+      "error": "异常",
+      "disabled": "已禁用"
+    },
+    "stepStatus": {
+      "pending": "等待中",
+      "running": "进行中",
+      "succeeded": "已完成",
+      "failed": "失败",
+      "skipped": "已跳过"
+    },
+    "nodeStatus": {
+      "pending": "等待中",
+      "running": "安装中",
+      "succeeded": "已完成",
+      "failed": "失败"
+    },
+    "steps": {
+      "precheck": "预检查",
+      "prepare": "系统准备与安装组件",
+      "init-control-plane": "初始化控制平面",
+      "join-control-planes": "加入其余控制平面",
+      "join-workers": "加入工作节点",
+      "install-cni": "安装网络插件",
+      "wait-ready": "等待集群就绪",
+      "register": "纳管到平台"
+    },
+    "stepDescriptions": {
+      "precheck": "SSH 连通、系统版本、资源、端口占用和时间同步",
+      "prepare": "系统设置、containerd 和 Kubernetes 二进制",
+      "init-control-plane": "在首个控制平面执行 kubeadm init",
+      "join-control-planes": "逐台加入其余控制平面",
+      "join-workers": "加入工作节点，最多 5 台同时进行",
+      "install-cni": "Calico",
+      "wait-ready": "节点 Ready、核心 Pod 运行",
+      "register": "写入平台的集群列表"
+    },
+    "checks": {
+      "ssh": "SSH 登录",
+      "privilege": "root 或 sudo 权限",
+      "os": "操作系统",
+      "arch": "CPU 架构",
+      "cgroup": "cgroup v2",
+      "resources": "CPU 和内存",
+      "disk": "磁盘空间",
+      "ports": "端口占用",
+      "residue": "残留安装",
+      "timeSync": "时间同步",
+      "download": "下载源",
+      "unique": "主机标识唯一",
+      "vip": "VIP 可用"
+    },
+    "checkStatus": {
+      "pass": "通过",
+      "warn": "警告",
+      "fail": "失败"
+    },
+    "roles": {
+      "control-plane": "控制平面",
+      "worker": "工作节点"
+    },
+    "controlPlaneModes": {
+      "single": "单控制平面",
+      "kube-vip": "3 控制平面 + 内置 kube-vip VIP",
+      "external-lb": "3 控制平面 + 外部负载均衡"
+    },
+    "duration": {
+      "seconds": "{{s}} 秒",
+      "minutes": "{{m}} 分 {{s}} 秒",
+      "hours": "{{h}} 小时 {{m}} 分"
+    },
+    "list": {
+      "empty": "还没有集群",
+      "emptyHint": "可以在自己的机器上创建集群，或把已有集群纳管进来。",
+      "noMatch": "没有符合筛选条件的集群"
+    },
+    "delete": {
+      "resourceType": "集群",
+      "createdNote": "从平台移除这个集群和它的安装记录。",
+      "reset": "同时清理节点（kubeadm reset）",
+      "resetHint": "在每个节点上执行 kubeadm reset，并清理安装时添加的内容。节点已经无法访问时取消勾选。",
+      "nothingInstalled": "节点上还没有安装任何内容，无需清理。"
+    },
+    "cancelDialog": {
+      "title": "取消创建 {{name}}？",
+      "description": "正在执行的步骤会中止。之后可以重试或删除这个集群。",
+      "confirm": "取消创建",
+      "keep": "继续创建"
+    },
+    "messages": {
+      "created": "已开始创建集群",
+      "retried": "已从失败的步骤开始重试",
+      "cancelling": "正在取消创建",
+      "deleted": "集群已删除",
+      "deleting": "正在清理节点，完成后删除集群",
+      "precheckPassed": "预检查通过",
+      "precheckFailed": "预检查发现问题"
+    },
+    "create": {
+      "title": "创建集群",
+      "description": "提交后平台在后台安装，可以随时在列表里查看进度。安装完成后自动纳管，左上角的集群切换器里可以直接选到。",
+      "methodTitle": "主机安装",
+      "methodDescription": "在你提供的物理机或虚拟机上，通过 SSH 用 kubeadm 安装 Kubernetes。",
+      "sections": {
+        "basic": "基本信息",
+        "nodes": "主机与节点",
+        "controlPlane": "控制平面",
+        "network": "网络",
+        "sources": "下载源",
+        "options": "其他设置"
+      },
+      "name": "集群名称",
+      "namePlaceholder": "例如 dev-01",
+      "nameHint": "小写字母、数字和 -，平台内唯一",
+      "version": "Kubernetes 版本",
+      "versionRecommended": "推荐",
+      "versionUnresolved": "未解析",
+      "versionError": "无法解析最新补丁版本：{{error}}",
+      "versionsLoadFailed": "加载 Kubernetes 版本失败",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "用途、负责人等",
+      "nodesHint": "平台通过 SSH 登录这些机器执行安装。机器需要能访问下载源，且彼此网络互通。",
+      "sshDefaults": "SSH 登录信息（所有节点默认使用）",
+      "sshHint": "使用 root 登录，或使用有 sudo 权限的用户。",
+      "sshUser": "用户名",
+      "sshPort": "端口",
+      "authType": "认证方式",
+      "authKey": "私钥",
+      "authPassword": "密码",
+      "privateKeyPlaceholder": "粘贴私钥内容，或上传文件。加密保存，不会再次显示。",
+      "uploadKey": "上传文件",
+      "passwordPlaceholder": "加密保存，不会再次显示",
+      "nodeList": "节点列表",
+      "nodeCounts": "控制平面 {{controlPlanes}} · 工作节点 {{workers}}",
+      "addNode": "添加节点",
+      "bulkPaste": "批量粘贴 IP",
+      "noNodes": "还没有节点。可以逐个添加，或批量粘贴 IP。",
+      "hostname": "主机名",
+      "hostnameAuto": "使用机器主机名",
+      "ip": "IP 地址",
+      "role": "角色",
+      "ssh": "SSH",
+      "sshDefault": "使用默认",
+      "controlPlaneMode": "高可用方式",
+      "vip": "控制平面 VIP",
+      "vipHint": "节点所在网段中一个未被占用的 IP，由 kube-vip 通过 ARP 宣告。",
+      "lbAddress": "负载均衡地址",
+      "lbHint": "需要在负载均衡上把这个端口转发到全部 3 个控制平面的 6443 端口。",
+      "endpointPort": "端口",
+      "cni": "网络插件",
+      "podCIDR": "Pod 网段",
+      "serviceCIDR": "Service 网段",
+      "dnsDomain": "集群域名",
+      "networkHint": "网段不能和节点所在网络重叠。容器运行时固定为 containerd。",
+      "binaryMirror": "二进制下载源",
+      "binaryMirrorHint": "留空则从官方源下载。镜像源需保持原有的目录结构：<镜像源>/<原始域名>/<原始路径>，例如 https://mirror.example.com/dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubeadm。",
+      "imageRepository": "镜像仓库",
+      "imageRepositoryHint": "Kubernetes 和 Calico 的镜像从这里拉取。留空则使用 registry.k8s.io。",
+      "registryMirrors": "镜像加速",
+      "registryMirrorsHint": "containerd 拉取这些仓库的镜像时走加速地址，例如 docker.io → https://mirror.example.com。",
+      "registry": "仓库",
+      "mirrorEndpoint": "加速地址",
+      "addMirror": "添加镜像加速",
+      "removeMirror": "移除镜像加速",
+      "isDefault": "设为默认集群",
+      "isDefaultHint": "登录后默认进入这个集群",
+      "schedulable": "控制平面允许调度业务 Pod",
+      "schedulableHint": "去掉控制平面的污点。没有工作节点时必须开启。",
+      "summary": "配置摘要",
+      "summaryTip": "提交前建议先做预检查：检查 SSH 连通、系统版本、端口占用和时间同步，问题会逐台列出来。",
+      "summaryMethod": "创建方式",
+      "summaryMethodValue": "主机安装（kubeadm）",
+      "summaryNodes": "节点",
+      "summaryNetwork": "网络"
+    },
+    "nodeDialog": {
+      "addTitle": "添加节点",
+      "editTitle": "编辑节点",
+      "hostnamePlaceholder": "留空则使用机器本身的主机名",
+      "overrideSSH": "单独设置这台节点的 SSH"
+    },
+    "bulkDialog": {
+      "title": "批量粘贴 IP",
+      "description": "每行一个 IP。列表里已有的 IP 会跳过。",
+      "invalid": "以下不是有效的 IPv4 地址：{{ips}}",
+      "add": "添加 {{count}} 个节点"
+    },
+    "validation": {
+      "title": "请先修正以下问题",
+      "name": "集群名称只能包含小写字母、数字和 -，以字母或数字开头和结尾，最长 63 个字符。",
+      "version": "请选择 Kubernetes 版本。",
+      "noNodes": "请至少添加一个节点。",
+      "ipRequired": "请填写节点的 IP 地址。",
+      "invalidIP": "不是有效的 IPv4 地址：{{ip}}",
+      "duplicateIP": "IP 地址重复：{{ip}}",
+      "singleControlPlane": "单控制平面模式需要正好 1 个控制平面节点。",
+      "haControlPlanes": "这种高可用方式需要正好 3 个控制平面节点。",
+      "endpoint": "请填写 VIP 或负载均衡地址。",
+      "vip": "VIP 必须是 IPv4 地址。",
+      "port": "请填写 1 到 65535 之间的端口。",
+      "noWorkers": "没有工作节点时，需要开启「控制平面允许调度业务 Pod」。",
+      "sshUser": "请填写 SSH 用户名。",
+      "sshKey": "请填写 SSH 私钥。",
+      "sshPassword": "请填写 SSH 密码。",
+      "nodeSSH": "节点 {{ip}}：{{error}}",
+      "mirror": "每条镜像加速都需要填写仓库和加速地址。"
+    },
+    "precheck": {
+      "title": "预检查结果",
+      "passed": "全部节点通过预检查。",
+      "passedWithWarnings": "预检查通过，但有警告。",
+      "failed": "有检查项未通过，请修正后再创建集群。",
+      "nodeInfo": "{{os}} · {{arch}} · {{cpu}} 核 · {{memory}}"
+    },
+    "detail": {
+      "meta": "平台创建 · 主机安装 · Kubernetes {{version}} · Calico · {{nodes}} 个节点 · {{user}} 发起于 {{time}}",
+      "progress": "第 {{current}} / {{total}} 步 · {{step}}",
+      "progressDone": "已完成 {{done}} / {{total}} 步",
+      "elapsed": "已用时 {{duration}}",
+      "steps": "安装步骤",
+      "stepsNote": "某一步失败时，这一步会标红并写明原因。修正后可以从这一步重试，不用从头再来。",
+      "nodes": "节点",
+      "currentAction": "当前动作",
+      "logs": "安装日志",
+      "allNodes": "全部",
+      "noLogs": "暂无日志",
+      "logsLoadFailed": "加载日志失败：{{error}}",
+      "precheckResults": "预检查结果",
+      "notFound": "安装记录"
     }
   },
   "oauthManagement": {

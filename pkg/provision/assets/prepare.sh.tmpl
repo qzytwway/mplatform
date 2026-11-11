@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Prepares a node for kubeadm: OS settings, packages, the container runtime
+# and Kubernetes binaries. Every step is idempotent so the step can be rerun.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+
+OS_FAMILY={{ shq .OSFamily }}
+POD_CIDR={{ shq .PodCIDR }}
+SERVICE_CIDR={{ shq .ServiceCIDR }}
+FIREWALL_PORTS=({{ range .Ports }}{{ shq . }} {{ end }})
+CACHE_DIR=/var/cache/mplatform/downloads
+
+log() { echo "==> $*"; }
+
+log "Disabling swap"
+swapoff -a
+sed -ri 's@^([^#[:space:]][^[:space:]]*[[:space:]]+[^[:space:]]+[[:space:]]+swap[[:space:]].*)$@#\1@' /etc/fstab
+systemctl mask --now systemd-zram-setup@zram0.service >/dev/null 2>&1 || true
+swapoff -a
+if [ -n "$(swapon --show --noheadings 2>/dev/null)" ]; then
+  echo "swap is still active:"
+  swapon --show
+  exit 1
+fi
+
+log "Loading kernel modules"
+modprobe overlay
+modprobe br_netfilter
+
+log "Applying sysctl settings"
+sysctl --system >/dev/null
+for kv in net.ipv4.ip_forward=1 net.bridge.bridge-nf-call-iptables=1 vm.overcommit_memory=1 vm.panic_on_oom=0 \
+  kernel.panic=10 kernel.panic_on_oops=1 kernel.keys.root_maxkeys=1000000 kernel.keys.root_maxbytes=25000000; do
+  key=${kv%%=*}
+  want=${kv#*=}
+  got=$(sysctl -n "$key")
+  if [ "$got" != "$want" ]; then
+    echo "sysctl $key is $got, expected $want; another file under /etc/sysctl.d overrides it"
+    exit 1
+  fi
+done
+
+log "Installing packages"
+case "$OS_FAMILY" in
+  ubuntu)
+    export DEBIAN_FRONTEND=noninteractive
+    # Fresh cloud images often run unattended-upgrades at first boot.
+    apt-get -o DPkg::Lock::Timeout=300 update -qq
+    apt-get -o DPkg::Lock::Timeout=300 install -y -qq --no-install-recommends conntrack socat ethtool iptables ipset chrony curl tar ca-certificates
+    ;;
+  rhel)
+    packages="conntrack-tools socat ethtool iptables-nft ipset chrony tar"
+    command -v curl >/dev/null 2>&1 || packages="$packages curl"
+    # shellcheck disable=SC2086
+    dnf install -y -q $packages
+    ;;
+  *)
+    echo "unsupported OS family $OS_FAMILY"
+    exit 1
+    ;;
+esac
+
+log "Enabling time synchronization"
+systemctl enable --now chrony.service >/dev/null 2>&1 || systemctl enable --now chronyd.service
+
+if [ "$OS_FAMILY" = rhel ] && command -v getenforce >/dev/null 2>&1; then
+  log "Setting SELinux to permissive"
+  if [ "$(getenforce)" = Enforcing ]; then
+    setenforce 0
+  fi
+  sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+fi
+
+if systemctl is-active --quiet firewalld 2>/dev/null; then
+  log "Opening ports in firewalld"
+  for port in "${FIREWALL_PORTS[@]}"; do
+    firewall-cmd --quiet --permanent --add-port="$port"
+  done
+  for cidr in "$POD_CIDR" "$SERVICE_CIDR"; do
+    firewall-cmd --quiet --permanent --zone=trusted --add-source="$cidr" || echo "warning: could not add $cidr to the trusted zone"
+  done
+  firewall-cmd --quiet --reload
+fi
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  log "Opening ports in ufw"
+  for port in "${FIREWALL_PORTS[@]}"; do
+    ufw allow "${port/-/:}" >/dev/null
+  done
+  for cidr in "$POD_CIDR" "$SERVICE_CIDR"; do
+    ufw allow from "$cidr" >/dev/null
+  done
+  ufw route allow from "$POD_CIDR" >/dev/null
+  ufw route allow to "$POD_CIDR" >/dev/null
+fi
+
+# fetch <url> <checksum-url> <name-in-checksum-file> <file>
+# Checksum files are a bare hash (dl.k8s.io, crictl), "hash  name"
+# (containerd, CNI plugins) or a clearsigned multi-file list (runc).
+fetch() {
+  local url=$1 sum_url=$2 sum_name=$3 dest="$CACHE_DIR/$4" expected actual
+  expected=$(curl -fsSL --retry 3 --connect-timeout 15 "$sum_url" | awk -v name="$sum_name" '
+    length($1) == 64 && $1 ~ /^[0-9a-f]+$/ {
+      if ($2 == name || $2 == "*" name) { print $1; found = 1; exit }
+      if (NF == 1 && first == "") first = $1
+    }
+    END { if (!found && first != "") print first }')
+  if [ -z "$expected" ]; then
+    echo "no checksum for $sum_name in $sum_url"
+    return 1
+  fi
+  if [ -f "$dest" ] && [ "$(sha256sum "$dest" | awk '{print $1}')" = "$expected" ]; then
+    echo "$4 already downloaded"
+    return 0
+  fi
+  echo "downloading $url"
+  curl -fsSL --retry 3 --connect-timeout 15 -o "$dest.part" "$url"
+  actual=$(sha256sum "$dest.part" | awk '{print $1}')
+  if [ "$actual" != "$expected" ]; then
+    rm -f "$dest.part"
+    echo "checksum mismatch for $url: expected $expected, got $actual"
+    return 1
+  fi
+  mv -f "$dest.part" "$dest"
+}
+
+log "Downloading binaries"
+mkdir -p "$CACHE_DIR"
+{{- range .Downloads }}
+fetch {{ shq .URL }} {{ shq .SumURL }} {{ shq .SumName }} {{ shq .Dest }}
+{{- end }}
+
+log "Installing binaries"
+for bin in kubeadm kubelet kubectl; do
+  install -m 0755 "$CACHE_DIR/$bin" "/usr/local/bin/$bin"
+done
+tar -C /usr/local -xzf "$CACHE_DIR/"{{ shq .ContainerdArchive }}
+install -m 0755 "$CACHE_DIR/runc" /usr/local/sbin/runc
+mkdir -p /opt/cni/bin
+tar -C /opt/cni/bin -xzf "$CACHE_DIR/"{{ shq .CNIArchive }}
+tar -C /usr/local/bin -xzf "$CACHE_DIR/"{{ shq .CrictlArchive }}
+
+log "Starting containerd"
+systemctl daemon-reload
+systemctl enable containerd.service >/dev/null 2>&1
+systemctl restart containerd.service
+for _ in $(seq 1 30); do
+  crictl info >/dev/null 2>&1 && break
+  sleep 1
+done
+crictl info >/dev/null
+systemctl enable kubelet.service >/dev/null 2>&1
+
+log "Node prepared: kubeadm $(kubeadm version -o short), containerd $(containerd --version | awk '{print $3}')"

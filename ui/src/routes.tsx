@@ -19,6 +19,9 @@ import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
 import { MetricsPage } from './pages/observability/metrics-page'
 import { Overview } from './pages/overview'
+import { ClusterCreatePage } from './pages/platform/cluster-create-page'
+import { ClusterListPage } from './pages/platform/cluster-list-page'
+import { ProvisionDetailPage } from './pages/platform/provision-detail-page'
 import { ResourceDetail } from './pages/resource-detail'
 import { ResourceList } from './pages/resource-list'
 import { SettingsPage } from './pages/settings'
@@ -70,6 +73,18 @@ export const router = createBrowserRouter(
         {
           path: 'settings',
           element: <SettingsPage />,
+        },
+        {
+          path: 'platform/clusters',
+          element: <ClusterListPage />,
+        },
+        {
+          path: 'platform/clusters/create',
+          element: <ClusterCreatePage />,
+        },
+        {
+          path: 'platform/clusters/provisions/:id',
+          element: <ProvisionDetailPage />,
         },
         {
           path: 'observability/metrics',

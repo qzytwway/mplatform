@@ -28,6 +28,14 @@ export function DynamicBreadcrumb() {
       return breadcrumbs
     }
 
+    // /platform and /platform/clusters/provisions have no pages of their own.
+    if (pathSegments[0] === 'platform') {
+      return [
+        { label: t('nav.platform') },
+        { label: t('clusterProvision.title'), href: '/platform/clusters' },
+      ]
+    }
+
     // Helper function to create breadcrumb item
     const createResourceBreadcrumb = (
       label: string,

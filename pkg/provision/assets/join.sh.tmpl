@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Joins this node to the cluster.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+
+bash /var/lib/mplatform/scripts/reset.sh retry
+echo "==> kubeadm join"
+kubeadm join --config /etc/kubernetes/mplatform/kubeadm-join.yaml
+{{- if .KubeVIP }}
+# kubeadm join refuses a non-empty manifests directory, so kube-vip is added
+# once the node has joined and admin.conf exists.
+install -m 0600 /etc/kubernetes/mplatform/kube-vip.yaml /etc/kubernetes/manifests/kube-vip.yaml
+{{- end }}

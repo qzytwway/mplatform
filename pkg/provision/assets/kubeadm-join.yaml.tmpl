@@ -1,0 +1,17 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: {{ json .Cluster.EndpointAddress }}
+    token: {{ json .Token }}
+    caCertHashes:
+      - {{ json .CACertHash }}
+{{ template "nodeRegistration" . }}
+{{- if eq .Node.Role "control-plane" }}
+controlPlane:
+  localAPIEndpoint:
+    advertiseAddress: {{ json .Node.IP }}
+    bindPort: 6443
+  certificateKey: {{ json .CertificateKey }}
+{{- end }}
+{{ template "patches" . }}

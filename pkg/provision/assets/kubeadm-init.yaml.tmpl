@@ -1,0 +1,119 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+bootstrapTokens:
+  - token: {{ json .Token }}
+    ttl: 2h0m0s
+    usages:
+      - signing
+      - authentication
+    groups:
+      - system:bootstrappers:kubeadm:default-node-token
+{{ template "nodeRegistration" . }}
+localAPIEndpoint:
+  advertiseAddress: {{ json .Node.IP }}
+  bindPort: 6443
+{{- if .CertificateKey }}
+certificateKey: {{ json .CertificateKey }}
+{{- end }}
+{{ template "patches" . }}
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: {{ json .Cluster.KubernetesVersion }}
+clusterName: {{ json .Cluster.Name }}
+controlPlaneEndpoint: {{ json .Cluster.EndpointAddress }}
+imageRepository: {{ json .Cluster.ImageRepository }}
+networking:
+  podSubnet: {{ json .Cluster.PodCIDR }}
+  serviceSubnet: {{ json .Cluster.ServiceCIDR }}
+  dnsDomain: {{ json .Cluster.DNSDomain }}
+apiServer:
+  certSANs:
+{{- range .Cluster.CertSANs }}
+    - {{ json . }}
+{{- end }}
+  extraArgs:
+    - name: audit-policy-file
+      value: /etc/kubernetes/mplatform/audit-policy.yaml
+    - name: audit-log-path
+      value: /var/log/kubernetes/audit/audit.log
+    - name: audit-log-maxage
+      value: "30"
+    - name: audit-log-maxbackup
+      value: "10"
+    - name: audit-log-maxsize
+      value: "100"
+    - name: encryption-provider-config
+      value: /etc/kubernetes/mplatform/encryption-config.yaml
+    - name: profiling
+      value: "false"
+    - name: tls-min-version
+      value: VersionTLS12
+    - name: tls-cipher-suites
+      value: {{ json (joinComma .TLSCipherSuites) }}
+  extraVolumes:
+    - name: audit-policy
+      hostPath: /etc/kubernetes/mplatform/audit-policy.yaml
+      mountPath: /etc/kubernetes/mplatform/audit-policy.yaml
+      readOnly: true
+      pathType: File
+    - name: audit-log
+      hostPath: /var/log/kubernetes/audit
+      mountPath: /var/log/kubernetes/audit
+      pathType: DirectoryOrCreate
+    - name: encryption-config
+      hostPath: /etc/kubernetes/mplatform/encryption-config.yaml
+      mountPath: /etc/kubernetes/mplatform/encryption-config.yaml
+      readOnly: true
+      pathType: File
+controllerManager:
+  extraArgs:
+    - name: profiling
+      value: "false"
+    - name: terminated-pod-gc-threshold
+      value: "1000"
+scheduler:
+  extraArgs:
+    - name: profiling
+      value: "false"
+etcd:
+  local:
+    extraArgs:
+      - name: quota-backend-bytes
+        value: "8589934592"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+failSwapOn: true
+rotateCertificates: true
+readOnlyPort: 0
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+authorization:
+  mode: Webhook
+protectKernelDefaults: true
+evictionHard:
+  memory.available: 500Mi
+  nodefs.available: 10%
+  nodefs.inodesFree: 5%
+  imagefs.available: 15%
+podPidsLimit: 4096
+containerLogMaxSize: 50Mi
+containerLogMaxFiles: 5
+serializeImagePulls: false
+maxParallelImagePulls: 5
+shutdownGracePeriod: 60s
+shutdownGracePeriodCriticalPods: 20s
+tlsMinVersion: VersionTLS12
+tlsCipherSuites:
+{{- range .TLSCipherSuites }}
+  - {{ . }}
+{{- end }}
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+mode: iptables

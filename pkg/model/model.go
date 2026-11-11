@@ -108,6 +108,9 @@ func InitDB() {
 		ServedModel{},
 		ModelGateway{},
 		ModelCaller{},
+		ClusterProvision{},
+		ProvisionNode{},
+		ProvisionLog{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)

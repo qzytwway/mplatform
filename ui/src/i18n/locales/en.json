@@ -465,7 +465,8 @@
     "metrics": "Prometheus Metrics",
     "logs": "Logs",
     "alerts": "Alerts",
-    "modelUsage": "Usage"
+    "modelUsage": "Usage",
+    "platform": "Platform"
   },
   "overview": {
     "title": "Overview",
@@ -1041,6 +1042,300 @@
       "imageRegistryHint": "Chart installs and upgrades on this cluster pull container images from this registry path, keeping only the image name and tag (docker.io/bitnami/redis:7 becomes <registry>/redis:7). Leave empty to keep the chart's images.",
       "discoveredUrl": "Auto-discovered: {{url}}. Leave empty to keep using it.",
       "autoDiscoverHint": "Leave empty to auto-discover it in the cluster, e.g. after installing kube-prometheus-stack."
+    }
+  },
+  "clusterProvision": {
+    "title": "Cluster Management",
+    "description": "See every cluster on the platform. Create a new cluster here, or import an existing one.",
+    "settingsNotice": "Create clusters and see every cluster on the platform in Cluster Management.",
+    "settingsNoticeLink": "Open Cluster Management",
+    "default": "Default",
+    "actions": {
+      "create": "Create Cluster",
+      "import": "Import Cluster",
+      "enter": "Open Cluster",
+      "viewProgress": "View Progress",
+      "viewLogs": "View Logs",
+      "viewDetails": "Installation Details",
+      "retry": "Retry",
+      "cancel": "Cancel Creation",
+      "delete": "Delete",
+      "precheck": "Run Precheck",
+      "prechecking": "Checking...",
+      "submitting": "Creating..."
+    },
+    "stats": {
+      "total": "Clusters",
+      "totalDetail": "{{created}} created · {{imported}} imported",
+      "running": "Running",
+      "runningDetail": "Connected and ready to open",
+      "creating": "Creating",
+      "creatingDetail": "{{name}} · {{step}}",
+      "creatingNone": "Nothing is being created",
+      "abnormal": "Needs Attention",
+      "abnormalDetail": "{{failed}} failed · {{disconnected}} disconnected"
+    },
+    "filter": {
+      "all": "All {{count}}",
+      "created": "Created {{count}}",
+      "imported": "Imported {{count}}",
+      "search": "Search clusters by name"
+    },
+    "source": {
+      "created": "Created",
+      "imported": "Imported"
+    },
+    "method": {
+      "host": "Host install",
+      "kubeconfig": "Kubeconfig",
+      "inCluster": "In-Cluster",
+      "clusterAgent": "Cluster Agent"
+    },
+    "columns": {
+      "name": "Name",
+      "source": "Source",
+      "method": "Method",
+      "version": "Version",
+      "nodes": "Nodes",
+      "status": "Status",
+      "createdAt": "Created / Imported"
+    },
+    "status": {
+      "running": "Running",
+      "creating": "Creating",
+      "succeeded": "Created",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "deleting": "Deleting",
+      "disconnected": "Disconnected",
+      "error": "Error",
+      "disabled": "Disabled"
+    },
+    "stepStatus": {
+      "pending": "Waiting",
+      "running": "In progress",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "nodeStatus": {
+      "pending": "Waiting",
+      "running": "Installing",
+      "succeeded": "Done",
+      "failed": "Failed"
+    },
+    "steps": {
+      "precheck": "Precheck",
+      "prepare": "Prepare nodes",
+      "init-control-plane": "Initialize control plane",
+      "join-control-planes": "Join control planes",
+      "join-workers": "Join worker nodes",
+      "install-cni": "Install network plugin",
+      "wait-ready": "Wait for ready",
+      "register": "Add to platform"
+    },
+    "stepDescriptions": {
+      "precheck": "SSH, OS, resources, ports and time sync",
+      "prepare": "System settings, containerd and Kubernetes binaries",
+      "init-control-plane": "kubeadm init on the first control plane",
+      "join-control-planes": "Join the other control planes one at a time",
+      "join-workers": "Join worker nodes, up to 5 at a time",
+      "install-cni": "Calico",
+      "wait-ready": "Nodes Ready and core Pods running",
+      "register": "Add the cluster to the platform's cluster list"
+    },
+    "checks": {
+      "ssh": "SSH login",
+      "privilege": "Root or sudo",
+      "os": "Operating system",
+      "arch": "Architecture",
+      "cgroup": "cgroup v2",
+      "resources": "CPU and memory",
+      "disk": "Disk space",
+      "ports": "Ports",
+      "residue": "Leftover installation",
+      "timeSync": "Time sync",
+      "download": "Download sources",
+      "unique": "Unique host identity",
+      "vip": "VIP available"
+    },
+    "checkStatus": {
+      "pass": "Pass",
+      "warn": "Warning",
+      "fail": "Failed"
+    },
+    "roles": {
+      "control-plane": "Control plane",
+      "worker": "Worker"
+    },
+    "controlPlaneModes": {
+      "single": "Single control plane",
+      "kube-vip": "3 control planes + built-in kube-vip VIP",
+      "external-lb": "3 control planes + external load balancer"
+    },
+    "duration": {
+      "seconds": "{{s}}s",
+      "minutes": "{{m}}m {{s}}s",
+      "hours": "{{h}}h {{m}}m"
+    },
+    "list": {
+      "empty": "No clusters yet",
+      "emptyHint": "Create a cluster on your own hosts, or import an existing one.",
+      "noMatch": "No clusters match the filter"
+    },
+    "delete": {
+      "resourceType": "cluster",
+      "createdNote": "Removes the cluster and its installation record from the platform.",
+      "reset": "Also clean up the nodes (kubeadm reset)",
+      "resetHint": "Runs kubeadm reset on every node and removes what the installation added. Uncheck it when the nodes can no longer be reached.",
+      "nothingInstalled": "Nothing was installed on the nodes yet, so there is nothing to clean up."
+    },
+    "cancelDialog": {
+      "title": "Cancel creating {{name}}?",
+      "description": "The running step stops. You can retry or delete the cluster afterwards.",
+      "confirm": "Cancel Creation",
+      "keep": "Keep Running"
+    },
+    "messages": {
+      "created": "Cluster creation started",
+      "retried": "Retrying from the failed step",
+      "cancelling": "Cancelling the creation",
+      "deleted": "Cluster deleted",
+      "deleting": "Cleaning up the nodes, then deleting the cluster",
+      "precheckPassed": "Precheck passed",
+      "precheckFailed": "Precheck found problems"
+    },
+    "create": {
+      "title": "Create Cluster",
+      "description": "The platform installs the cluster in the background, and you can follow the progress from the list. When it finishes, the cluster is added to the platform and appears in the cluster switcher.",
+      "methodTitle": "Host install",
+      "methodDescription": "Installs Kubernetes with kubeadm over SSH on the physical or virtual machines you provide.",
+      "sections": {
+        "basic": "Basic Information",
+        "nodes": "Hosts and Nodes",
+        "controlPlane": "Control Plane",
+        "network": "Network",
+        "sources": "Download Sources",
+        "options": "Options"
+      },
+      "name": "Cluster name",
+      "namePlaceholder": "e.g. dev-01",
+      "nameHint": "Lowercase letters, digits and -. Unique on the platform.",
+      "version": "Kubernetes version",
+      "versionRecommended": "Recommended",
+      "versionUnresolved": "unresolved",
+      "versionError": "Could not resolve the latest patch release: {{error}}",
+      "versionsLoadFailed": "Failed to load Kubernetes versions",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Purpose, owner, etc.",
+      "nodesHint": "The platform logs in to these machines over SSH to install. They must reach the download sources and each other.",
+      "sshDefaults": "SSH login (default for all nodes)",
+      "sshHint": "Log in as root, or as a user that can run sudo.",
+      "sshUser": "User",
+      "sshPort": "Port",
+      "authType": "Authentication",
+      "authKey": "Private key",
+      "authPassword": "Password",
+      "privateKeyPlaceholder": "Paste the private key, or upload a file. It is stored encrypted and never shown again.",
+      "uploadKey": "Upload file",
+      "passwordPlaceholder": "Stored encrypted and never shown again",
+      "nodeList": "Nodes",
+      "nodeCounts": "{{controlPlanes}} control planes · {{workers}} workers",
+      "addNode": "Add Node",
+      "bulkPaste": "Paste IPs",
+      "noNodes": "No nodes yet. Add nodes one by one, or paste a list of IPs.",
+      "hostname": "Hostname",
+      "hostnameAuto": "Machine hostname",
+      "ip": "IP address",
+      "role": "Role",
+      "ssh": "SSH",
+      "sshDefault": "Default",
+      "controlPlaneMode": "High availability",
+      "vip": "Control plane VIP",
+      "vipHint": "An unused IP in the nodes' subnet. kube-vip announces it with ARP.",
+      "lbAddress": "Load balancer address",
+      "lbHint": "Forward this port on the load balancer to port 6443 on all three control planes.",
+      "endpointPort": "Port",
+      "cni": "Network plugin",
+      "podCIDR": "Pod CIDR",
+      "serviceCIDR": "Service CIDR",
+      "dnsDomain": "Cluster domain",
+      "networkHint": "The CIDRs must not overlap with the nodes' network. The container runtime is containerd.",
+      "binaryMirror": "Binary download mirror",
+      "binaryMirrorHint": "Leave empty to download from the official sources. A mirror keeps the original layout: <mirror>/<original-host>/<original-path>, e.g. https://mirror.example.com/dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubeadm.",
+      "imageRepository": "Image repository",
+      "imageRepositoryHint": "Kubernetes and Calico images are pulled from here. Leave empty to use registry.k8s.io.",
+      "registryMirrors": "Registry mirrors",
+      "registryMirrorsHint": "containerd pulls images of these registries through the mirror, e.g. docker.io → https://mirror.example.com.",
+      "registry": "Registry",
+      "mirrorEndpoint": "Mirror endpoint",
+      "addMirror": "Add Mirror",
+      "removeMirror": "Remove mirror",
+      "isDefault": "Set as default cluster",
+      "isDefaultHint": "Users enter this cluster after signing in",
+      "schedulable": "Allow workloads on control planes",
+      "schedulableHint": "Removes the control-plane taint. Required when there are no worker nodes.",
+      "summary": "Summary",
+      "summaryTip": "Run the precheck before creating. It checks SSH, the OS, ports and time sync, and lists problems node by node.",
+      "summaryMethod": "Method",
+      "summaryMethodValue": "Host install (kubeadm)",
+      "summaryNodes": "Nodes",
+      "summaryNetwork": "Network"
+    },
+    "nodeDialog": {
+      "addTitle": "Add Node",
+      "editTitle": "Edit Node",
+      "hostnamePlaceholder": "Leave empty to use the machine's hostname",
+      "overrideSSH": "Use different SSH settings for this node"
+    },
+    "bulkDialog": {
+      "title": "Paste IPs",
+      "description": "One IP per line. IPs already in the list are skipped.",
+      "invalid": "Not valid IPv4 addresses: {{ips}}",
+      "add": "Add {{count}} Nodes"
+    },
+    "validation": {
+      "title": "Fix these problems first",
+      "name": "The name must be lowercase letters, digits and -, start and end with a letter or digit, and be at most 63 characters.",
+      "version": "Choose a Kubernetes version.",
+      "noNodes": "Add at least one node.",
+      "ipRequired": "Enter the node's IP address.",
+      "invalidIP": "Not a valid IPv4 address: {{ip}}",
+      "duplicateIP": "Duplicate IP address: {{ip}}",
+      "singleControlPlane": "Single control plane mode needs exactly 1 control-plane node.",
+      "haControlPlanes": "This mode needs exactly 3 control-plane nodes.",
+      "endpoint": "Enter the VIP or load balancer address.",
+      "vip": "The VIP must be an IPv4 address.",
+      "port": "Enter a port between 1 and 65535.",
+      "noWorkers": "With no worker nodes, allow workloads on control planes.",
+      "sshUser": "Enter the SSH user.",
+      "sshKey": "Enter the SSH private key.",
+      "sshPassword": "Enter the SSH password.",
+      "nodeSSH": "Node {{ip}}: {{error}}",
+      "mirror": "Fill in both the registry and the endpoint of each mirror."
+    },
+    "precheck": {
+      "title": "Precheck Results",
+      "passed": "All nodes passed the precheck.",
+      "passedWithWarnings": "The precheck passed with warnings.",
+      "failed": "Some checks failed. Fix them before creating the cluster.",
+      "nodeInfo": "{{os}} · {{arch}} · {{cpu}} cores · {{memory}}"
+    },
+    "detail": {
+      "meta": "Created · Host install · Kubernetes {{version}} · Calico · {{nodes}} nodes · started by {{user}} at {{time}}",
+      "progress": "Step {{current}} / {{total}} · {{step}}",
+      "progressDone": "{{done}} / {{total}} steps done",
+      "elapsed": "Elapsed {{duration}}",
+      "steps": "Installation Steps",
+      "stepsNote": "When a step fails, it is marked red with the reason. After fixing the cause, retry from that step instead of starting over.",
+      "nodes": "Nodes",
+      "currentAction": "Current action",
+      "logs": "Installation Logs",
+      "allNodes": "All",
+      "noLogs": "No logs yet",
+      "logsLoadFailed": "Failed to load logs: {{error}}",
+      "precheckResults": "Precheck Results",
+      "notFound": "installation record"
     }
   },
   "oauthManagement": {

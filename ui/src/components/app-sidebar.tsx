@@ -15,6 +15,7 @@ import {
   IconLayoutDashboard,
   IconRocket,
   IconRouteAltLeft,
+  IconServer2,
   IconSparkles,
 } from '@tabler/icons-react'
 import { CustomResourceDefinition } from 'kubernetes-types/apiextensions/v1'
@@ -79,6 +80,7 @@ const MODEL_SERVING_ITEMS = [
 ]
 
 const SIDEBAR_ALERTS_REFRESH_MS = 60000
+const CLUSTER_MANAGEMENT_URL = '/platform/clusters'
 
 const leafItemClass =
   'h-7 data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:hover:bg-sidebar-primary data-[active=true]:hover:text-sidebar-primary-foreground'
@@ -395,6 +397,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        {user?.isAdmin() && (
+          <SidebarMenu>
+            <li className="px-2 text-xs text-muted-foreground">
+              {t('nav.platform')}
+            </li>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip={t('clusterProvision.title')}
+                asChild
+                isActive={
+                  location.pathname === CLUSTER_MANAGEMENT_URL ||
+                  location.pathname.startsWith(`${CLUSTER_MANAGEMENT_URL}/`)
+                }
+                className={leafItemClass}
+              >
+                <Link to={CLUSTER_MANAGEMENT_URL} onClick={handleMenuItemClick}>
+                  <IconServer2 className="opacity-70" />
+                  <span className="truncate">
+                    {t('clusterProvision.title')}
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
         <div className="rounded-md border border-dashed border-sidebar-border">
           <ClusterSelector />
         </div>

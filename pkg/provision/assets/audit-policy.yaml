@@ -1,0 +1,37 @@
+# Managed by MPlatform.
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - RequestReceived
+rules:
+  # Health checks and metrics.
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /livez*
+      - /readyz*
+      - /version
+      - /metrics
+  # Reads are not recorded.
+  - level: None
+    verbs: ["get", "list", "watch"]
+  # High-volume writes from controllers and kubelets carry no audit value.
+  - level: None
+    resources:
+      - group: ""
+        resources: ["events"]
+      - group: "events.k8s.io"
+        resources: ["events"]
+      - group: "coordination.k8s.io"
+        resources: ["leases"]
+  # Never record the content of secrets, config maps or token reviews.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "configmaps"]
+      - group: "authentication.k8s.io"
+        resources: ["tokenreviews"]
+  # Remaining writes are recorded with their request body.
+  - level: Request
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+  - level: None

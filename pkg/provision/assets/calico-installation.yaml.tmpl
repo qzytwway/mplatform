@@ -1,0 +1,18 @@
+# Calico images are pulled from their default registry; registry mirrors
+# configured for the cluster apply through containerd's certs.d, which also
+# covers the tigera operator image that Installation.spec.registry cannot.
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+      - name: default-ipv4-ippool
+        blockSize: 26
+        cidr: {{ json .PodCIDR }}
+        encapsulation: VXLANCrossSubnet
+        natOutgoing: Enabled
+        nodeSelector: all()
+    nodeAddressAutodetectionV4:
+      kubernetes: NodeInternalIP

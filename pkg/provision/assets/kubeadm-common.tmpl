@@ -1,0 +1,15 @@
+{{- define "nodeRegistration" -}}
+nodeRegistration:
+  name: {{ json .Node.Name }}
+  criSocket: unix:///run/containerd/containerd.sock
+  kubeletExtraArgs:
+    - name: node-ip
+      value: {{ json .Node.IP }}
+{{- if and (eq .Node.Role "control-plane") .Cluster.Schedulable }}
+  taints: []
+{{- end }}
+{{- end -}}
+{{- define "patches" -}}
+patches:
+  directory: /etc/kubernetes/mplatform/patches
+{{- end -}}

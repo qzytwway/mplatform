@@ -1,0 +1,6 @@
+# Managed by MPlatform.
+server = {{ json .Server }}
+{{ range .Endpoints }}
+[host.{{ json . }}]
+  capabilities = ["pull", "resolve"]
+{{ end -}}

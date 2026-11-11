@@ -1,0 +1,7 @@
+# Per-node reservation computed by MPlatform from the node's CPU and memory.
+kubeReserved:
+  cpu: {{ .KubeCPU }}m
+  memory: {{ .KubeMemory }}Mi
+systemReserved:
+  cpu: {{ .SystemCPU }}m
+  memory: {{ .SystemMemory }}Mi
