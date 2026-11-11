@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,11 +31,7 @@ func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, stora
 		roleReq := *req
 		roleReq.GroupSize, roleReq.GPUCount = role.spec.GroupSize, role.spec.GPUCount
 		roleReq.ExtraArgs = append(slices.Clone(req.ExtraArgs), role.spec.ExtraArgs...)
-		// Role env replaces service env of the same name rather than
-		// shadowing it with a duplicate.
-		roleReq.Env = append(slices.DeleteFunc(slices.Clone(req.Env), func(item envVar) bool {
-			return slices.ContainsFunc(role.spec.Env, func(override envVar) bool { return override.Name == item.Name })
-		}), role.spec.Env...)
+		roleReq.Env = append(slices.Clone(req.Env), role.spec.Env...)
 		roleReq.Image = cmp.Or(role.spec.Image, req.Image)
 		roleReq.CPU = cmp.Or(role.spec.CPU, req.CPU)
 		roleReq.Memory = cmp.Or(role.spec.Memory, req.Memory)
@@ -87,12 +84,14 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 					ServiceAccountName: meta.Name,
 					// Spreads router replicas over nodes when it can, so one node
 					// going down leaves the others serving. It is set even for one
-					// replica so that scaling up later spreads too.
+					// replica so that scaling up later spreads too, and only counts
+					// pods of the same revision so rollouts do not skew it.
 					TopologySpreadConstraints: []corev1.TopologySpreadConstraint{{
 						MaxSkew:           1,
 						TopologyKey:       corev1.LabelHostname,
 						WhenUnsatisfiable: corev1.ScheduleAnyway,
 						LabelSelector:     &metav1.LabelSelector{MatchLabels: labels},
+						MatchLabelKeys:    []string{appsv1.DefaultDeploymentUniqueLabelKey},
 					}},
 					Containers: []corev1.Container{{
 						Name:    roleRouter,
@@ -100,8 +99,18 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 						Command: []string{"python3", "-m", "sglang_router.launch_router"},
 						Args:    routerArgs(req),
 						Ports:   []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}},
+						// Requests keep the router out of the BestEffort class,
+						// whose pods are evicted first.
+						Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						}},
 						ReadinessProbe: &corev1.Probe{
-							ProbeHandler:  corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(servingPort)}},
+							ProbeHandler:  routerProbe("/readiness"),
+							PeriodSeconds: probePeriodSeconds,
+						},
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler:  routerProbe("/liveness"),
 							PeriodSeconds: probePeriodSeconds,
 						},
 					}},
@@ -109,6 +118,10 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 			},
 		},
 	}
+}
+
+func routerProbe(path string) corev1.ProbeHandler {
+	return corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: path, Port: intstr.FromInt32(servingPort)}}
 }
 
 // routerArgs lets the router find prefill and decode pods by label, so it

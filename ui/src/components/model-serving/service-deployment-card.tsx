@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 
 import type {
   DeploymentConfig,
+  DeploymentMode,
   PodConfig,
   ResourceQuantity,
   RoleConfig,
@@ -30,15 +31,17 @@ function formatCommand(command: string[], args: string[]) {
   return lines.map((line) => line.join(' ')).join(' \\\n  ')
 }
 
-// ServiceDeploymentCard shows how each role of a service is deployed, as read
-// back from its pod templates.
+// ServiceDeploymentCard shows how each role of a service is deployed, as
+// recorded on its workload or read back from its pod templates.
 export function ServiceDeploymentCard({
   config,
+  mode,
 }: {
   config: DeploymentConfig
+  mode: DeploymentMode
 }) {
   const { t } = useTranslation()
-  const isPD = config.roles.some((role) => role.name === 'prefill')
+  const isPD = mode === 'pd'
 
   return (
     <Card>
@@ -46,23 +49,33 @@ export function ServiceDeploymentCard({
         <CardTitle>{t('modelServing.deployment.title')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isPD && (
-          <dl className="grid gap-4 text-sm sm:grid-cols-3">
-            <DetailItem label={t('modelServing.services.transferBackend')}>
-              {t(
-                `modelServing.services.transferBackends.${config.transferBackend}`,
-                { defaultValue: config.transferBackend || '-' }
-              )}
+        {/* Single-node pods talk to no other pod over RDMA. */}
+        {mode !== 'single' && (
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <DetailItem label={t('modelServing.services.rdma')}>
+              {t(`modelServing.services.rdmaModes.${config.rdma}`, {
+                defaultValue: config.rdma,
+              })}
             </DetailItem>
-            <DetailItem label={t('modelServing.services.ibDevices')}>
-              <span className="font-mono">{config.ibDevices || '-'}</span>
-            </DetailItem>
-            <DetailItem label={t('modelServing.services.routerPolicy')}>
-              {t(
-                `modelServing.services.routerPolicies.${config.routerPolicy || 'default'}`,
-                { defaultValue: config.routerPolicy }
-              )}
-            </DetailItem>
+            {isPD && (
+              <>
+                <DetailItem label={t('modelServing.services.transferBackend')}>
+                  {t(
+                    `modelServing.services.transferBackends.${config.transferBackend}`,
+                    { defaultValue: config.transferBackend || '-' }
+                  )}
+                </DetailItem>
+                <DetailItem label={t('modelServing.services.ibDevices')}>
+                  <span className="font-mono">{config.ibDevices || '-'}</span>
+                </DetailItem>
+                <DetailItem label={t('modelServing.services.routerPolicy')}>
+                  {t(
+                    `modelServing.services.routerPolicies.${config.routerPolicy || 'default'}`,
+                    { defaultValue: config.routerPolicy }
+                  )}
+                </DetailItem>
+              </>
+            )}
           </dl>
         )}
         {config.roles.map((role) => (
@@ -90,11 +103,6 @@ function RoleConfigView({ role }: { role: RoleConfig }) {
         {!isRouter && (
           <DetailItem label={t('modelServing.services.nodesPerReplica')}>
             <span className="tabular-nums">{role.groupSize ?? '-'}</span>
-          </DetailItem>
-        )}
-        {!isRouter && pod && (
-          <DetailItem label={t('modelServing.services.rdma')}>
-            {t(`modelServing.services.rdmaModes.${pod.rdma}`)}
           </DetailItem>
         )}
         {pod?.networks && (
@@ -174,7 +182,12 @@ function PodConfigView({ pod }: { pod: PodConfig }) {
         <DetailItem label={t('modelServing.services.env')}>
           {pod.env.length > 0 ? (
             <pre className={CODE_BLOCK_CLASS}>
-              {pod.env.map((item) => `${item.name}=${item.value}`).join('\n')}
+              {pod.env
+                .map(
+                  (item) =>
+                    `${item.name}=${item.valueFrom ? `(${item.valueFrom})` : item.value}`
+                )
+                .join('\n')}
             </pre>
           ) : (
             '-'

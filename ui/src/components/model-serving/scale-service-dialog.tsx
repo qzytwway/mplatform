@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import {
   scaleInferenceService,
-  type InferenceService,
+  type InferenceServiceDetail,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 interface ScaleServiceDialogProps {
-  service: InferenceService
+  service: InferenceServiceDetail
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -48,7 +48,7 @@ function ScaleServiceDialogContent({
   service,
   onClose,
 }: {
-  service: InferenceService
+  service: InferenceServiceDetail
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -65,6 +65,10 @@ function ScaleServiceDialogContent({
   )
   const [decodeReplicas, setDecodeReplicas] = useState(roleReplicas('decode'))
   const [routerReplicas, setRouterReplicas] = useState(roleReplicas('router'))
+  // The router's default policy is cache_aware.
+  const routerPolicy = service.deployment?.routerPolicy
+  const cacheAware =
+    !!service.deployment && (!routerPolicy || routerPolicy === 'cache_aware')
   const [isScaling, setIsScaling] = useState(false)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -148,6 +152,11 @@ function ScaleServiceDialogContent({
                 required
               />
             </div>
+            {cacheAware && Number(routerReplicas) > 1 && (
+              <p className="text-xs text-destructive sm:col-span-3">
+                {t('modelServing.services.routerCacheWarning')}
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-2">

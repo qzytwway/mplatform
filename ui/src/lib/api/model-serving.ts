@@ -106,6 +106,7 @@ export interface InferenceServiceDetail extends InferenceService {
 // workload and router.
 export interface DeploymentConfig {
   roles: RoleConfig[]
+  rdma: RDMAMode | 'none'
   // Set in PD mode only.
   transferBackend?: string
   ibDevices?: string
@@ -126,13 +127,20 @@ export interface PodConfig {
   image: string
   command: string[]
   args: string[]
-  env: EnvVar[]
+  env: ConfigEnvVar[]
   resources: ResourceQuantity[]
-  rdma: RDMAMode | 'none'
   hostNetwork: boolean
   privileged: boolean
   ipcLock: boolean
   networks?: string
+}
+
+// valueFrom describes where a variable without a value gets one, such as
+// "fieldRef: status.podIP". Values of sensitive variables come masked.
+export interface ConfigEnvVar {
+  name: string
+  value: string
+  valueFrom?: string
 }
 
 export interface ResourceQuantity {
@@ -216,7 +224,12 @@ export interface EnvVar {
 
 export type ScaleInferenceServiceRequest =
   | { replicas: number }
-  | { prefillReplicas: number; decodeReplicas: number; routerReplicas: number }
+  | {
+      prefillReplicas: number
+      decodeReplicas: number
+      // Omitted to leave the router as it is.
+      routerReplicas?: number
+    }
 
 export interface GPUNode {
   name: string

@@ -80,6 +80,8 @@ interface ServiceModeFieldsProps {
   gpuCountLabel: string
   // The service image, which PD roles use unless they set their own.
   image: string
+  // Whether an RDMA network is chosen, which Mooncake over RDMA needs.
+  rdmaEnabled: boolean
 }
 
 export function ServiceModeFields({
@@ -90,6 +92,7 @@ export function ServiceModeFields({
   onValuesChange,
   gpuCountLabel,
   image,
+  rdmaEnabled,
 }: ServiceModeFieldsProps) {
   const { t } = useTranslation()
   const update = (patch: Partial<ServiceModeValues>) =>
@@ -127,6 +130,7 @@ export function ServiceModeFields({
           update={update}
           gpuCountLabel={gpuCountLabel}
           image={image}
+          rdmaEnabled={rdmaEnabled}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -171,10 +175,21 @@ interface PDFieldsProps {
   update: (patch: Partial<ServiceModeValues>) => void
   gpuCountLabel: string
   image: string
+  rdmaEnabled: boolean
 }
 
-function PDFields({ values, update, gpuCountLabel, image }: PDFieldsProps) {
+function PDFields({
+  values,
+  update,
+  gpuCountLabel,
+  image,
+  rdmaEnabled,
+}: PDFieldsProps) {
   const { t } = useTranslation()
+  // The router's default policy is cache_aware.
+  const cacheAware =
+    values.routerPolicy === 'cache_aware' || values.routerPolicy === 'default'
+  const roleImage = (role: PDRole) => values[role].image.trim() || image.trim()
 
   return (
     <>
@@ -187,8 +202,11 @@ function PDFields({ values, update, gpuCountLabel, image }: PDFieldsProps) {
             id="inference-router-image"
             value={values.routerImage}
             onChange={(event) => update({ routerImage: event.target.value })}
-            required
+            placeholder={image}
           />
+          <p className="text-xs text-muted-foreground">
+            {t('modelServing.services.routerImageHint')}
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="inference-router-replicas">
@@ -232,6 +250,11 @@ function PDFields({ values, update, gpuCountLabel, image }: PDFieldsProps) {
               `modelServing.services.routerPolicyHints.${values.routerPolicy}`
             )}
           </p>
+          {cacheAware && Number(values.routerReplicas) > 1 && (
+            <p className="text-xs text-destructive">
+              {t('modelServing.services.routerCacheWarning')}
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="inference-transfer-backend">
@@ -259,6 +282,11 @@ function PDFields({ values, update, gpuCountLabel, image }: PDFieldsProps) {
               `modelServing.services.transferBackendHints.${values.transferBackend}`
             )}
           </p>
+          {values.transferBackend === 'mooncake' && !rdmaEnabled && (
+            <p className="text-xs text-destructive">
+              {t('modelServing.services.transferBackendNeedsRDMA')}
+            </p>
+          )}
         </div>
       </div>
       {values.transferBackend === 'mooncake' && (
@@ -277,6 +305,11 @@ function PDFields({ values, update, gpuCountLabel, image }: PDFieldsProps) {
             {t('modelServing.services.ibDevicesHint')}
           </p>
         </div>
+      )}
+      {roleImage('prefill') !== roleImage('decode') && (
+        <p className="text-xs text-destructive">
+          {t('modelServing.services.roleImagesDiffer')}
+        </p>
       )}
       {(['prefill', 'decode'] as const).map((role) => (
         <PDRoleFields

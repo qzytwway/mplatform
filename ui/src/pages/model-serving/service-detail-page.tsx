@@ -236,7 +236,10 @@ export function ServiceDetailPage() {
       </Card>
 
       {service.deployment && (
-        <ServiceDeploymentCard config={service.deployment} />
+        <ServiceDeploymentCard
+          config={service.deployment}
+          mode={service.mode}
+        />
       )}
 
       <Card>

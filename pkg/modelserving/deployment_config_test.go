@@ -46,6 +46,22 @@ func pdWorkload(prefill, decode map[string]any) *unstructured.Unstructured {
 	return workload
 }
 
+func singlePodRole(container, annotations map[string]any) map[string]any {
+	worker := map[string]any{"spec": map[string]any{"containers": []any{container}}}
+	if annotations != nil {
+		worker["metadata"] = map[string]any{"annotations": annotations}
+	}
+	return map[string]any{
+		"replicas":             int64(1),
+		"leaderWorkerTemplate": map[string]any{"size": int64(1), "workerTemplate": worker},
+	}
+}
+
+func withSecurity(container, securityContext map[string]any) map[string]any {
+	container["securityContext"] = securityContext
+	return container
+}
+
 func TestReadDeploymentConfigOfOldLeaderWorkerSet(t *testing.T) {
 	workload := &unstructured.Unstructured{Object: map[string]any{
 		"metadata": map[string]any{"name": "old", "namespace": "default"},
@@ -72,23 +88,25 @@ func TestReadDeploymentConfigOfOldLeaderWorkerSet(t *testing.T) {
 	config, err := readDeploymentConfig(workload, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, &deploymentConfig{Roles: []roleConfig{{
-		Name:      roleDefault,
-		Replicas:  2,
-		GroupSize: 1,
-		Pods: []podConfig{{
-			Image:   "vllm/vllm-openai:v0.9.0",
-			Command: []string{"vllm", "serve"},
-			Args:    []string{"/models/qwen", "--tensor-parallel-size", "2"},
-			Env:     []envVar{{Name: "HF_HUB_OFFLINE", Value: "1"}},
-			Resources: []resourceQuantity{
-				{Name: "cpu", Request: "8", Limit: "8"},
-				{Name: "memory", Request: "32Gi", Limit: "32Gi"},
-				{Name: "nvidia.com/gpu", Limit: "2"},
-			},
-			RDMA: rdmaModeNone,
+	assert.Equal(t, &deploymentConfig{
+		RDMA: rdmaModeNone,
+		Roles: []roleConfig{{
+			Name:      roleDefault,
+			Replicas:  2,
+			GroupSize: 1,
+			Pods: []podConfig{{
+				Image:   "vllm/vllm-openai:v0.9.0",
+				Command: []string{"vllm", "serve"},
+				Args:    []string{"/models/qwen", "--tensor-parallel-size", "2"},
+				Env:     []configEnvVar{{Name: "HF_HUB_OFFLINE", Value: "1"}},
+				Resources: []resourceQuantity{
+					{Name: "cpu", Request: "8", Limit: "8"},
+					{Name: "memory", Request: "32Gi", Limit: "32Gi"},
+					{Name: "nvidia.com/gpu", Limit: "2"},
+				},
+			}},
 		}},
-	}}}, config)
+	}, config)
 }
 
 func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
@@ -97,6 +115,7 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 		name      string
 		prefill   map[string]any
 		decode    map[string]any
+		rdma      string
 		backend   string
 		ibDevices string
 		check     func(*testing.T, []roleConfig)
@@ -122,6 +141,7 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 				},
 			},
 			decode:    singlePodRole(containerSpec([]any{"--disaggregation-mode", "decode"}, nil, gpus), nil),
+			rdma:      rdmaModeHost,
 			backend:   transferNIXL,
 			ibDevices: "mlx5_0,mlx5_1",
 			check: func(t *testing.T, roles []roleConfig) {
@@ -134,9 +154,7 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 					assert.Equal(t, role, pod.Role)
 					assert.True(t, pod.HostNetwork)
 					assert.True(t, pod.Privileged)
-					assert.Equal(t, rdmaModeHost, pod.RDMA)
 				}
-				assert.Equal(t, rdmaModeNone, roles[1].Pods[0].RDMA)
 				assert.Empty(t, roles[1].Pods[0].Role)
 			},
 		},
@@ -148,14 +166,22 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 				map[string]any{"nvidia.com/gpu": "4", "rdma/hca": "1"}),
 				map[string]any{"capabilities": map[string]any{"add": []any{"IPC_LOCK"}}}), nil),
 			decode:  singlePodRole(containerSpec(nil, nil, gpus), nil),
+			rdma:    rdmaModeDevicePlugin,
 			backend: transferMooncakeTCP,
 			check: func(t *testing.T, roles []roleConfig) {
 				pod := roles[0].Pods[0]
-				assert.Equal(t, rdmaModeDevicePlugin, pod.RDMA)
 				assert.True(t, pod.IPCLock)
 				assert.False(t, pod.Privileged)
 				assert.Contains(t, pod.Resources, resourceQuantity{Name: "rdma/hca", Limit: "1"})
 			},
+		},
+		{
+			name:    "mooncake_tcp backend",
+			prefill: singlePodRole(containerSpec([]any{"--disaggregation-transfer-backend", "mooncake_tcp"}, nil, gpus), nil),
+			decode:  singlePodRole(containerSpec(nil, nil, gpus), nil),
+			rdma:    rdmaModeNone,
+			backend: transferMooncakeTCP,
+			check:   func(*testing.T, []roleConfig) {},
 		},
 		{
 			name: "multus networks without an rdma resource and flags in key=value form",
@@ -164,18 +190,18 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 				[]any{envItem("MC_FORCE_TCP", "1"), envItem("MC_FORCE_TCP", "0")}, gpus),
 				map[string]any{multusAnnotation: "default/rdma-net"}),
 			decode:    singlePodRole(containerSpec(nil, nil, gpus), nil),
+			rdma:      rdmaModeDevicePlugin,
 			backend:   transferMooncake,
 			ibDevices: "mlx5_2",
 			check: func(t *testing.T, roles []roleConfig) {
-				pod := roles[0].Pods[0]
-				assert.Equal(t, rdmaModeDevicePlugin, pod.RDMA)
-				assert.Equal(t, "default/rdma-net", pod.Networks)
+				assert.Equal(t, "default/rdma-net", roles[0].Pods[0].Networks)
 			},
 		},
 		{
-			name:    "sglang defaults to mooncake",
+			name:    "sglang defaults to mooncake and gpus are not rdma",
 			prefill: singlePodRole(containerSpec([]any{"--disaggregation-mode", "prefill"}, nil, gpus), nil),
 			decode:  singlePodRole(containerSpec([]any{"--disaggregation-mode", "decode"}, nil, gpus), nil),
+			rdma:    rdmaModeNone,
 			backend: transferMooncake,
 			check: func(t *testing.T, roles []roleConfig) {
 				assert.Equal(t, []resourceQuantity{
@@ -191,6 +217,7 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 			config, err := readDeploymentConfig(pdWorkload(tt.prefill, tt.decode), nil)
 
 			require.NoError(t, err)
+			assert.Equal(t, tt.rdma, config.RDMA)
 			assert.Equal(t, tt.backend, config.TransferBackend)
 			assert.Equal(t, tt.ibDevices, config.IBDevices)
 			assert.Empty(t, config.RouterPolicy)
@@ -203,20 +230,19 @@ func TestReadDeploymentConfigOfOldDisaggregatedSet(t *testing.T) {
 	}
 }
 
-func singlePodRole(container, annotations map[string]any) map[string]any {
-	worker := map[string]any{"spec": map[string]any{"containers": []any{container}}}
-	if annotations != nil {
-		worker["metadata"] = map[string]any{"annotations": annotations}
+func oldRouter(args ...string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "old-pd-router", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32(2)),
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name:    roleRouter,
+				Image:   "lmsysorg/sglang-router:v0.2",
+				Command: []string{"python3", "-m", "sglang_router.launch_router"},
+				Args:    args,
+			}}}},
+		},
 	}
-	return map[string]any{
-		"replicas":             int64(1),
-		"leaderWorkerTemplate": map[string]any{"size": int64(1), "workerTemplate": worker},
-	}
-}
-
-func withSecurity(container, securityContext map[string]any) map[string]any {
-	container["securityContext"] = securityContext
-	return container
 }
 
 func TestReadDeploymentConfigOfRouter(t *testing.T) {
@@ -225,20 +251,8 @@ func TestReadDeploymentConfigOfRouter(t *testing.T) {
 		singlePodRole(containerSpec(nil, nil, limits), nil),
 		singlePodRole(containerSpec(nil, nil, limits), nil),
 	)
-	router := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "old-pd-router", Namespace: "default"},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: new(int32(2)),
-			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
-				Name:    roleRouter,
-				Image:   "lmsysorg/sglang-router:v0.2",
-				Command: []string{"python3", "-m", "sglang_router.launch_router"},
-				Args:    []string{"--pd-disaggregation", "--policy", "cache_aware"},
-			}}}},
-		},
-	}
 
-	config, err := readDeploymentConfig(workload, router)
+	config, err := readDeploymentConfig(workload, oldRouter("--pd-disaggregation", "--policy", "cache_aware"))
 
 	require.NoError(t, err)
 	require.Len(t, config.Roles, 3)
@@ -246,11 +260,81 @@ func TestReadDeploymentConfigOfRouter(t *testing.T) {
 		Image:     "lmsysorg/sglang-router:v0.2",
 		Command:   []string{"python3", "-m", "sglang_router.launch_router"},
 		Args:      []string{"--pd-disaggregation", "--policy", "cache_aware"},
-		Env:       []envVar{},
+		Env:       []configEnvVar{},
 		Resources: []resourceQuantity{},
-		RDMA:      rdmaModeNone,
 	}}}, config.Roles[2])
 	assert.Equal(t, "cache_aware", config.RouterPolicy)
+}
+
+func TestReadDeploymentConfigPrefersAnnotations(t *testing.T) {
+	limits := map[string]any{"nvidia.com/gpu": "1"}
+	// The templates say host network, nixl over mlx5_9 and round robin.
+	workload := pdWorkload(
+		map[string]any{"replicas": int64(1), "leaderWorkerTemplate": map[string]any{"size": int64(1), "workerTemplate": map[string]any{
+			"spec": map[string]any{"hostNetwork": true, "containers": []any{containerSpec(
+				[]any{"--disaggregation-transfer-backend", "nixl", "--disaggregation-ib-device", "mlx5_9"}, nil, limits)}},
+		}}},
+		singlePodRole(containerSpec(nil, nil, limits), nil),
+	)
+	workload.SetAnnotations(map[string]string{
+		rdmaAnnotation:            rdmaModeDevicePlugin,
+		transferBackendAnnotation: transferMooncake,
+		ibDevicesAnnotation:       "",
+		routerPolicyAnnotation:    "",
+	})
+
+	config, err := readDeploymentConfig(workload, oldRouter("--policy", "round_robin"))
+
+	require.NoError(t, err)
+	assert.Equal(t, rdmaModeDevicePlugin, config.RDMA)
+	assert.Equal(t, transferMooncake, config.TransferBackend)
+	// Recorded empty values win too: the service was created without them.
+	assert.Empty(t, config.IBDevices)
+	assert.Empty(t, config.RouterPolicy)
+}
+
+func TestReadEnvVar(t *testing.T) {
+	tests := []struct {
+		name string
+		env  corev1.EnvVar
+		want configEnvVar
+	}{
+		{"plain", corev1.EnvVar{Name: "NCCL_IB_GID_INDEX", Value: "3"}, configEnvVar{Name: "NCCL_IB_GID_INDEX", Value: "3"}},
+		{"token", corev1.EnvVar{Name: "HF_TOKEN", Value: "hf_abc"}, configEnvVar{Name: "HF_TOKEN", Value: maskedEnvValue}},
+		{"lowercase secret", corev1.EnvVar{Name: "my_secret", Value: "s"}, configEnvVar{Name: "my_secret", Value: maskedEnvValue}},
+		{"api key", corev1.EnvVar{Name: "OPENAI_API_KEY", Value: "sk"}, configEnvVar{Name: "OPENAI_API_KEY", Value: maskedEnvValue}},
+		{"password", corev1.EnvVar{Name: "DB_PASSWORD", Value: "p"}, configEnvVar{Name: "DB_PASSWORD", Value: maskedEnvValue}},
+		{"empty sensitive value stays empty", corev1.EnvVar{Name: "HF_TOKEN"}, configEnvVar{Name: "HF_TOKEN"}},
+		{
+			"pod field",
+			corev1.EnvVar{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}},
+			configEnvVar{Name: "POD_IP", ValueFrom: "fieldRef: status.podIP"},
+		},
+		{
+			"secret key",
+			corev1.EnvVar{Name: "HF_TOKEN", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "hf"}, Key: "token",
+			}}},
+			configEnvVar{Name: "HF_TOKEN", ValueFrom: "secretKeyRef: hf/token"},
+		},
+		{
+			"config map key",
+			corev1.EnvVar{Name: "MODE", ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "settings"}, Key: "mode",
+			}}},
+			configEnvVar{Name: "MODE", ValueFrom: "configMapKeyRef: settings/mode"},
+		},
+		{
+			"container resource",
+			corev1.EnvVar{Name: "CPUS", ValueFrom: &corev1.EnvVarSource{ResourceFieldRef: &corev1.ResourceFieldSelector{Resource: "limits.cpu"}}},
+			configEnvVar{Name: "CPUS", ValueFrom: "resourceFieldRef: limits.cpu"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, readEnvVar(tt.env))
+		})
+	}
 }
 
 func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
@@ -265,21 +349,20 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 		config, err := readDeploymentConfig(workload, nil)
 
 		require.NoError(t, err)
+		assert.Equal(t, rdmaModeNone, config.RDMA)
 		require.Len(t, config.Roles, 1)
-		pod := config.Roles[0].Pods[0]
-		assert.Equal(t, rdmaModeNone, pod.RDMA)
 		assert.Equal(t, []resourceQuantity{
 			{Name: "nvidia.com/gpucores", Limit: "50"},
 			{Name: "nvidia.com/gpumem", Limit: "8192"},
 			{Name: "nvidia.com/vgpu", Limit: "2"},
-		}, pod.Resources)
+		}, config.Roles[0].Pods[0].Resources)
 		assert.Empty(t, config.TransferBackend)
 	})
 
 	t.Run("pd with role overrides over a device plugin", func(t *testing.T) {
 		body := pdBody()
 		body.CPU = "8"
-		body.Env = []envVar{{Name: "NCCL_IB_GID_INDEX", Value: "3"}}
+		body.Env = []envVar{{Name: "NCCL_IB_GID_INDEX", Value: "3"}, {Name: "HF_TOKEN", Value: "hf_abc"}}
 		body.RDMA = &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1, Networks: "default/rdma-net"}
 		body.PD.Prefill = pdRoleRequest{Replicas: 1, GroupSize: 2, GPUCount: 8, Image: "my/sglang:prefill", Env: []envVar{{Name: "NCCL_IB_GID_INDEX", Value: "5"}}}
 		body.PD.Decode = pdRoleRequest{Replicas: 2, GroupSize: 1, GPUCount: 4, Memory: "256Gi"}
@@ -292,6 +375,7 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 		config, err := readDeploymentConfig(workload, routerDeployment(t, &req))
 
 		require.NoError(t, err)
+		assert.Equal(t, rdmaModeDevicePlugin, config.RDMA)
 		assert.Equal(t, transferMooncakeTCP, config.TransferBackend)
 		assert.Empty(t, config.IBDevices)
 		assert.Equal(t, "round_robin", config.RouterPolicy)
@@ -302,10 +386,14 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 		require.Len(t, prefill.Pods, 2)
 		for _, pod := range prefill.Pods {
 			assert.Equal(t, "my/sglang:prefill", pod.Image)
-			assert.Equal(t, rdmaModeDevicePlugin, pod.RDMA)
 			assert.True(t, pod.IPCLock)
 			assert.Equal(t, "default/rdma-net", pod.Networks)
-			assert.Equal(t, "5", envValue(pod.Env, "NCCL_IB_GID_INDEX"))
+			assert.Equal(t, []configEnvVar{
+				{Name: "MOONCAKE_PROTOCOL", Value: "tcp"},
+				{Name: "MC_FORCE_TCP", Value: "1"},
+				{Name: "NCCL_IB_GID_INDEX", Value: "5"},
+				{Name: "HF_TOKEN", Value: maskedEnvValue},
+			}, pod.Env)
 			assert.Contains(t, pod.Resources, resourceQuantity{Name: "cpu", Request: "8", Limit: "8"})
 			assert.Contains(t, pod.Resources, resourceQuantity{Name: "nvidia.com/gpu", Limit: "8"})
 			assert.Contains(t, pod.Resources, resourceQuantity{Name: "rdma/hca", Limit: "1"})

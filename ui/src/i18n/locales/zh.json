@@ -2289,24 +2289,28 @@
       "prefillReplicas": "Prefill 副本数",
       "decodeReplicas": "Decode 副本数",
       "routerImage": "路由镜像",
+      "routerImageHint": "留空则使用服务镜像，使路由与其转发的推理引擎版本一致。镜像需包含 sglang_router。",
       "routerReplicas": "路由副本数",
       "routerReplicasHint": "副本尽量分散到不同节点，单个节点故障时路由仍可提供服务。",
       "routerPolicy": "路由策略",
       "routerPolicies": {
-        "default": "路由默认",
+        "default": "路由默认 (cache_aware)",
         "cache_aware": "缓存感知 (cache_aware)",
         "power_of_two": "二选一 (power_of_two)",
         "round_robin": "轮询 (round_robin)",
         "random": "随机 (random)"
       },
       "routerPolicyHints": {
-        "default": "不设置 --policy，使用路由所在版本的默认策略。",
+        "default": "不设置 --policy，使用路由的默认策略 cache_aware。",
         "cache_aware": "把前缀相同的请求发往已缓存该前缀的服务实例，负载不均时改为均衡负载。",
         "power_of_two": "随机取两个服务实例，选负载较低的一个。",
         "round_robin": "依次轮流选择服务实例。",
         "random": "随机选择服务实例。"
       },
       "roleImageHint": "留空则使用服务镜像。",
+      "roleImagesDiffer": "Prefill 与 Decode 使用了不同的镜像。KV 传输要求两侧推理引擎版本一致。",
+      "routerCacheWarning": "各路由副本的缓存树不共享，多于一个副本时缓存命中率会下降。",
+      "transferBackendNeedsRDMA": "Mooncake (RDMA) 需要 RDMA 网络。请在下方配置，或改用 Mooncake (TCP)。",
       "roleEnvHint": "每行一个 KEY=VALUE，追加在服务级环境变量之后；与服务级同名的变量以这里为准。",
       "inheritService": "沿用服务设置",
       "nodesPerReplica": "每副本节点数",
@@ -2333,7 +2337,7 @@
       "rdmaModeHints": {
         "none": "节点间通信和 KV 传输走 Pod 网络。",
         "device-plugin": "通过 RDMA 设备插件（如 NVIDIA Network Operator、SR-IOV）把网卡分配给 Pod，并授予 IPC_LOCK 权限。",
-        "host": "Pod 以特权方式运行在节点网络中，直接使用节点的 RDMA 网卡。命名空间需允许特权 Pod，同一节点上同一端口只能被一个 Pod 占用。"
+        "host": "Pod 以特权方式运行在节点网络中，直接使用节点的 RDMA 网卡。命名空间需允许特权 Pod，同一节点上同一端口只能被一个 Pod 占用，因此每个节点最多运行一个推理 Pod。"
       },
       "rdmaResource": "RDMA 资源名",
       "rdmaResourceCount": "每 Pod 资源数",

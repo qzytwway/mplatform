@@ -36,6 +36,8 @@ func pdBody() serviceRequest {
 		Runtime:   runtimeSGLang,
 		Image:     "lmsysorg/sglang:latest",
 		Mode:      modePD,
+		// Mooncake, the default transfer backend, needs RDMA.
+		RDMA: &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1},
 		PD: &pdRequest{
 			Prefill:     pdRoleRequest{Replicas: 1, GroupSize: 1, GPUCount: 1},
 			Decode:      pdRoleRequest{Replicas: 1, GroupSize: 1, GPUCount: 1},
@@ -80,6 +82,9 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		}, "rdma.resourceCount must be at least 1"},
 		{"pd with vllm", pdBody(), func(r *serviceRequest) { r.Runtime = runtimeVLLM }, "pd mode requires the sglang runtime"},
 		{"pd without pd", pdBody(), func(r *serviceRequest) { r.PD = nil }, "pd is required in pd mode"},
+		{"pd name too long", pdBody(), func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength+1) }, "name must be at most 30 characters in pd mode"},
+		{"mooncake without rdma", pdBody(), func(r *serviceRequest) { r.RDMA = nil }, "pd.transferBackend mooncake transfers over RDMA; configure rdma or use mooncake-tcp"},
+		{"explicit mooncake without rdma", pdBody(), func(r *serviceRequest) { r.RDMA, r.PD.TransferBackend = nil, transferMooncake }, "configure rdma or use mooncake-tcp"},
 		{"prefill without replicas", pdBody(), func(r *serviceRequest) { r.PD.Prefill.Replicas = 0 }, "pd.prefill replicas, groupSize and gpuCount must be at least 1"},
 		{"decode without gpus", pdBody(), func(r *serviceRequest) { r.PD.Decode.GPUCount = 0 }, "pd.decode replicas, groupSize and gpuCount must be at least 1"},
 		{"decode without nodes", pdBody(), func(r *serviceRequest) { r.PD.Decode.GroupSize = 0 }, "pd.decode replicas, groupSize and gpuCount must be at least 1"},
@@ -189,6 +194,25 @@ func TestParsePDRequest(t *testing.T) {
 			check: func(t *testing.T, pd *pdRequest) {
 				assert.Equal(t, transferMooncakeTCP, pd.TransferBackend)
 				assert.Empty(t, pd.IBDevices)
+			},
+		},
+		{
+			name:  "name of the longest pd length",
+			edit:  func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength) },
+			check: func(*testing.T, *pdRequest) {},
+		},
+		{
+			name: "mooncake over tcp needs no rdma",
+			edit: func(r *serviceRequest) { r.RDMA, r.PD.TransferBackend = nil, transferMooncakeTCP },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, transferMooncakeTCP, pd.TransferBackend)
+			},
+		},
+		{
+			name: "nixl needs no rdma",
+			edit: func(r *serviceRequest) { r.RDMA, r.PD.TransferBackend = nil, transferNIXL },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, transferNIXL, pd.TransferBackend)
 			},
 		},
 		{

@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func chatModel() *model.ServedModel {
@@ -440,9 +441,16 @@ func TestRouter(t *testing.T) {
 				TopologyKey:       corev1.LabelHostname,
 				WhenUnsatisfiable: corev1.ScheduleAnyway,
 				LabelSelector:     router.Spec.Selector,
+				MatchLabelKeys:    []string{"pod-template-hash"},
 			}}, router.Spec.Template.Spec.TopologySpreadConstraints)
 			container := router.Spec.Template.Spec.Containers[0]
 			assert.Equal(t, "lmsysorg/sglang-router:latest", container.Image)
+			assert.Equal(t, &corev1.HTTPGetAction{Path: "/readiness", Port: intstr.FromInt32(servingPort)}, container.ReadinessProbe.HTTPGet)
+			assert.Equal(t, &corev1.HTTPGetAction{Path: "/liveness", Port: intstr.FromInt32(servingPort)}, container.LivenessProbe.HTTPGet)
+			assert.Equal(t, corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			}, container.Resources.Requests)
 			// The router only discovers group leaders, which serve HTTP.
 			assertArgs(t, container.Args,
 				[]string{"--pd-disaggregation", "--service-discovery", "--service-discovery-namespace", "default", "--service-discovery-port", "8000"},
@@ -465,4 +473,155 @@ func TestBuildServiceSelectsServingPods(t *testing.T) {
 	assert.Equal(t, roleRouter, buildService(&pd).Spec.Selector[roleLabel])
 	assert.NotContains(t, buildService(&pd).Spec.Selector, lwsWorkerIndexLabel)
 	assert.Equal(t, "0", buildService(&single).Spec.Selector[lwsWorkerIndexLabel])
+}
+
+func TestHostNetworkWorkersServeOnTheDeclaredPort(t *testing.T) {
+	declared := []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
+	tests := []struct {
+		name      string
+		runtime   string
+		rdma      rdmaRequest
+		ports     []corev1.ContainerPort
+		listens   bool
+		extraArgs []string
+	}{
+		{name: "sglang in the host network", runtime: runtimeSGLang, rdma: rdmaRequest{Mode: rdmaModeHost}, ports: declared, listens: true},
+		{name: "headless vllm in the host network", runtime: runtimeVLLM, rdma: rdmaRequest{Mode: rdmaModeHost}, ports: declared, extraArgs: []string{"--headless"}},
+		{
+			name:    "sglang with a device plugin",
+			runtime: runtimeSGLang,
+			rdma:    rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := multiBody()
+			body.Runtime = tt.runtime
+			body.RDMA = &tt.rdma
+			req := parseTestRequest(t, body)
+
+			workload, err := buildLeaderWorkerSet(&req, chatModel(), nil)
+
+			require.NoError(t, err)
+			leader, worker := groupPods(t, lwsTemplate(t, workload))
+			assert.Equal(t, declared, leader.Spec.Containers[0].Ports)
+			container := worker.Spec.Containers[0]
+			assert.Equal(t, tt.ports, container.Ports)
+			if tt.listens {
+				assertArgs(t, container.Args, []string{"--host", "0.0.0.0", "--port", "8000"})
+			} else {
+				assert.NotContains(t, container.Args, "--host")
+			}
+			assertArgs(t, container.Args, tt.extraArgs)
+			// Only leaders serve the API, so only they are probed.
+			assert.Nil(t, container.ReadinessProbe)
+		})
+	}
+
+	t.Run("pd prefill workers", func(t *testing.T) {
+		body := pdBody()
+		body.RDMA = &rdmaRequest{Mode: rdmaModeHost}
+		body.PD.Prefill.GroupSize = 2
+		req := parseTestRequest(t, body)
+
+		workload, err := buildDisaggregatedSet(&req, chatModel(), nil)
+
+		require.NoError(t, err)
+		_, template := pdRoleTemplate(t, workload, rolePrefill)
+		_, worker := groupPods(t, template)
+		assert.Equal(t, declared, worker.Spec.Containers[0].Ports)
+		assertArgs(t, worker.Spec.Containers[0].Args, []string{"--host", "0.0.0.0", "--port", "8000"}, []string{"--disaggregation-mode", "prefill"})
+	})
+}
+
+func TestWorkloadAnnotations(t *testing.T) {
+	multi := multiBody()
+	multi.RDMA = &rdmaRequest{Mode: rdmaModeHost}
+	pdTCP := pdBody()
+	pdTCP.RDMA, pdTCP.PD.TransferBackend = nil, transferMooncakeTCP
+	pdRDMA := pdBody()
+	pdRDMA.PD.IBDevices, pdRDMA.PD.RouterPolicy = "mlx5_0", "cache_aware"
+	tests := []struct {
+		name string
+		body serviceRequest
+		want map[string]string
+	}{
+		{name: "single", body: singleBody(), want: map[string]string{rdmaAnnotation: rdmaModeNone}},
+		{name: "multi in the host network", body: multi, want: map[string]string{rdmaAnnotation: rdmaModeHost}},
+		{
+			name: "pd over tcp keeps unset settings",
+			body: pdTCP,
+			want: map[string]string{rdmaAnnotation: rdmaModeNone, transferBackendAnnotation: transferMooncakeTCP, ibDevicesAnnotation: "", routerPolicyAnnotation: ""},
+		},
+		{
+			name: "pd over rdma",
+			body: pdRDMA,
+			want: map[string]string{rdmaAnnotation: rdmaModeDevicePlugin, transferBackendAnnotation: transferMooncake, ibDevicesAnnotation: "mlx5_0", routerPolicyAnnotation: "cache_aware"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := parseTestRequest(t, tt.body)
+
+			annotations := workloadMeta(&req, chatModel()).Annotations
+
+			assert.Equal(t, req.Mode, annotations[modeAnnotation])
+			for _, key := range []string{rdmaAnnotation, transferBackendAnnotation, ibDevicesAnnotation, routerPolicyAnnotation} {
+				want, ok := tt.want[key]
+				got, found := annotations[key]
+				assert.Equal(t, ok, found, key)
+				assert.Equal(t, want, got, key)
+			}
+		})
+	}
+}
+
+func TestMergeEnv(t *testing.T) {
+	podIP := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
+	tests := []struct {
+		name string
+		env  []corev1.EnvVar
+		want []corev1.EnvVar
+	}{
+		{name: "none", env: nil, want: nil},
+		{
+			name: "distinct names keep their order",
+			env:  []corev1.EnvVar{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}},
+			want: []corev1.EnvVar{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}},
+		},
+		{
+			name: "the last value takes the first position",
+			env:  []corev1.EnvVar{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}, {Name: "A", Value: "3"}, {Name: "C"}, {Name: "B", Value: "4"}},
+			want: []corev1.EnvVar{{Name: "A", Value: "3"}, {Name: "B", Value: "4"}, {Name: "C"}},
+		},
+		{
+			name: "a value replaces a value source and back",
+			env:  []corev1.EnvVar{{Name: "IP", ValueFrom: podIP}, {Name: "HOST", Value: "x"}, {Name: "IP", Value: "10.0.0.1"}, {Name: "HOST", ValueFrom: podIP}},
+			want: []corev1.EnvVar{{Name: "IP", Value: "10.0.0.1"}, {Name: "HOST", ValueFrom: podIP}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, mergeEnv(tt.env))
+		})
+	}
+}
+
+func TestRuntimeEnvMergesPlatformServiceAndRoleEnv(t *testing.T) {
+	body := pdBody()
+	body.RDMA, body.PD.TransferBackend = nil, transferMooncakeTCP
+	body.Env = []envVar{{Name: "MC_FORCE_TCP", Value: "0"}, {Name: "LOG", Value: "info"}}
+	body.PD.Decode.Env = []envVar{{Name: "LOG", Value: "debug"}, {Name: "MOONCAKE_PROTOCOL", Value: "rdma"}}
+	req := parseTestRequest(t, body)
+
+	workload, err := buildDisaggregatedSet(&req, chatModel(), nil)
+
+	require.NoError(t, err)
+	_, template := pdRoleTemplate(t, workload, roleDecode)
+	_, pod := groupPods(t, template)
+	assert.Equal(t, []corev1.EnvVar{
+		{Name: "MOONCAKE_PROTOCOL", Value: "rdma"},
+		{Name: "MC_FORCE_TCP", Value: "0"},
+		{Name: "LOG", Value: "debug"},
+	}, pod.Spec.Containers[0].Env)
 }

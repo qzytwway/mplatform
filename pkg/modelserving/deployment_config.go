@@ -11,13 +11,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-const rdmaModeNone = "none"
+const maskedEnvValue = "******"
 
-// deploymentConfig is how a service is deployed, read back from the pod
-// templates of its workload and router rather than from what it was created
-// with, so services created before a setting existed show it too.
+// sensitiveEnvWords mark environment variables whose values are masked.
+var sensitiveEnvWords = []string{"TOKEN", "SECRET", "KEY", "PASSWORD"}
+
+// deploymentConfig is how a service is deployed. Settings the workload
+// records in annotations come from there; the rest, and everything on
+// workloads created before those annotations, is read back from the pod
+// templates of the workload and router.
 type deploymentConfig struct {
 	Roles []roleConfig `json:"roles"`
+	RDMA  string       `json:"rdma"`
 	// Set in pd mode only.
 	TransferBackend string `json:"transferBackend,omitempty"`
 	IBDevices       string `json:"ibDevices,omitempty"`
@@ -41,13 +46,20 @@ type podConfig struct {
 	Image       string             `json:"image"`
 	Command     []string           `json:"command"`
 	Args        []string           `json:"args"`
-	Env         []envVar           `json:"env"`
+	Env         []configEnvVar     `json:"env"`
 	Resources   []resourceQuantity `json:"resources"`
-	RDMA        string             `json:"rdma"`
 	HostNetwork bool               `json:"hostNetwork"`
 	Privileged  bool               `json:"privileged"`
 	IPCLock     bool               `json:"ipcLock"`
 	Networks    string             `json:"networks,omitempty"`
+}
+
+// configEnvVar is a container variable as shown: ValueFrom describes where a
+// variable without a value gets one, and sensitive values are masked.
+type configEnvVar struct {
+	Name      string `json:"name"`
+	Value     string `json:"value"`
+	ValueFrom string `json:"valueFrom,omitempty"`
 }
 
 type resourceQuantity struct {
@@ -59,20 +71,33 @@ type resourceQuantity struct {
 // readDeploymentConfig reads a LeaderWorkerSet or DisaggregatedSet and, in pd
 // mode, its router, which may be nil.
 func readDeploymentConfig(workload *unstructured.Unstructured, router *appsv1.Deployment) (*deploymentConfig, error) {
+	config := &deploymentConfig{}
 	if workload.GetKind() != disaggregatedSetGVK.Kind {
 		spec, _, _ := unstructured.NestedMap(workload.Object, "spec")
 		role, err := readRoleConfig(roleDefault, spec)
 		if err != nil {
 			return nil, err
 		}
-		return &deploymentConfig{Roles: []roleConfig{role}}, nil
+		config.Roles = []roleConfig{role}
+	} else if err := readPDConfig(config, workload, router); err != nil {
+		return nil, err
 	}
-	config := &deploymentConfig{}
+	config.RDMA = rdmaModeNone
+	if pods := config.Roles[0].Pods; len(pods) > 0 {
+		config.RDMA = readRDMA(pods[0])
+	}
+	if mode, ok := workload.GetAnnotations()[rdmaAnnotation]; ok {
+		config.RDMA = mode
+	}
+	return config, nil
+}
+
+func readPDConfig(config *deploymentConfig, workload *unstructured.Unstructured, router *appsv1.Deployment) error {
 	specs := pdRoleSpecs(workload)
 	for _, name := range []string{rolePrefill, roleDecode} {
 		role, err := readRoleConfig(name, specs[name])
 		if err != nil {
-			return nil, err
+			return err
 		}
 		config.Roles = append(config.Roles, role)
 	}
@@ -81,17 +106,26 @@ func readDeploymentConfig(workload *unstructured.Unstructured, router *appsv1.De
 	if pods := config.Roles[0].Pods; len(pods) > 0 {
 		config.TransferBackend, config.IBDevices = readTransfer(pods[0])
 	}
-	if router == nil {
-		return config, nil
+	if router != nil {
+		routerPod := readPodConfig("", &router.Spec.Template)
+		routerRole := roleConfig{Name: roleRouter, Pods: []podConfig{routerPod}}
+		if router.Spec.Replicas != nil {
+			routerRole.Replicas = *router.Spec.Replicas
+		}
+		config.Roles = append(config.Roles, routerRole)
+		config.RouterPolicy = argValue(routerPod.Args, "--policy")
 	}
-	routerPod := readPodConfig("", &router.Spec.Template)
-	routerRole := roleConfig{Name: roleRouter, Pods: []podConfig{routerPod}}
-	if router.Spec.Replicas != nil {
-		routerRole.Replicas = *router.Spec.Replicas
+	annotations := workload.GetAnnotations()
+	for key, field := range map[string]*string{
+		transferBackendAnnotation: &config.TransferBackend,
+		ibDevicesAnnotation:       &config.IBDevices,
+		routerPolicyAnnotation:    &config.RouterPolicy,
+	} {
+		if value, ok := annotations[key]; ok {
+			*field = value
+		}
 	}
-	config.Roles = append(config.Roles, routerRole)
-	config.RouterPolicy = argValue(routerPod.Args, "--policy")
-	return config, nil
+	return nil
 }
 
 // readRoleConfig reads a spec holding replicas and a leaderWorkerTemplate:
@@ -124,33 +158,48 @@ func readPodConfig(role string, template *corev1.PodTemplateSpec) podConfig {
 		Role:        role,
 		Command:     []string{},
 		Args:        []string{},
-		Env:         []envVar{},
+		Env:         []configEnvVar{},
 		Resources:   []resourceQuantity{},
 		HostNetwork: template.Spec.HostNetwork,
 		Networks:    template.Annotations[multusAnnotation],
 	}
-	if len(template.Spec.Containers) > 0 {
-		container := template.Spec.Containers[0]
-		pod.Image = container.Image
-		pod.Command = append(pod.Command, container.Command...)
-		pod.Args = append(pod.Args, container.Args...)
-		for _, item := range container.Env {
-			pod.Env = append(pod.Env, envVar{Name: item.Name, Value: item.Value})
-		}
-		pod.Resources = readResources(container.Resources)
-		if security := container.SecurityContext; security != nil {
-			pod.Privileged = security.Privileged != nil && *security.Privileged
-			pod.IPCLock = security.Capabilities != nil && slices.Contains(security.Capabilities.Add, "IPC_LOCK")
-		}
+	if len(template.Spec.Containers) == 0 {
+		return pod
 	}
-	pod.RDMA = rdmaModeNone
-	switch {
-	case pod.HostNetwork:
-		pod.RDMA = rdmaModeHost
-	case pod.Networks != "" || slices.ContainsFunc(pod.Resources, func(item resourceQuantity) bool { return isRDMAResource(item.Name) }):
-		pod.RDMA = rdmaModeDevicePlugin
+	container := template.Spec.Containers[0]
+	pod.Image = container.Image
+	pod.Command = append(pod.Command, container.Command...)
+	pod.Args = append(pod.Args, container.Args...)
+	for _, item := range container.Env {
+		pod.Env = append(pod.Env, readEnvVar(item))
+	}
+	pod.Resources = readResources(container.Resources)
+	if security := container.SecurityContext; security != nil {
+		pod.Privileged = security.Privileged != nil && *security.Privileged
+		pod.IPCLock = security.Capabilities != nil && slices.Contains(security.Capabilities.Add, "IPC_LOCK")
 	}
 	return pod
+}
+
+func readEnvVar(item corev1.EnvVar) configEnvVar {
+	env := configEnvVar{Name: item.Name, Value: item.Value}
+	upper := strings.ToUpper(item.Name)
+	if env.Value != "" && slices.ContainsFunc(sensitiveEnvWords, func(word string) bool { return strings.Contains(upper, word) }) {
+		env.Value = maskedEnvValue
+	}
+	source := item.ValueFrom
+	switch {
+	case source == nil:
+	case source.FieldRef != nil:
+		env.ValueFrom = "fieldRef: " + source.FieldRef.FieldPath
+	case source.ResourceFieldRef != nil:
+		env.ValueFrom = "resourceFieldRef: " + source.ResourceFieldRef.Resource
+	case source.SecretKeyRef != nil:
+		env.ValueFrom = "secretKeyRef: " + source.SecretKeyRef.Name + "/" + source.SecretKeyRef.Key
+	case source.ConfigMapKeyRef != nil:
+		env.ValueFrom = "configMapKeyRef: " + source.ConfigMapKeyRef.Name + "/" + source.ConfigMapKeyRef.Key
+	}
+	return env
 }
 
 // readResources lists CPU and memory first, then the other resources by name.
@@ -189,8 +238,23 @@ func readResources(requirements corev1.ResourceRequirements) []resourceQuantity 
 	return resources
 }
 
-// isRDMAResource tells the extended resources RDMA device plugins serve
-// apart from GPUs and vGPUs. Extended resource names are domain-prefixed.
+// readRDMA infers how a pod reaches RDMA NICs: through the node network, or
+// through a device plugin, whose extended resource or Multus networks it
+// asks for.
+func readRDMA(pod podConfig) string {
+	switch {
+	case pod.HostNetwork:
+		return rdmaModeHost
+	case pod.Networks != "" || slices.ContainsFunc(pod.Resources, func(item resourceQuantity) bool { return isRDMAResource(item.Name) }):
+		return rdmaModeDevicePlugin
+	default:
+		return rdmaModeNone
+	}
+}
+
+// isRDMAResource takes every extended resource but GPUs and HAMi's vGPU
+// resources for an RDMA device plugin's. Extended resources are
+// domain-prefixed outside kubernetes.io.
 func isRDMAResource(name string) bool {
 	switch corev1.ResourceName(name) {
 	case gpuResource, vgpuResource, vgpuMemoryResource, vgpuMemoryPercentageResource, vgpuCoresResource:
@@ -203,7 +267,7 @@ func isRDMAResource(name string) bool {
 // SGLang transfers with Mooncake unless told otherwise.
 func readTransfer(pod podConfig) (backend, ibDevices string) {
 	backend = cmp.Or(argValue(pod.Args, "--disaggregation-transfer-backend"), transferMooncake)
-	if backend == transferMooncake && envValue(pod.Env, "MC_FORCE_TCP") == "1" {
+	if backend == "mooncake_tcp" || (backend == transferMooncake && envValue(pod.Env, "MC_FORCE_TCP") == "1") {
 		backend = transferMooncakeTCP
 	}
 	return backend, argValue(pod.Args, "--disaggregation-ib-device")
@@ -225,7 +289,7 @@ func argValue(args []string, flag string) string {
 }
 
 // envValue returns the last value of name, which is the one a container gets.
-func envValue(env []envVar, name string) string {
+func envValue(env []configEnvVar, name string) string {
 	value := ""
 	for _, item := range env {
 		if item.Name == name {

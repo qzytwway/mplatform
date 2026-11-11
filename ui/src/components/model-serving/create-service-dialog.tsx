@@ -59,6 +59,11 @@ const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
 // Radix Select items cannot have an empty value.
 const ANY_NODE = '__any__'
 
+// The backend's limits; PD names are shorter because the DisaggregatedSet
+// webhook bounds the names it derives from them.
+const MAX_NAME_LENGTH = 40
+const MAX_PD_NAME_LENGTH = 30
+
 const DEFAULT_PD_ROLE: PDRoleValues = {
   replicas: '1',
   groupSize: '1',
@@ -148,10 +153,13 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     groupSize: '2',
     prefill: DEFAULT_PD_ROLE,
     decode: DEFAULT_PD_ROLE,
-    routerImage: DEFAULT_IMAGES.sglang,
+    // Empty runs the router from the service image, which matches the
+    // engine version it routes to.
+    routerImage: '',
     routerReplicas: '1',
     routerPolicy: 'default',
-    transferBackend: 'mooncake',
+    // Mooncake over RDMA needs an RDMA network, which starts unset.
+    transferBackend: 'mooncake-tcp',
     ibDevices: '',
   })
   const [networkValues, setNetworkValues] = useState<NetworkValues>({
@@ -226,7 +234,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           pd: {
             prefill: toPDRole(modeValues.prefill),
             decode: toPDRole(modeValues.decode),
-            routerImage: modeValues.routerImage.trim(),
+            routerImage: modeValues.routerImage.trim() || image.trim(),
             routerReplicas: Number(modeValues.routerReplicas),
             routerPolicy:
               modeValues.routerPolicy === 'default'
@@ -279,7 +287,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
               onChange={(event) => setName(event.target.value)}
               placeholder="qwen-chat"
               pattern="[a-z]([a-z0-9\-]*[a-z0-9])?"
-              maxLength={40}
+              maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
               required
             />
           </div>
@@ -352,6 +360,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           onValuesChange={setModeValues}
           gpuCountLabel={gpuCountLabel}
           image={image}
+          rdmaEnabled={networkValues.rdma !== 'none'}
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">

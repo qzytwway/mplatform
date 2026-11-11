@@ -2202,24 +2202,28 @@
       "prefillReplicas": "Prefill replicas",
       "decodeReplicas": "Decode replicas",
       "routerImage": "Router image",
+      "routerImageHint": "Leave empty to use the service image, so the router matches the engine version it routes to. The image must include sglang_router.",
       "routerReplicas": "Router replicas",
       "routerReplicasHint": "Replicas prefer different nodes, so the router keeps serving when one node fails.",
       "routerPolicy": "Routing policy",
       "routerPolicies": {
-        "default": "Router default",
+        "default": "Router default (cache_aware)",
         "cache_aware": "Cache aware",
         "power_of_two": "Power of two",
         "round_robin": "Round robin",
         "random": "Random"
       },
       "routerPolicyHints": {
-        "default": "Leaves --policy unset, so the router uses the default policy of its version.",
+        "default": "Leaves --policy unset, so the router uses its default, cache_aware.",
         "cache_aware": "Sends requests that share a prompt prefix to the server that has it cached, and balances load when servers become uneven.",
         "power_of_two": "Picks the less loaded of two random servers.",
         "round_robin": "Picks servers in turn.",
         "random": "Picks a random server."
       },
       "roleImageHint": "Leave empty to use the service image.",
+      "roleImagesDiffer": "Prefill and decode run different images. KV transfer needs the same engine version on both sides.",
+      "routerCacheWarning": "Router replicas do not share their cache trees, so cache hits drop with more than one replica.",
+      "transferBackendNeedsRDMA": "Mooncake over RDMA needs an RDMA network. Configure one below or choose Mooncake (TCP).",
       "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name.",
       "inheritService": "Same as the service",
       "nodesPerReplica": "Nodes per replica",
@@ -2246,7 +2250,7 @@
       "rdmaModeHints": {
         "none": "Traffic between nodes and KV transfer go over the pod network.",
         "device-plugin": "An RDMA device plugin, such as the NVIDIA Network Operator or SR-IOV, assigns NICs to pods, which get the IPC_LOCK capability.",
-        "host": "Pods run privileged in the node network and use the node's RDMA NICs directly. The namespace must allow privileged pods, and a port on a node can be used by only one pod."
+        "host": "Pods run privileged in the node network and use the node's RDMA NICs directly. The namespace must allow privileged pods, and a port on a node can be used by only one pod, so each node runs at most one inference pod."
       },
       "rdmaResource": "RDMA resource",
       "rdmaResourceCount": "Per pod",

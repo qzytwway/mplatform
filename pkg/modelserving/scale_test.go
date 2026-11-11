@@ -40,18 +40,23 @@ func TestScaleWorkload(t *testing.T) {
 		{name: "leader worker set without replicas", workload: lws, req: scaleRequest{}, wantErr: "replicas must be at least 1"},
 		{
 			name: "pd roles", workload: pd,
-			req:  scaleRequest{PrefillReplicas: 2, DecodeReplicas: 4, RouterReplicas: 2},
+			req:  scaleRequest{PrefillReplicas: 2, DecodeReplicas: 4, RouterReplicas: new(int32(2))},
+			want: map[string]int64{rolePrefill: 2, roleDecode: 4},
+		},
+		{
+			name: "pd leaving the router alone", workload: pd,
+			req:  scaleRequest{PrefillReplicas: 2, DecodeReplicas: 4},
 			want: map[string]int64{rolePrefill: 2, roleDecode: 4},
 		},
 		{
 			name: "pd without router replicas", workload: pd,
-			req:     scaleRequest{PrefillReplicas: 2, DecodeReplicas: 4},
-			wantErr: "prefillReplicas, decodeReplicas and routerReplicas must be at least 1",
+			req:     scaleRequest{PrefillReplicas: 2, DecodeReplicas: 4, RouterReplicas: new(int32(0))},
+			wantErr: "routerReplicas must be at least 1",
 		},
 		{
 			name: "pd without decode replicas", workload: pd,
-			req:     scaleRequest{PrefillReplicas: 2, RouterReplicas: 1},
-			wantErr: "prefillReplicas, decodeReplicas and routerReplicas must be at least 1",
+			req:     scaleRequest{PrefillReplicas: 2, RouterReplicas: new(int32(1))},
+			wantErr: "prefillReplicas and decodeReplicas must be at least 1",
 		},
 	}
 	for _, tt := range tests {

@@ -12,7 +12,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-const maxServiceNameLength = 40
+const (
+	maxServiceNameLength = 40
+	// The DisaggregatedSet webhook of LWS v1.0.0 (validateGeneratedNames)
+	// rejects names whose child LeaderWorkerSets or pods would exceed 63
+	// characters, which a longer name reaches with the prefill role at two
+	// digit replica counts.
+	maxPDServiceNameLength = 30
+)
 
 type serviceRequest struct {
 	Name      string     `json:"name"`
@@ -83,11 +90,13 @@ type pdRoleRequest struct {
 	Env       []envVar `json:"env"`
 }
 
+// scaleRequest leaves the router of a pd service as it is when RouterReplicas
+// is nil.
 type scaleRequest struct {
-	Replicas        int32 `json:"replicas"`
-	PrefillReplicas int32 `json:"prefillReplicas"`
-	DecodeReplicas  int32 `json:"decodeReplicas"`
-	RouterReplicas  int32 `json:"routerReplicas"`
+	Replicas        int32  `json:"replicas"`
+	PrefillReplicas int32  `json:"prefillReplicas"`
+	DecodeReplicas  int32  `json:"decodeReplicas"`
+	RouterReplicas  *int32 `json:"routerReplicas"`
 }
 
 // routerPolicies are the --policy values of sglang_router.launch_router.
@@ -190,6 +199,9 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	if req.PD == nil {
 		return req, fmt.Errorf("pd is required in %s mode", modePD)
 	}
+	if len(req.Name) > maxPDServiceNameLength {
+		return req, fmt.Errorf("name must be at most %d characters in %s mode", maxPDServiceNameLength, modePD)
+	}
 	prefill, err := parsePDRole(rolePrefill, req.PD.Prefill)
 	if err != nil {
 		return req, err
@@ -225,6 +237,10 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	case transferMooncake, transferMooncakeTCP, transferNIXL:
 	default:
 		return req, fmt.Errorf("pd.transferBackend must be %s, %s or %s", transferMooncake, transferMooncakeTCP, transferNIXL)
+	}
+	// parseServiceMode has parsed rdma already.
+	if pd.TransferBackend == transferMooncake && req.RDMA == nil {
+		return req, fmt.Errorf("pd.transferBackend %s transfers over RDMA; configure rdma or use %s", transferMooncake, transferMooncakeTCP)
 	}
 	if pd.TransferBackend != transferMooncake {
 		pd.IBDevices = ""
