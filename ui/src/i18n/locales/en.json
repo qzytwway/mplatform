@@ -2068,7 +2068,10 @@
       "title": "Logs"
     },
     "dashboards": {
-      "select": "Select a dashboard",
+      "search": "Search dashboards",
+      "noMatch": "No dashboards match your search.",
+      "empty": "No dashboards yet.",
+      "other": "Other",
       "all": "All",
       "noOptions": "No values",
       "moreSeries": "{{count}} more series",

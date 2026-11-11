@@ -17,6 +17,7 @@ import { ServicesPage } from './pages/model-serving/services-page'
 import { UsagePage } from './pages/model-serving/usage-page'
 import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
+import { MetricsDashboardPage } from './pages/observability/metrics-dashboard-page'
 import { MetricsPage } from './pages/observability/metrics-page'
 import { Overview } from './pages/overview'
 import { ClusterCreatePage } from './pages/platform/cluster-create-page'
@@ -89,6 +90,10 @@ export const router = createBrowserRouter(
         {
           path: 'observability/metrics',
           element: <MetricsPage />,
+        },
+        {
+          path: 'observability/metrics/:uid',
+          element: <MetricsDashboardPage />,
         },
         {
           path: 'observability/logs',

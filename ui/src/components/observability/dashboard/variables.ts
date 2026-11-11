@@ -119,6 +119,31 @@ export function dashboardLink(
   return { uid, variables }
 }
 
+export const METRICS_PATH = '/observability/metrics'
+const URL_VARIABLE_PREFIX = 'var-'
+
+// The page of a dashboard, with its variables in the query string the way
+// Grafana's URLs keep them.
+export function dashboardPath(
+  uid: string,
+  variables: Record<string, string> = {}
+): string {
+  const params = new URLSearchParams()
+  for (const [name, value] of Object.entries(variables)) {
+    params.set(URL_VARIABLE_PREFIX + name, value)
+  }
+  const query = params.toString()
+  return `${METRICS_PATH}/${encodeURIComponent(uid)}${query ? `?${query}` : ''}`
+}
+
+export function urlVariables(params: URLSearchParams): Record<string, string> {
+  return Object.fromEntries(
+    [...params.entries()]
+      .filter(([key]) => key.startsWith(URL_VARIABLE_PREFIX))
+      .map(([key, value]) => [key.slice(URL_VARIABLE_PREFIX.length), value])
+  )
+}
+
 export function parseDuration(text: string | undefined): number {
   const match = /^(\d+)(s|m|h|d)$/.exec(text ?? '')
   if (!match) return 0

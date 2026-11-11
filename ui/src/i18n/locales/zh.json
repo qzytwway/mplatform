@@ -2155,7 +2155,10 @@
       "title": "日志"
     },
     "dashboards": {
-      "select": "选择仪表盘",
+      "search": "搜索仪表盘",
+      "noMatch": "没有匹配的仪表盘。",
+      "empty": "暂无仪表盘。",
+      "other": "其他",
       "all": "全部",
       "noOptions": "无可选值",
       "moreSeries": "还有 {{count}} 条序列",
