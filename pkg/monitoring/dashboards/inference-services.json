@@ -34,18 +34,18 @@
       "id": 1,
       "type": "timeseries",
       "title": "Time to First Token",
-      "description": "p50 and p95 of vllm:time_to_first_token_seconds or sglang:time_to_first_token_seconds.",
+      "description": "p50 and p95 of vllm:time_to_first_token_seconds or sglang:time_to_first_token_seconds, from when a request reaches the serving pod. Prefill pods of pd services are left out; on decode pods it includes waiting for the KV cache transfer. The time to first token a client of a pd service sees needs the router's metrics, which the platform does not collect yet.",
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval])))",
           "legendFormat": "p50 {{inference_service}} {{inference_role}}"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval])))",
           "legendFormat": "p95 {{inference_service}} {{inference_role}}"
         }
       ]
@@ -54,18 +54,18 @@
       "id": 2,
       "type": "timeseries",
       "title": "Inter-Token Latency",
-      "description": "p50 and p95 of vllm:inter_token_latency_seconds or sglang:inter_token_latency_seconds, the time between consecutive output tokens.",
+      "description": "p50 and p95 of vllm:inter_token_latency_seconds or sglang:inter_token_latency_seconds, the time between consecutive output tokens. Prefill pods of pd services are left out, as they do not decode.",
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:inter_token_latency_seconds_bucket|sglang:inter_token_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:inter_token_latency_seconds_bucket|sglang:inter_token_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval])))",
           "legendFormat": "p50 {{inference_service}} {{inference_role}}"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:inter_token_latency_seconds_bucket|sglang:inter_token_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:inter_token_latency_seconds_bucket|sglang:inter_token_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval])))",
           "legendFormat": "p95 {{inference_service}} {{inference_role}}"
         }
       ]
@@ -74,18 +74,18 @@
       "id": 3,
       "type": "timeseries",
       "title": "End-to-End Request Latency",
-      "description": "p50 and p95 of vllm:e2e_request_latency_seconds or sglang:e2e_request_latency_seconds.",
+      "description": "p50 and p95 of vllm:e2e_request_latency_seconds or sglang:e2e_request_latency_seconds, from when a request reaches the serving pod. Prefill pods of pd services are left out, so a pd service shows its decode pods, without the router.",
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:e2e_request_latency_seconds_bucket|sglang:e2e_request_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:e2e_request_latency_seconds_bucket|sglang:e2e_request_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval])))",
           "legendFormat": "p50 {{inference_service}} {{inference_role}}"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:e2e_request_latency_seconds_bucket|sglang:e2e_request_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, inference_service, inference_role) (rate({__name__=~\"vllm:e2e_request_latency_seconds_bucket|sglang:e2e_request_latency_seconds_bucket\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval])))",
           "legendFormat": "p95 {{inference_service}} {{inference_role}}"
         }
       ]
@@ -94,18 +94,18 @@
       "id": 4,
       "type": "timeseries",
       "title": "Token Throughput (tokens/s)",
-      "description": "Input tokens from vllm:prompt_tokens_total or sglang:prompt_tokens_total and output tokens from vllm:generation_tokens_total or sglang:generation_tokens_total, per second.",
+      "description": "Input tokens from vllm:prompt_tokens_total or sglang:prompt_tokens_total and output tokens from vllm:generation_tokens_total or sglang:generation_tokens_total, per second. In pd services input tokens are counted on prefill pods and output tokens on decode pods, which both see every request.",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "short", "min": 0 } },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (inference_service, inference_role) (rate({__name__=~\"vllm:prompt_tokens_total|sglang:prompt_tokens_total\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval]))",
+          "expr": "sum by (inference_service, inference_role) (rate({__name__=~\"vllm:prompt_tokens_total|sglang:prompt_tokens_total\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"decode\"}[$__rate_interval]))",
           "legendFormat": "input {{inference_service}} {{inference_role}}"
         },
         {
           "refId": "B",
-          "expr": "sum by (inference_service, inference_role) (rate({__name__=~\"vllm:generation_tokens_total|sglang:generation_tokens_total\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\"}[$__rate_interval]))",
+          "expr": "sum by (inference_service, inference_role) (rate({__name__=~\"vllm:generation_tokens_total|sglang:generation_tokens_total\", namespace=\"$namespace\", inference_service=~\"$service\", inference_role=~\"$role\", inference_role!=\"prefill\"}[$__rate_interval]))",
           "legendFormat": "output {{inference_service}} {{inference_role}}"
         }
       ]

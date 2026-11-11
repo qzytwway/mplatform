@@ -222,7 +222,7 @@ func (h *Handler) CreateService(c *gin.Context) {
 		objects, err = withPodMonitor(ctx, cs, &req, objects)
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -425,8 +425,8 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 		object := &unstructured.Unstructured{}
 		object.SetGroupVersionKind(companion.gvk)
 		err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: companion.name}, object)
-		// The PodMonitor kind is missing from clusters without its CRD.
-		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+		// Only the PodMonitor kind may be missing, in clusters without its CRD.
+		if apierrors.IsNotFound(err) || (companion.gvk == podMonitorGVK && apimeta.IsNoMatchError(err)) {
 			continue
 		} else if err != nil {
 			return err

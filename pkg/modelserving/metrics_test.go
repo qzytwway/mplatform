@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"net/http"
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,13 +33,13 @@ import (
 )
 
 var (
-	testModel     = &model.ServedModel{Name: "qwen", Type: modelTypeChat, SourceType: sourceTypeLocal, Path: "/data/qwen"}
-	prometheusGVK = schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "Prometheus"}
+	metricsTestModel     = &model.ServedModel{Name: "qwen", Type: modelTypeChat, SourceType: sourceTypeLocal, Path: "/data/qwen"}
+	metricsPrometheusGVK = schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "Prometheus"}
 )
 
-// testRequest returns a service request for runtime and mode; multi-node
+// metricsTestRequest returns a service request for runtime and mode; multi-node
 // groups have two nodes, as does the prefill role of pd mode.
-func testRequest(runtime, mode string) *serviceRequest {
+func metricsTestRequest(runtime, mode string) *serviceRequest {
 	req := &serviceRequest{
 		Name: "qwen", Namespace: "ai", Runtime: runtime, Image: "image", Mode: mode,
 		Replicas: 1, GroupSize: 1, GPUCount: 1,
@@ -55,7 +57,7 @@ func testRequest(runtime, mode string) *serviceRequest {
 	return req
 }
 
-func newTestClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.Object) *cluster.ClientSet {
+func metricsClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.Object) *cluster.ClientSet {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
@@ -64,7 +66,7 @@ func newTestClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.O
 	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	for _, gvk := range []schema.GroupVersionKind{lwsGVK, disaggregatedSetGVK, podMonitorGVK, prometheusGVK} {
+	for _, gvk := range []schema.GroupVersionKind{lwsGVK, disaggregatedSetGVK, podMonitorGVK, metricsPrometheusGVK} {
 		scheme.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})
 		scheme.AddKnownTypeWithName(gvk.GroupVersion().WithKind(gvk.Kind+"List"), &unstructured.UnstructuredList{})
 	}
@@ -72,22 +74,22 @@ func newTestClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.O
 	return &cluster.ClientSet{Name: "test", K8sClient: &kube.K8sClient{Client: fakeClient}}
 }
 
-func podMonitorCRDObject() *apiextensionsv1.CustomResourceDefinition {
+func metricsPodMonitorCRD() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: podMonitorCRD}}
 }
 
-func prometheusObject(matchLabels map[string]any) *unstructured.Unstructured {
+func metricsPrometheus(matchLabels map[string]any) *unstructured.Unstructured {
 	prometheus := &unstructured.Unstructured{Object: map[string]any{
 		"metadata": map[string]any{"name": "k8s", "namespace": "monitoring"},
 		"spec":     map[string]any{"podMonitorSelector": map[string]any{"matchLabels": matchLabels}},
 	}}
-	prometheus.SetGroupVersionKind(prometheusGVK)
+	prometheus.SetGroupVersionKind(metricsPrometheusGVK)
 	return prometheus
 }
 
-// failKind makes reads of kind fail with err, as a cluster without the
+// metricsFailKind makes reads of kind fail with err, as a cluster without the
 // kind's CRD does with a NoKindMatchError.
-func failKind(kind string, err error) interceptor.Funcs {
+func metricsFailKind(kind string, err error) interceptor.Funcs {
 	return interceptor.Funcs{
 		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			if gvk, _ := apiutil.GVKForObject(obj, c.Scheme()); gvk.Kind == kind {
@@ -104,7 +106,7 @@ func failKind(kind string, err error) interceptor.Funcs {
 	}
 }
 
-func noKindMatch(gvk schema.GroupVersionKind) error {
+func metricsNoKindMatch(gvk schema.GroupVersionKind) error {
 	return &apimeta.NoKindMatchError{GroupKind: gvk.GroupKind(), SearchedVersions: []string{gvk.Version}}
 }
 
@@ -129,13 +131,13 @@ func TestRuntimeArgsEnableMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := testRequest(tt.runtime, tt.mode)
-			args := runtimeArgs(req, testModel, tt.pdRole, tt.worker)
+			req := metricsTestRequest(tt.runtime, tt.mode)
+			args := runtimeArgs(req, metricsTestModel, tt.pdRole, tt.worker)
 			want := 0
 			if tt.want {
 				want = 1
 			}
-			if got := countArg(args, "--enable-metrics"); got != want {
+			if got := metricsCountArg(args, "--enable-metrics"); got != want {
 				t.Fatalf("--enable-metrics appears %d times in %q, want %d", got, args, want)
 			}
 		})
@@ -152,7 +154,7 @@ func TestRuntimeArgsSingleNode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.runtime, func(t *testing.T) {
-			got := runtimeArgs(testRequest(tt.runtime, modeSingle), testModel, "", false)
+			got := runtimeArgs(metricsTestRequest(tt.runtime, modeSingle), metricsTestModel, "", false)
 			if !slices.Equal(got, tt.want) {
 				t.Fatalf("runtimeArgs() = %q, want %q", got, tt.want)
 			}
@@ -160,7 +162,7 @@ func TestRuntimeArgsSingleNode(t *testing.T) {
 	}
 }
 
-func countArg(args []string, arg string) int {
+func metricsCountArg(args []string, arg string) int {
 	count := 0
 	for _, item := range args {
 		if item == arg {
@@ -185,10 +187,15 @@ func TestBuildPodMonitor(t *testing.T) {
 			prometheusLabels: map[string]string{"release": "kube-prometheus-stack", "team": "ml"},
 			wantLabels:       map[string]string{managedByLabel: managedByValue, serviceLabel: "qwen", "release": "kube-prometheus-stack", "team": "ml"},
 		},
+		{
+			name:             "Prometheus labels naming the service labels",
+			prometheusLabels: map[string]string{managedByLabel: "Helm", serviceLabel: "other", "release": "monitoring"},
+			wantLabels:       map[string]string{managedByLabel: managedByValue, serviceLabel: "qwen", "release": "monitoring"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			monitor, err := buildPodMonitor(testRequest(runtimeSGLang, modeSingle), tt.prometheusLabels)
+			monitor, err := buildPodMonitor(metricsTestRequest(runtimeSGLang, modeSingle), tt.prometheusLabels)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -217,6 +224,7 @@ func TestBuildPodMonitor(t *testing.T) {
 				t.Fatalf("endpoint scrapes port %v path %v, want http /metrics", endpoint["port"], endpoint["path"])
 			}
 			wantRelabelings := []any{
+				map[string]any{"sourceLabels": []any{"__meta_kubernetes_pod_ready"}, "regex": "true", "action": "keep"},
 				map[string]any{"targetLabel": "inference_service", "replacement": "qwen"},
 				map[string]any{"targetLabel": "inference_role", "replacement": "default"},
 				map[string]any{"sourceLabels": []any{"__meta_kubernetes_pod_label_model_serving_mplatform_io_role"}, "regex": "(.+)", "targetLabel": "inference_role"},
@@ -228,9 +236,9 @@ func TestBuildPodMonitor(t *testing.T) {
 	}
 }
 
-// testPod is a pod LeaderWorkerSet would run from a template, with the
+// metricsPod is a pod LeaderWorkerSet would run from a template, with the
 // worker index label it adds.
-type testPod struct {
+type metricsPod struct {
 	name   string
 	labels map[string]string
 	ports  []corev1.ContainerPort
@@ -238,26 +246,26 @@ type testPod struct {
 	leader bool
 }
 
-// servicePods returns the pods of one group of every role of objects, and the
+// metricsServicePods returns the pods of one group of every role of objects, and the
 // router pod in pd mode.
-func servicePods(t *testing.T, objects []client.Object) []testPod {
+func metricsServicePods(t *testing.T, objects []client.Object) []metricsPod {
 	t.Helper()
-	var pods []testPod
+	var pods []metricsPod
 	for _, object := range objects {
 		switch object := object.(type) {
 		case *appsv1.Deployment:
-			pods = append(pods, templatePod(t, "router", object.Spec.Template, ""))
+			pods = append(pods, metricsTemplatePod(t, "router", object.Spec.Template, ""))
 		case *unstructured.Unstructured:
 			if object.GetKind() == lwsGVK.Kind {
 				template, _, _ := unstructured.NestedMap(object.Object, "spec", "leaderWorkerTemplate")
-				pods = append(pods, groupPods(t, "group", template)...)
+				pods = append(pods, metricsGroupPods(t, "group", template)...)
 			}
 			if object.GetKind() == disaggregatedSetGVK.Kind {
 				roles, _, _ := unstructured.NestedSlice(object.Object, "spec", "roles")
 				for _, item := range roles {
 					role := item.(map[string]any)
 					template, _, _ := unstructured.NestedMap(role, "spec", "leaderWorkerTemplate")
-					pods = append(pods, groupPods(t, role["name"].(string), template)...)
+					pods = append(pods, metricsGroupPods(t, role["name"].(string), template)...)
 				}
 			}
 		}
@@ -265,23 +273,23 @@ func servicePods(t *testing.T, objects []client.Object) []testPod {
 	return pods
 }
 
-func groupPods(t *testing.T, name string, template map[string]any) []testPod {
+func metricsGroupPods(t *testing.T, name string, template map[string]any) []metricsPod {
 	t.Helper()
 	size, _, _ := unstructured.NestedInt64(template, "size")
-	worker := podTemplate(t, template["workerTemplate"])
+	worker := metricsPodTemplate(t, template["workerTemplate"])
 	leader := worker
 	if template["leaderTemplate"] != nil {
-		leader = podTemplate(t, template["leaderTemplate"])
+		leader = metricsPodTemplate(t, template["leaderTemplate"])
 	}
-	pods := []testPod{templatePod(t, name+"-leader", leader, "0")}
+	pods := []metricsPod{metricsTemplatePod(t, name+"-leader", leader, "0")}
 	pods[0].leader = true
 	for index := int64(1); index < size; index++ {
-		pods = append(pods, templatePod(t, name+"-worker", worker, "1"))
+		pods = append(pods, metricsTemplatePod(t, name+"-worker", worker, "1"))
 	}
 	return pods
 }
 
-func podTemplate(t *testing.T, value any) corev1.PodTemplateSpec {
+func metricsPodTemplate(t *testing.T, value any) corev1.PodTemplateSpec {
 	t.Helper()
 	var template corev1.PodTemplateSpec
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(value.(map[string]any), &template); err != nil {
@@ -290,22 +298,23 @@ func podTemplate(t *testing.T, value any) corev1.PodTemplateSpec {
 	return template
 }
 
-func templatePod(t *testing.T, name string, template corev1.PodTemplateSpec, workerIndex string) testPod {
+func metricsTemplatePod(t *testing.T, name string, template corev1.PodTemplateSpec, workerIndex string) metricsPod {
 	t.Helper()
 	podLabels := maps.Clone(template.Labels)
 	if workerIndex != "" {
 		podLabels[lwsWorkerIndexLabel] = workerIndex
 	}
 	container := template.Spec.Containers[0]
-	return testPod{name: name, labels: podLabels, ports: container.Ports, args: container.Args}
+	return metricsPod{name: name, labels: podLabels, ports: container.Ports, args: container.Args}
 }
 
-// relabel applies relabelings the way Prometheus does to a pod's discovered
-// labels, returning the target labels they set.
-func relabel(t *testing.T, relabelings []any, podLabels map[string]string) map[string]string {
+// metricsRelabel applies relabelings the way Prometheus does to what it
+// discovers on a pod, returning the target labels they set, or false when
+// they drop the target.
+func metricsRelabel(t *testing.T, relabelings []any, podLabels map[string]string, ready bool) (map[string]string, bool) {
 	t.Helper()
 	sanitize := regexp.MustCompile(`[^a-zA-Z0-9_]`)
-	discovered := map[string]string{}
+	discovered := map[string]string{"__meta_kubernetes_pod_ready": strconv.FormatBool(ready)}
 	for key, value := range podLabels {
 		discovered["__meta_kubernetes_pod_label_"+sanitize.ReplaceAllString(key, "_")] = value
 	}
@@ -327,15 +336,27 @@ func relabel(t *testing.T, relabelings []any, podLabels map[string]string) map[s
 		re := regexp.MustCompile("^(?:" + pattern + ")$")
 		value := strings.Join(values, ";")
 		match := re.FindStringSubmatchIndex(value)
-		if match == nil {
-			continue
+		switch action, _ := rule["action"].(string); action {
+		case "keep":
+			if match == nil {
+				return nil, false
+			}
+		case "drop":
+			if match != nil {
+				return nil, false
+			}
+		case "", "replace":
+			if match != nil {
+				discovered[rule["targetLabel"].(string)] = string(re.ExpandString(nil, replacement, value, match))
+			}
+		default:
+			t.Fatalf("relabel action %q is not simulated", action)
 		}
-		discovered[rule["targetLabel"].(string)] = string(re.ExpandString(nil, replacement, value, match))
 	}
 	return map[string]string{
 		"inference_service": discovered["inference_service"],
 		"inference_role":    discovered["inference_role"],
-	}
+	}, true
 }
 
 func TestPodMonitorScrapesServingPods(t *testing.T) {
@@ -353,8 +374,8 @@ func TestPodMonitorScrapesServingPods(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := testRequest(tt.runtime, tt.mode)
-			objects, _, err := buildServiceObjects(req, testModel, nil)
+			req := metricsTestRequest(tt.runtime, tt.mode)
+			objects, _, err := buildServiceObjects(req, metricsTestModel, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -369,7 +390,7 @@ func TestPodMonitorScrapesServingPods(t *testing.T) {
 			relabelings, _ := endpoint["relabelings"].([]any)
 
 			scraped := map[string]string{}
-			for _, pod := range servicePods(t, objects) {
+			for _, pod := range metricsServicePods(t, objects) {
 				if !selector.Matches(labels.Set(pod.labels)) {
 					continue
 				}
@@ -384,7 +405,13 @@ func TestPodMonitorScrapesServingPods(t *testing.T) {
 				if tt.runtime == runtimeSGLang && !slices.Contains(pod.args, "--enable-metrics") {
 					t.Fatalf("%s runs SGLang without --enable-metrics", pod.name)
 				}
-				target := relabel(t, relabelings, pod.labels)
+				if _, kept := metricsRelabel(t, relabelings, pod.labels, false); kept {
+					t.Fatalf("%s is scraped before it is ready", pod.name)
+				}
+				target, kept := metricsRelabel(t, relabelings, pod.labels, true)
+				if !kept {
+					t.Fatalf("%s is not scraped once it is ready", pod.name)
+				}
 				if target["inference_service"] != req.Name {
 					t.Fatalf("%s is labeled inference_service=%q, want %q", pod.name, target["inference_service"], req.Name)
 				}
@@ -397,70 +424,108 @@ func TestPodMonitorScrapesServingPods(t *testing.T) {
 	}
 }
 
+// metricsOtherPodMonitor is a PodMonitor named like the test service that is
+// not an inference service's.
+func metricsOtherPodMonitor() *unstructured.Unstructured {
+	monitor := &unstructured.Unstructured{Object: map[string]any{
+		"metadata": map[string]any{"name": "qwen", "namespace": "ai"},
+	}}
+	monitor.SetGroupVersionKind(podMonitorGVK)
+	return monitor
+}
+
+func metricsServicePodMonitor(t *testing.T) *unstructured.Unstructured {
+	t.Helper()
+	monitor, err := buildPodMonitor(metricsTestRequest(runtimeVLLM, modeSingle), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return monitor
+}
+
 func TestWithPodMonitor(t *testing.T) {
 	defaultLabels := map[string]string{managedByLabel: managedByValue, serviceLabel: "qwen", "release": "kube-prometheus-stack"}
 	tests := []struct {
-		name        string
-		objects     []client.Object
-		funcs       interceptor.Funcs
-		wantMonitor bool
-		wantLabels  map[string]string
-		wantErr     bool
+		name         string
+		objects      []client.Object
+		funcs        interceptor.Funcs
+		wantMonitor  bool
+		wantLabels   map[string]string
+		wantErr      bool
+		wantConflict bool
 	}{
 		{
 			name: "no PodMonitor CRD",
 		},
 		{
 			name:        "no Prometheus",
-			objects:     []client.Object{podMonitorCRDObject()},
+			objects:     []client.Object{metricsPodMonitorCRD()},
 			wantMonitor: true,
 			wantLabels:  defaultLabels,
 		},
 		{
 			name:        "Prometheus selecting other labels",
-			objects:     []client.Object{podMonitorCRDObject(), prometheusObject(map[string]any{"release": "monitoring", "team": "ml"})},
+			objects:     []client.Object{metricsPodMonitorCRD(), metricsPrometheus(map[string]any{"release": "monitoring", "team": "ml"})},
 			wantMonitor: true,
 			wantLabels:  map[string]string{managedByLabel: managedByValue, serviceLabel: "qwen", "release": "monitoring", "team": "ml"},
 		},
 		{
 			name:        "Prometheus selecting every PodMonitor",
-			objects:     []client.Object{podMonitorCRDObject(), prometheusObject(map[string]any{})},
+			objects:     []client.Object{metricsPodMonitorCRD(), metricsPrometheus(map[string]any{})},
 			wantMonitor: true,
 			wantLabels:  defaultLabels,
 		},
 		{
 			name:        "no Prometheus CRD",
-			objects:     []client.Object{podMonitorCRDObject()},
-			funcs:       failKind(prometheusGVK.Kind, noKindMatch(prometheusGVK)),
+			objects:     []client.Object{metricsPodMonitorCRD()},
+			funcs:       metricsFailKind(metricsPrometheusGVK.Kind, metricsNoKindMatch(metricsPrometheusGVK)),
 			wantMonitor: true,
 			wantLabels:  defaultLabels,
 		},
 		{
 			name:        "listing Prometheus fails",
-			objects:     []client.Object{podMonitorCRDObject()},
-			funcs:       failKind(prometheusGVK.Kind, errors.New("connection refused")),
+			objects:     []client.Object{metricsPodMonitorCRD()},
+			funcs:       metricsFailKind(metricsPrometheusGVK.Kind, errors.New("connection refused")),
 			wantMonitor: true,
 			wantLabels:  defaultLabels,
 		},
 		{
+			// Creating the service then fails on its Service, which says the
+			// name is taken.
+			name:        "PodMonitor of a service with the name",
+			objects:     []client.Object{metricsPodMonitorCRD(), metricsServicePodMonitor(t)},
+			wantMonitor: true,
+			wantLabels:  defaultLabels,
+		},
+		{
+			name:         "PodMonitor of something else with the name",
+			objects:      []client.Object{metricsPodMonitorCRD(), metricsOtherPodMonitor()},
+			wantErr:      true,
+			wantConflict: true,
+		},
+		{
 			name:    "looking up the CRD fails",
-			funcs:   failKind("CustomResourceDefinition", errors.New("connection refused")),
+			funcs:   metricsFailKind("CustomResourceDefinition", errors.New("connection refused")),
+			wantErr: true,
+		},
+		{
+			name:    "looking up the PodMonitor fails",
+			objects: []client.Object{metricsPodMonitorCRD()},
+			funcs:   metricsFailKind(podMonitorGVK.Kind, errors.New("connection refused")),
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cs := newTestClientSet(t, tt.funcs, tt.objects...)
-			req := testRequest(runtimeSGLang, modeSingle)
-			objects, workload, err := buildServiceObjects(req, testModel, nil)
+			cs := metricsClientSet(t, tt.funcs, tt.objects...)
+			req := metricsTestRequest(runtimeSGLang, modeSingle)
+			objects, workload, err := buildServiceObjects(req, metricsTestModel, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			got, err := withPodMonitor(context.Background(), cs, req, objects)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatal("withPodMonitor() succeeded, want an error")
-				}
+				checkPodMonitorError(t, err, tt.wantConflict)
 				return
 			}
 			if err != nil {
@@ -470,20 +535,73 @@ func TestWithPodMonitor(t *testing.T) {
 				t.Fatalf("the workload is not created last")
 			}
 			if !tt.wantMonitor {
-				if len(got) != len(objects) {
-					t.Fatalf("got %d objects, want the %d of the service", len(got), len(objects))
+				if !slices.Equal(got, objects) {
+					t.Fatalf("got objects %v, want the service's %v", got, objects)
 				}
 				return
 			}
-			if len(got) != len(objects)+1 {
-				t.Fatalf("got %d objects, want the %d of the service and a PodMonitor", len(got), len(objects))
+			// The PodMonitor goes right before the workload.
+			if want := slices.Insert(slices.Clone(objects), len(objects)-1, got[len(got)-2]); !slices.Equal(got, want) {
+				t.Fatalf("got objects %v, want %v", got, want)
 			}
-			monitor, ok := got[0].(*unstructured.Unstructured)
+			monitor, ok := got[len(got)-2].(*unstructured.Unstructured)
 			if !ok || monitor.GroupVersionKind() != podMonitorGVK {
-				t.Fatalf("first object is %T, want a PodMonitor", got[0])
+				t.Fatalf("object before the workload is %T, want a PodMonitor", got[len(got)-2])
 			}
 			if !maps.Equal(monitor.GetLabels(), tt.wantLabels) {
 				t.Fatalf("labels = %v, want %v", monitor.GetLabels(), tt.wantLabels)
+			}
+		})
+	}
+}
+
+func checkPodMonitorError(t *testing.T, err error, wantConflict bool) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("withPodMonitor() succeeded, want an error")
+	}
+	if !wantConflict {
+		return
+	}
+	if !apierrors.IsAlreadyExists(err) || createErrorStatus(err) != http.StatusConflict {
+		t.Fatalf("withPodMonitor() = %v, want a conflict", err)
+	}
+	if want := "PodMonitor ai/qwen already exists and is not an inference service's"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not say %q", err, want)
+	}
+}
+
+// TestCreateObjectsRemovesPodMonitor fails the workload, created after the
+// PodMonitor, and expects nothing of the service to be left.
+func TestCreateObjectsRemovesPodMonitor(t *testing.T) {
+	for _, mode := range []string{modeSingle, modePD} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			req := metricsTestRequest(runtimeSGLang, mode)
+			objects, workload, err := buildServiceObjects(req, metricsTestModel, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			denyWorkload := interceptor.Funcs{
+				Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					if obj == client.Object(workload) {
+						return errors.New("admission webhook denied the request")
+					}
+					return c.Create(ctx, obj, opts...)
+				},
+			}
+			cs := metricsClientSet(t, denyWorkload, metricsPodMonitorCRD())
+			if objects, err = withPodMonitor(ctx, cs, req, objects); err != nil {
+				t.Fatal(err)
+			}
+			if err := createObjects(ctx, cs, objects); err == nil {
+				t.Fatal("createObjects() succeeded, want the workload to fail")
+			}
+			for _, object := range objects {
+				err := cs.K8sClient.Get(ctx, client.ObjectKeyFromObject(object), object)
+				if !apierrors.IsNotFound(err) {
+					t.Errorf("%T %s is left after the service failed: %v", object, object.GetName(), err)
+				}
 			}
 		})
 	}
@@ -493,9 +611,9 @@ func TestCreateAndDeleteServiceObjects(t *testing.T) {
 	for _, mode := range []string{modeSingle, modeMulti, modePD} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
-			cs := newTestClientSet(t, interceptor.Funcs{}, podMonitorCRDObject())
-			req := testRequest(runtimeSGLang, mode)
-			objects, workload, err := buildServiceObjects(req, testModel, nil)
+			cs := metricsClientSet(t, interceptor.Funcs{}, metricsPodMonitorCRD())
+			req := metricsTestRequest(runtimeSGLang, mode)
+			objects, workload, err := buildServiceObjects(req, metricsTestModel, nil)
 			if err == nil {
 				objects, err = withPodMonitor(ctx, cs, req, objects)
 			}
@@ -525,45 +643,42 @@ func TestCreateAndDeleteServiceObjects(t *testing.T) {
 }
 
 func TestDeleteServiceObjectsPodMonitor(t *testing.T) {
-	ours := func() client.Object {
-		monitor, err := buildPodMonitor(testRequest(runtimeVLLM, modeSingle), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return monitor
-	}
-	notOurs := func() client.Object {
-		monitor := &unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": "qwen", "namespace": "ai"},
-		}}
-		monitor.SetGroupVersionKind(podMonitorGVK)
-		return monitor
-	}
+	ingressGVK := schema.GroupVersionKind{Group: "networking.k8s.io", Version: "v1", Kind: "Ingress"}
 	tests := []struct {
 		name        string
-		monitor     func() client.Object
+		monitor     client.Object
 		funcs       interceptor.Funcs
 		wantMonitor bool
+		wantErr     bool
 	}{
-		{name: "PodMonitor of the service", monitor: ours},
-		{name: "same-named PodMonitor without the service label", monitor: notOurs, wantMonitor: true},
-		{name: "no PodMonitor", monitor: nil},
-		{name: "no PodMonitor CRD", funcs: failKind(podMonitorGVK.Kind, noKindMatch(podMonitorGVK))},
+		{name: "PodMonitor of the service", monitor: metricsServicePodMonitor(t)},
+		{name: "same-named PodMonitor without the service label", monitor: metricsOtherPodMonitor(), wantMonitor: true},
+		{name: "no PodMonitor"},
+		{name: "no PodMonitor CRD", funcs: metricsFailKind(podMonitorGVK.Kind, metricsNoKindMatch(podMonitorGVK))},
+		// Only the PodMonitor is optional; other kinds missing is an error.
+		{name: "no Ingress kind", funcs: metricsFailKind(ingressGVK.Kind, metricsNoKindMatch(ingressGVK)), wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			workload, err := buildLeaderWorkerSet(testRequest(runtimeVLLM, modeSingle), testModel, nil)
+			workload, err := buildLeaderWorkerSet(metricsTestRequest(runtimeVLLM, modeSingle), metricsTestModel, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			objects := []client.Object{workload, buildService(testRequest(runtimeVLLM, modeSingle))}
+			objects := []client.Object{workload, buildService(metricsTestRequest(runtimeVLLM, modeSingle))}
 			if tt.monitor != nil {
-				objects = append(objects, tt.monitor())
+				objects = append(objects, tt.monitor)
 			}
-			cs := newTestClientSet(t, tt.funcs, objects...)
+			cs := metricsClientSet(t, tt.funcs, objects...)
 
-			if err := deleteServiceObjects(ctx, cs, workload); err != nil {
+			err = deleteServiceObjects(ctx, cs, workload)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("deleteServiceObjects() succeeded, want an error")
+				}
+				return
+			}
+			if err != nil {
 				t.Fatalf("deleteServiceObjects() = %v", err)
 			}
 			if err := cs.K8sClient.Get(ctx, client.ObjectKeyFromObject(workload), workload.DeepCopy()); !apierrors.IsNotFound(err) {

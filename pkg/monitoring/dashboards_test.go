@@ -2,26 +2,36 @@ package monitoring
 
 import (
 	"encoding/json"
+	"maps"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/qzytwway/mplatform/pkg/cluster"
+	"github.com/qzytwway/mplatform/pkg/common"
+	"github.com/qzytwway/mplatform/pkg/kube"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"helm.sh/helm/v4/pkg/chart/common"
+	helmcommon "helm.sh/helm/v4/pkg/chart/common"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const inferenceDashboardUID = "mplatform-inference-services"
 
 // The parts of a dashboard the UI's renderer reads, see
 // ui/src/components/observability/dashboard.
-type testDashboard struct {
+type dashboardDefinition struct {
 	UID        string `json:"uid"`
 	Title      string `json:"title"`
 	Templating struct {
@@ -33,7 +43,7 @@ type testDashboard struct {
 			Multi      bool   `json:"multi"`
 		} `json:"list"`
 	} `json:"templating"`
-	Panels []testPanel `json:"panels"`
+	Panels []dashboardPanel `json:"panels"`
 }
 
 var (
@@ -43,8 +53,8 @@ var (
 		"percentunit", "percent", "s", "ms", "none", "short", "bytes", "decbytes",
 		"bps", "Bps", "binBps", "pps", "ops", "reqps", "iops", "rds", "wps", "cps",
 	}
-	// labelValuesQuery is the variable query form the UI resolves.
-	labelValuesQuery = regexp.MustCompile(`^\s*label_values\(\s*([\s\S]+),\s*(\w+)\s*\)\s*$`)
+	// dashboardLabelValues is the variable query form the UI resolves.
+	dashboardLabelValues = regexp.MustCompile(`^\s*label_values\(\s*([\s\S]+),\s*(\w+)\s*\)\s*$`)
 	// The vLLM and SGLang metrics the dashboard shows.
 	inferenceMetrics = []string{
 		"vllm:time_to_first_token_seconds_bucket", "sglang:time_to_first_token_seconds_bucket",
@@ -56,9 +66,16 @@ var (
 		"vllm:num_requests_waiting", "sglang:num_queue_reqs",
 		"vllm:kv_cache_usage_perc", "sglang:token_usage",
 	}
+	// pdRoleFilters leave out the pd role whose numbers would mislead: prefill
+	// pods do not decode, and decode pods see every prompt again.
+	pdRoleFilters = []struct{ metric, filter string }{
+		{"_seconds_bucket", `inference_role!="prefill"`},
+		{"generation_tokens_total", `inference_role!="prefill"`},
+		{"prompt_tokens_total", `inference_role!="decode"`},
+	}
 )
 
-type testPanel struct {
+type dashboardPanel struct {
 	ID      int    `json:"id"`
 	Type    string `json:"type"`
 	Title   string `json:"title"`
@@ -78,7 +95,7 @@ type testPanel struct {
 
 // inferenceDashboard reads the inference services dashboard from the
 // built-in dashboards.
-func inferenceDashboard(t *testing.T) testDashboard {
+func inferenceDashboard(t *testing.T) dashboardDefinition {
 	t.Helper()
 	summaries, definitions, err := builtinDashboards()
 	if err != nil {
@@ -94,7 +111,7 @@ func inferenceDashboard(t *testing.T) testDashboard {
 	if got := summaries[index].Title; got != "Model Serving / Inference Services" {
 		t.Fatalf("title = %q", got)
 	}
-	var dashboard testDashboard
+	var dashboard dashboardDefinition
 	if err := json.Unmarshal(definitions[inferenceDashboardUID], &dashboard); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +122,7 @@ func TestInferenceDashboardVariables(t *testing.T) {
 	var names []string
 	for _, variable := range inferenceDashboard(t).Templating.List {
 		names = append(names, variable.Name)
-		if variable.Type != "query" || !labelValuesQuery.MatchString(variable.Query) {
+		if variable.Type != "query" || !dashboardLabelValues.MatchString(variable.Query) {
 			t.Errorf("variable %s is not a label_values query: %q", variable.Name, variable.Query)
 		}
 		// Several services or roles are matched as a regular expression.
@@ -129,13 +146,13 @@ func TestInferenceDashboardPanels(t *testing.T) {
 			t.Errorf("panel id %d is used twice", panel.ID)
 		}
 		ids[panel.ID] = true
-		checkPanel(t, panel)
+		checkInferencePanel(t, panel)
 	}
 }
 
-// checkPanel checks that the platform renders panel and that its queries
+// checkInferencePanel checks that the platform renders panel and that its queries
 // follow the dashboard's variables for both runtimes.
-func checkPanel(t *testing.T, panel testPanel) {
+func checkInferencePanel(t *testing.T, panel dashboardPanel) {
 	t.Helper()
 	if !slices.Contains(renderedPanelTypes, panel.Type) {
 		t.Errorf("panel %q has type %q, which the platform does not render", panel.Title, panel.Type)
@@ -162,6 +179,32 @@ func checkPanel(t *testing.T, panel testPanel) {
 		if !strings.Contains(expr, "vllm:") || !strings.Contains(expr, "sglang:") {
 			t.Errorf("query of panel %q does not read both vLLM and SGLang metrics: %s", panel.Title, expr)
 		}
+		checkPDRoleFilter(t, panel.Title, expr)
+	}
+}
+
+// checkPDRoleFilter checks that a query leaves out the pd role it should, and
+// only that one.
+func checkPDRoleFilter(t *testing.T, title, expr string) {
+	t.Helper()
+	if strings.Contains(expr, "prompt_tokens_total") && strings.Contains(expr, "generation_tokens_total") {
+		t.Errorf("query of panel %q adds up input and output tokens: %s", title, expr)
+	}
+	want := ""
+	for _, rule := range pdRoleFilters {
+		if strings.Contains(expr, rule.metric) {
+			want = rule.filter
+		}
+	}
+	if want != "" && !strings.Contains(expr, want) {
+		t.Errorf("query of panel %q does not filter by %s: %s", title, want, expr)
+	}
+	others := strings.Count(expr, "inference_role!=")
+	if want != "" {
+		others -= strings.Count(expr, want)
+	}
+	if others > 0 {
+		t.Errorf("query of panel %q leaves out other roles than %q: %s", title, want, expr)
 	}
 }
 
@@ -184,9 +227,9 @@ func TestInferenceDashboardMetrics(t *testing.T) {
 // page does, from a local kube-prometheus-stack chart with one dashboard.
 func TestLoadDashboardsListsBuiltins(t *testing.T) {
 	chartDir := t.TempDir()
-	setupLocalRepository(t, chartDir)
+	setupDashboardRepository(t, chartDir)
 	chartDashboard := `{"uid": "chart-dashboard", "title": "Kubernetes / Chart"}`
-	saveChart(t, chartDir, `apiVersion: v1
+	saveDashboardChart(t, chartDir, `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: chart-dashboards
@@ -227,7 +270,79 @@ data:
 	}
 }
 
-func setupLocalRepository(t *testing.T, chartDir string) {
+// TestDashboardsWithoutChart lists and serves the built-in dashboards, and
+// the cluster's, when the local chart directory lacks kube-prometheus-stack.
+func TestDashboardsWithoutChart(t *testing.T) {
+	setupDashboardRepository(t, t.TempDir())
+	clusterDashboard := `{"uid": "cluster-dashboard", "title": "GPU / Cluster"}`
+	cs := &cluster.ClientSet{Name: "test", K8sClient: &kube.K8sClient{Client: fake.NewClientBuilder().WithObjects(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "gpu-dashboards", Namespace: "gpu-operator", Labels: map[string]string{dashboardLabel: "1"}},
+		Data:       map[string]string{"gpu.json": clusterDashboard},
+	}).Build()}}
+	_, builtins, err := builtinDashboards()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := serveDashboards(t, cs, ListDashboards, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("listing returned %d: %s", recorder.Code, recorder.Body)
+	}
+	var list struct {
+		Chart      map[string]string  `json:"chart"`
+		Dashboards []dashboardSummary `json:"dashboards"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"name": chartName}; !maps.Equal(list.Chart, want) {
+		t.Fatalf("chart = %v, want %v with no version", list.Chart, want)
+	}
+	var uids []string
+	for _, summary := range list.Dashboards {
+		uids = append(uids, summary.UID)
+	}
+	if want := []string{"cluster-dashboard", inferenceDashboardUID}; !slices.Equal(uids, want) {
+		t.Fatalf("listed dashboards = %v, want %v", uids, want)
+	}
+
+	for _, tt := range []struct {
+		uid      string
+		wantCode int
+		wantBody string
+	}{
+		{inferenceDashboardUID, http.StatusOK, string(builtins[inferenceDashboardUID])},
+		{"cluster-dashboard", http.StatusOK, clusterDashboard},
+		{"missing", http.StatusNotFound, ""},
+	} {
+		recorder := serveDashboards(t, cs, GetDashboard, tt.uid)
+		if recorder.Code != tt.wantCode {
+			t.Fatalf("getting %s returned %d, want %d: %s", tt.uid, recorder.Code, tt.wantCode, recorder.Body)
+		}
+		if tt.wantBody != "" && recorder.Body.String() != tt.wantBody {
+			t.Fatalf("got %s for %s", recorder.Body, tt.uid)
+		}
+	}
+}
+
+// serveDashboards calls a dashboard handler as a user who may query
+// Prometheus.
+func serveDashboards(t *testing.T, cs *cluster.ClientSet, handler gin.HandlerFunc, uid string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/prometheus/dashboards", nil)
+	c.Params = gin.Params{{Key: "uid", Value: uid}}
+	c.Set("cluster", cs)
+	c.Set("user", model.User{Username: "viewer", Roles: []common.Role{{
+		Name: "viewer", Clusters: []string{"*"}, Namespaces: []string{"*"}, Resources: []string{"prometheus"}, Verbs: []string{"get"},
+	}}})
+	handler(c)
+	return recorder
+}
+
+func setupDashboardRepository(t *testing.T, chartDir string) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -257,11 +372,11 @@ func setupLocalRepository(t *testing.T, chartDir string) {
 	})
 }
 
-func saveChart(t *testing.T, dir, template string) {
+func saveDashboardChart(t *testing.T, dir, template string) {
 	t.Helper()
 	localChart := &chart.Chart{
 		Metadata:  &chart.Metadata{APIVersion: chart.APIVersionV2, Name: chartName, Version: "1.0.0"},
-		Templates: []*common.File{{Name: "templates/dashboards.yaml", Data: []byte(template)}},
+		Templates: []*helmcommon.File{{Name: "templates/dashboards.yaml", Data: []byte(template)}},
 	}
 	if _, err := chartutil.Save(localChart, dir); err != nil {
 		t.Fatal(err)
