@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -38,15 +39,23 @@ const (
 
 var wasmPluginGVK = schema.GroupVersionKind{Group: "extensions.higress.io", Version: "v1alpha1", Kind: "WasmPlugin"}
 
-// gatewayPlugins are the Wasm plugins the gateway pulls as OCI artifacts.
-// Phase and priority are the documented ones: model-router has to set the
-// model header before key-auth picks the rule of the matched route.
+// gatewayPlugins are the Wasm plugins the gateway pulls as OCI artifacts,
+// with their documented phase and priority: AUTHN precedes the default
+// phase, and a higher priority runs first within one. model-router has to set
+// the model header before key-auth picks the rule of the matched route, and
+// key-auth has to name the caller before ai-quota and ai-token-ratelimit
+// check it.
 var gatewayPlugins = []struct {
-	name, version string
-	priority      int64
+	name, version, phase string
+	priority             int64
 }{
-	{"key-auth", "1.0.0", 310},
-	{"model-router", "2.0.4", 900},
+	{"model-router", "2.0.4", "AUTHN", 900},
+	{"transformer", "2.0.3", "AUTHN", 410},
+	{"key-auth", "1.0.0", "AUTHN", 310},
+	{quotaPlugin, "2.0.4", "UNSPECIFIED_PHASE", 750},
+	{"ai-token-ratelimit", "2.0.4", "UNSPECIFIED_PHASE", 600},
+	{"ai-statistics", "2.0.3", "UNSPECIFIED_PHASE", 200},
+	{"ai-proxy", "2.0.4", "UNSPECIFIED_PHASE", 100},
 }
 
 type pluginStatus struct {
@@ -95,77 +104,46 @@ func syncGateway(ctx context.Context, cs *cluster.ClientSet) error {
 	if err := model.DB.Where("cluster_name = ? AND enabled = ?", cs.Name, true).Order("name").Find(&callers).Error; err != nil {
 		return err
 	}
-	keyAuth, err := keyAuthSpec(callers, published)
+	specs, err := pluginSpecs(gateway, callers, published)
 	if err != nil {
 		return err
 	}
-	specs := map[string]map[string]any{
-		"key-auth":     keyAuth,
-		"model-router": {"defaultConfig": map[string]any{"modelToHeader": modelHeader}},
-	}
-	for i, plugin := range gatewayPlugins {
-		spec := specs[plugin.name]
+	apply := func(i int, spec map[string]any) error {
+		plugin := gatewayPlugins[i]
 		spec["url"] = urls[i].URL
-		spec["phase"] = "AUTHN"
+		spec["phase"] = plugin.phase
 		spec["priority"] = plugin.priority
 		spec["defaultConfigDisable"] = false
 		if err := applyWasmPlugin(ctx, cs, plugin.name, spec); err != nil {
 			return fmt.Errorf("failed to apply gateway plugin %s: %w", plugin.name, err)
 		}
+		return nil
 	}
-	return nil
-}
-
-// keyAuthSpec requires a key on every route and lets each published service
-// be called only by the callers allowed for its model.
-func keyAuthSpec(callers []model.ModelCaller, published []publishedService) (map[string]any, error) {
-	consumers := []any{}
-	for _, caller := range callers {
-		consumers = append(consumers, map[string]any{"name": caller.Name, "credential": credentialScheme + string(caller.APIKey)})
-	}
-	if len(consumers) == 0 {
-		key, err := newAPIKey()
+	quotaIndex := 0
+	for i, plugin := range gatewayPlugins {
+		if plugin.name == quotaPlugin {
+			quotaIndex = i
+			continue
+		}
+		spec, ok := specs[plugin.name]
+		if !ok {
+			err = deleteWasmPlugin(ctx, cs, plugin.name)
+		} else {
+			err = apply(i, spec)
+		}
 		if err != nil {
-			return nil, err
-		}
-		consumers = append(consumers, map[string]any{"name": unusedConsumer, "credential": credentialScheme + key})
-	}
-	rules := []any{}
-	for _, service := range published {
-		allow := []any{}
-		for _, caller := range callers {
-			if caller.AllowAll || containsModel(caller.Models, service.Model) {
-				allow = append(allow, caller.Name)
-			}
-		}
-		if len(allow) == 0 {
-			allow = append(allow, nobodyConsumer)
-		}
-		rules = append(rules, map[string]any{
-			"ingress":       []any{service.Namespace + "/" + service.Name + ingressSuffix},
-			"configDisable": false,
-			"config":        map[string]any{"allow": allow},
-		})
-	}
-	return map[string]any{
-		"defaultConfig": map[string]any{
-			"global_auth": true,
-			"consumers":   consumers,
-			"keys":        []any{"Authorization"},
-			"in_header":   true,
-			"in_query":    false,
-		},
-		"matchRules": rules,
-	}, nil
-}
-
-func containsModel(models []string, name string) bool {
-	for _, allowed := range models {
-		if allowed == name {
-			return true
+			return err
 		}
 	}
-	return false
+	if gateway.QuotaAdminKey == "" {
+		return nil
+	}
+	if err := applyIngress(ctx, cs, buildQuotaAdminIngress()); err != nil {
+		return fmt.Errorf("failed to apply the quota administration route: %w", err)
+	}
+	return syncQuotas(ctx, cs, gateway, callers, func(enforced bool) error {
+		return apply(quotaIndex, quotaSpec(gateway, enforced))
+	})
 }
 
 func pluginName(name string) string {
@@ -189,17 +167,23 @@ func applyWasmPlugin(ctx context.Context, cs *cluster.ClientSet, name string, sp
 	return cs.K8sClient.Update(ctx, plugin)
 }
 
-func deleteWasmPlugins(ctx context.Context, cs *cluster.ClientSet) error {
-	for _, gatewayPlugin := range gatewayPlugins {
-		plugin := &unstructured.Unstructured{}
-		plugin.SetGroupVersionKind(wasmPluginGVK)
-		plugin.SetNamespace(gatewayNamespace)
-		plugin.SetName(pluginName(gatewayPlugin.name))
-		if err := cs.K8sClient.Delete(ctx, plugin); err != nil && !apierrors.IsNotFound(err) {
+func deleteWasmPlugin(ctx context.Context, cs *cluster.ClientSet, name string) error {
+	plugin := &unstructured.Unstructured{}
+	plugin.SetGroupVersionKind(wasmPluginGVK)
+	plugin.SetNamespace(gatewayNamespace)
+	plugin.SetName(pluginName(name))
+	return client.IgnoreNotFound(cs.K8sClient.Delete(ctx, plugin))
+}
+
+// deleteGatewayObjects removes what the platform configured the gateway with
+// outside its release.
+func deleteGatewayObjects(ctx context.Context, cs *cluster.ClientSet) error {
+	for _, plugin := range gatewayPlugins {
+		if err := deleteWasmPlugin(ctx, cs, plugin.name); err != nil {
 			return err
 		}
 	}
-	return nil
+	return client.IgnoreNotFound(cs.K8sClient.Delete(ctx, buildQuotaAdminIngress()))
 }
 
 func loadGateway(clusterName string) (*model.ModelGateway, error) {

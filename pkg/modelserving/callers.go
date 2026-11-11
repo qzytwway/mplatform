@@ -27,6 +27,11 @@ type callerRequest struct {
 	Enabled     *bool    `json:"enabled"`
 	AllowAll    bool     `json:"allowAll"`
 	Models      []string `json:"models"`
+
+	TokensPerMinute int64 `json:"tokensPerMinute"`
+	QuotaLimited    bool  `json:"quotaLimited"`
+	// Quota is the initial quota of a new quota-limited caller.
+	Quota int64 `json:"quota"`
 }
 
 type createdCaller struct {
@@ -58,6 +63,20 @@ func parseCallerModels(models []string) (model.SliceString, error) {
 		}
 	}
 	return parsed, nil
+}
+
+// validateCallerLimits checks the rate limit and initial quota of a request.
+func validateCallerLimits(req *callerRequest) error {
+	if req.TokensPerMinute < 0 || req.TokensPerMinute > maxQuotaTokens {
+		return fmt.Errorf("tokensPerMinute must be between 0 and %d", maxQuotaTokens)
+	}
+	if req.Quota < 0 || req.Quota > maxQuotaTokens {
+		return fmt.Errorf("quota must be between 0 and %d", maxQuotaTokens)
+	}
+	if req.Quota > 0 && !req.QuotaLimited {
+		return fmt.Errorf("quota needs quotaLimited to be set")
+	}
+	return nil
 }
 
 // callerView hides the empty element an empty model list is stored as.
@@ -107,8 +126,15 @@ func (h *Handler) CreateCaller(c *gin.Context) {
 		return
 	}
 	models, err := parseCallerModels(req.Models)
+	if err == nil {
+		err = validateCallerLimits(&req)
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	admin, ok := limitsAdmin(c, cs, &req)
+	if !ok {
 		return
 	}
 	var count int64
@@ -133,6 +159,12 @@ func (h *Handler) CreateCaller(c *gin.Context) {
 		APIKey:      model.SecretString(key),
 		AllowAll:    req.AllowAll,
 		Models:      models,
+
+		TokensPerMinute: req.TokensPerMinute,
+		QuotaLimited:    req.QuotaLimited,
+	}
+	if caller.QuotaLimited && !startQuota(c, admin, caller.Name, req.Quota) {
+		return
 	}
 	if err := model.DB.Create(&caller).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -159,8 +191,23 @@ func (h *Handler) UpdateCaller(c *gin.Context) {
 		return
 	}
 	models, err := parseCallerModels(req.Models)
+	if err == nil {
+		err = validateCallerLimits(&req)
+	}
+	if err == nil && req.Quota != 0 {
+		err = fmt.Errorf("quota can only be set when creating a caller; adjust the quota instead")
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	admin, ok := limitsAdmin(c, cs, &req)
+	if !ok {
+		return
+	}
+	// A caller that becomes quota-limited starts without quota, whatever it
+	// held before.
+	if req.QuotaLimited && !caller.QuotaLimited && !startQuota(c, admin, caller.Name, 0) {
 		return
 	}
 	updated := *caller
@@ -168,6 +215,8 @@ func (h *Handler) UpdateCaller(c *gin.Context) {
 	updated.Enabled = *req.Enabled
 	updated.AllowAll = req.AllowAll
 	updated.Models = models
+	updated.TokensPerMinute = req.TokensPerMinute
+	updated.QuotaLimited = req.QuotaLimited
 	if err := model.DB.Save(&updated).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -216,6 +265,16 @@ func (h *Handler) DeleteCaller(c *gin.Context) {
 		return
 	}
 	if !syncGatewayIfInstalled(c, cs) {
+		return
+	}
+	// ai-quota cannot delete a quota; an empty one reads and acts the same,
+	// and keeps a later caller of this name from inheriting it.
+	admin, err := newQuotaAdmin(cs)
+	if err == nil {
+		err = admin.set(c.Request.Context(), caller.Name, 0)
+	}
+	if err != nil && !errors.Is(err, errQuotaUnavailable) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "the caller was deleted, but clearing its quota on the gateway failed: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "caller deleted"})

@@ -8,6 +8,7 @@ import {
   installGateway,
   syncGateway,
   uninstallGateway,
+  upgradeGateway,
   type GatewayStatus,
 } from '@/lib/api/model-gateway'
 import { translateError } from '@/lib/utils'
@@ -30,6 +31,7 @@ export function GatewayCard({ status }: { status: GatewayStatus }) {
   const [confirmingUninstall, setConfirmingUninstall] = useState(false)
   const [isUninstalling, setIsUninstalling] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isUpgrading, setIsUpgrading] = useState(false)
 
   const refreshStatus = () =>
     queryClient.invalidateQueries({ queryKey: ['model-gateway'] })
@@ -64,6 +66,22 @@ export function GatewayCard({ status }: { status: GatewayStatus }) {
       toast.error(translateError(err, t))
     } finally {
       setIsSyncing(false)
+    }
+  }
+
+  const handleUpgrade = async () => {
+    if (!currentCluster) return
+    setIsUpgrading(true)
+    try {
+      await upgradeGateway(currentCluster)
+      toast.success(t('modelServing.gateway.messages.upgraded'))
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      // A failed request can still leave the gateway upgraded.
+      await refreshStatus()
+      void queryClient.invalidateQueries({ queryKey: ['model-callers'] })
+      setIsUpgrading(false)
     }
   }
 
@@ -107,6 +125,24 @@ export function GatewayCard({ status }: { status: GatewayStatus }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
+          {status.upgradeRequired && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {t('modelServing.gateway.upgradeHint')}
+                </p>
+                <Button
+                  onClick={() => void handleUpgrade()}
+                  disabled={isUpgrading}
+                >
+                  {isUpgrading
+                    ? t('modelServing.gateway.upgrading')
+                    : t('modelServing.gateway.upgrade')}
+                </Button>
+              </div>
+              <GatewayRequirements status={status} />
+            </>
+          )}
           <div className="flex items-center gap-1">
             <code className="rounded bg-muted px-2 py-1 text-sm break-all">
               {address}
@@ -204,47 +240,7 @@ export function GatewayCard({ status }: { status: GatewayStatus }) {
               {t('modelServing.gateway.hubHint')}
             </p>
           </div>
-          <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
-            <p className="text-muted-foreground">
-              {t('modelServing.gateway.chartsHint')}
-            </p>
-            <ul className="space-y-1 text-xs">
-              {status.charts.map((chart) => (
-                <li
-                  key={chart.name}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  <span className="font-mono">{chart.name}</span>
-                  {chart.version ? (
-                    <>
-                      <Badge variant="outline">{chart.version}</Badge>
-                      <span className="font-mono text-muted-foreground">
-                        {chart.image}
-                      </span>
-                    </>
-                  ) : (
-                    <Badge variant="destructive">
-                      {t('modelServing.gateway.chartMissing')}
-                    </Badge>
-                  )}
-                </li>
-              ))}
-              {status.plugins.map((plugin) => (
-                <li
-                  key={plugin.name}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  <span className="font-mono">{plugin.name}</span>
-                  <Badge variant="outline">
-                    {t('modelServing.gateway.plugin')}
-                  </Badge>
-                  <span className="font-mono break-all text-muted-foreground">
-                    {plugin.url}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <GatewayRequirements status={status} />
           <Button
             type="submit"
             disabled={isInstalling || chartMissing || !nodeHost.trim()}
@@ -256,5 +252,49 @@ export function GatewayCard({ status }: { status: GatewayStatus }) {
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+function GatewayRequirements({ status }: { status: GatewayStatus }) {
+  const { t } = useTranslation()
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
+      <p className="text-muted-foreground">
+        {t('modelServing.gateway.chartsHint')}
+      </p>
+      <ul className="space-y-1 text-xs">
+        {status.charts.map((chart) => (
+          <li key={chart.name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono">{chart.name}</span>
+            {chart.version ? (
+              <>
+                <Badge variant="outline">{chart.version}</Badge>
+                {(chart.images ?? [chart.image]).map((image) => (
+                  <span
+                    key={image}
+                    className="font-mono break-all text-muted-foreground"
+                  >
+                    {image}
+                  </span>
+                ))}
+              </>
+            ) : (
+              <Badge variant="destructive">
+                {t('modelServing.gateway.chartMissing')}
+              </Badge>
+            )}
+          </li>
+        ))}
+        {status.plugins.map((plugin) => (
+          <li key={plugin.name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono">{plugin.name}</span>
+            <Badge variant="outline">{t('modelServing.gateway.plugin')}</Badge>
+            <span className="font-mono break-all text-muted-foreground">
+              {plugin.url}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

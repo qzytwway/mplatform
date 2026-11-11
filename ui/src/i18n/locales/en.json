@@ -464,7 +464,8 @@
     "gpuResources": "GPU Resources",
     "metrics": "Prometheus Metrics",
     "logs": "Logs",
-    "alerts": "Alerts"
+    "alerts": "Alerts",
+    "modelUsage": "Usage"
   },
   "overview": {
     "title": "Overview",
@@ -1792,11 +1793,15 @@
       "addressHint": "Published inference services are served at this address. Requests need a caller API key.",
       "sync": "Resync",
       "syncHint": "Re-applies all callers and published models to the gateway. Use it when a change reported a sync failure.",
+      "upgrade": "Upgrade",
+      "upgrading": "Upgrading...",
+      "upgradeHint": "Rate limits, quotas and usage statistics need components this gateway was installed without. Upgrade the gateway in place to turn them on.",
       "messages": {
         "installed": "Gateway installed",
         "uninstalled": "Gateway uninstalled",
         "synced": "Gateway resynced",
-        "uninstallNote": "Unpublish every inference service in this cluster first. Callers are kept."
+        "uninstallNote": "Unpublish every inference service in this cluster first. Callers are kept, but every caller's remaining quota is lost.",
+        "upgraded": "Gateway upgraded"
       },
       "usage": {
         "title": "Usage examples",
@@ -1824,11 +1829,42 @@
       "resetKeyDescription": "A new key is generated and the current key stops working immediately.",
       "newKeyTitle": "API key of {{name}}",
       "newKeyDescription": "Use it as Authorization: Bearer <key>. You can view it again from the callers table.",
+      "tokensPerMinute": "Tokens per minute",
+      "tokensPerMinuteHint": "The most tokens this caller may use per minute across all models. Leave blank or enter 0 for no limit.",
+      "quotaLimited": "Limit total quota",
+      "limitsUnavailableHint": "Rate limits and quotas take effect only after the gateway is installed and upgraded. Install or upgrade it first.",
+      "quotaLimitedHint": "Requests are rejected once the quota is used up. It never resets on its own; set or add to it from the callers table.",
+      "initialQuota": "Initial quota (tokens)",
+      "rateLimit": "Rate limit",
+      "perMinute": "{{tokens}} / min",
+      "remainingQuota": "Remaining quota",
+      "unlimited": "Unlimited",
+      "quotaUnknown": "The remaining quota could not be read.",
+      "adjustQuota": "Adjust Quota",
+      "adjustQuotaTitle": "Adjust the quota of {{name}}",
+      "currentQuota": "Remaining quota: {{remaining}} tokens",
+      "quotaSet": "Set to",
+      "quotaAdd": "Add",
+      "quotaTokens": "Tokens",
       "messages": {
         "created": "Caller added",
         "updated": "Caller updated",
-        "deleted": "Caller deleted"
+        "deleted": "Caller deleted",
+        "quotaAdjusted": "Quota updated. Remaining: {{remaining}} tokens"
       }
+    },
+    "usage": {
+      "title": "Usage",
+      "trend": "Tokens by caller",
+      "trendHint": "Input and output tokens per {{minutes}} min",
+      "trendHintSeconds": "Input and output tokens per {{seconds}} s",
+      "empty": "No usage in this time range",
+      "caller": "Caller",
+      "model": "Model",
+      "requests": "Requests",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "avgDuration": "Avg. duration"
     }
   }
 }

@@ -18,6 +18,17 @@ import (
 
 var ErrReleaseAlreadyInstalled = errors.New("already installed")
 
+// withoutValues is the release as the history records it: the platform sets
+// the values of these releases itself, and they may hold secrets.
+func withoutValues(rel *release.Release) *release.Release {
+	if rel == nil {
+		return nil
+	}
+	recorded := *rel
+	recorded.Config = nil
+	return &recorded
+}
+
 func ReleaseExists(cfg *action.Configuration, name string) (bool, error) {
 	if _, err := GetRelease(cfg, name); err != nil {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
@@ -56,7 +67,7 @@ func InstallPlatformRelease(ctx context.Context, cfg *action.Configuration, clus
 
 	var rel *release.Release
 	defer func() {
-		RecordReleaseHistory(clusterName, operatorID, "manual", "install", opts.ReleaseName, opts.Namespace, nil, rel, err == nil, err)
+		RecordReleaseHistory(clusterName, operatorID, "manual", "install", opts.ReleaseName, opts.Namespace, nil, withoutValues(rel), err == nil, err)
 	}()
 	rel, err = InstallRelease(ctx, cfg, loadedChart, values, installOpts)
 	if err != nil {
@@ -69,6 +80,28 @@ func InstallPlatformRelease(ctx context.Context, cfg *action.Configuration, clus
 	return err
 }
 
+// UpgradePlatformRelease upgrades a release to a chart and values with the
+// cluster's image registry, and records it in the release history.
+func UpgradePlatformRelease(ctx context.Context, cfg *action.Configuration, clusterName string, operatorID uint, name string, loadedChart *chart.Chart, values map[string]any, opts UpgradeReleaseOptions) (err error) {
+	imageRegistry, err := ClusterImageRegistry(clusterName)
+	if err != nil {
+		return err
+	}
+	current, err := GetRelease(cfg, name)
+	if err != nil {
+		return err
+	}
+	upgradeOpts := opts
+	upgradeOpts.ImageRegistry = imageRegistry
+
+	var rel *release.Release
+	defer func() {
+		RecordReleaseHistory(clusterName, operatorID, "manual", "upgrade", name, opts.Namespace, withoutValues(current), withoutValues(rel), err == nil, err)
+	}()
+	rel, err = UpgradeRelease(ctx, cfg, name, loadedChart, values, upgradeOpts)
+	return err
+}
+
 // UninstallPlatformRelease uninstalls a release and records it in the release
 // history.
 func UninstallPlatformRelease(cfg *action.Configuration, clusterName string, operatorID uint, name, namespace string, opts UninstallReleaseOptions) (err error) {
@@ -77,7 +110,7 @@ func UninstallPlatformRelease(cfg *action.Configuration, clusterName string, ope
 		return err
 	}
 	defer func() {
-		RecordReleaseHistory(clusterName, operatorID, "manual", "delete", name, namespace, current, nil, err == nil, err)
+		RecordReleaseHistory(clusterName, operatorID, "manual", "delete", name, namespace, withoutValues(current), nil, err == nil, err)
 	}()
 	return UninstallRelease(cfg, name, opts)
 }

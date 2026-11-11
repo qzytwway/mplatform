@@ -469,7 +469,8 @@
     "gpuResources": "GPU 资源",
     "metrics": "Prometheus 指标",
     "logs": "日志",
-    "alerts": "告警"
+    "alerts": "告警",
+    "modelUsage": "用量"
   },
   "overview": {
     "title": "概览",
@@ -1879,11 +1880,15 @@
       "addressHint": "已发布的推理服务通过该地址对外提供，请求需要携带调用方的 API Key。",
       "sync": "重新同步",
       "syncHint": "将所有调用方和已发布的模型重新应用到网关。当某次修改提示同步失败时使用。",
+      "upgrade": "升级网关",
+      "upgrading": "升级中...",
+      "upgradeHint": "限速、总额度和用量统计需要的组件在当前网关中尚未安装。原地升级网关后即可使用。",
       "messages": {
         "installed": "网关已安装",
         "uninstalled": "网关已卸载",
         "synced": "网关已重新同步",
-        "uninstallNote": "请先取消发布当前集群中的所有推理服务。调用方会保留。"
+        "uninstallNote": "请先取消发布当前集群中的所有推理服务。调用方会保留，但所有调用方的剩余额度会丢失。",
+        "upgraded": "网关已升级"
       },
       "usage": {
         "title": "调用示例",
@@ -1911,11 +1916,42 @@
       "resetKeyDescription": "将生成新的 Key，当前 Key 立即失效。",
       "newKeyTitle": "{{name}} 的 API Key",
       "newKeyDescription": "以 Authorization: Bearer <key> 的方式使用。之后仍可在调用方列表中查看。",
+      "tokensPerMinute": "每分钟 Token 上限",
+      "tokensPerMinuteHint": "该调用方每分钟最多可消耗的 Token 数，不区分模型。留空或填 0 表示不限。",
+      "quotaLimited": "限制总额度",
+      "limitsUnavailableHint": "限速和总额度需要网关已安装并升级后才能生效，请先安装或升级网关。",
+      "quotaLimitedHint": "额度用完后请求会被拒绝。额度不会自动重置，可在调用方列表中设置或追加。",
+      "initialQuota": "初始额度（Token）",
+      "rateLimit": "限速",
+      "perMinute": "{{tokens}} / 分钟",
+      "remainingQuota": "剩余额度",
+      "unlimited": "不限",
+      "quotaUnknown": "无法读取剩余额度。",
+      "adjustQuota": "调整额度",
+      "adjustQuotaTitle": "调整 {{name}} 的额度",
+      "currentQuota": "剩余额度：{{remaining}} Token",
+      "quotaSet": "设置为",
+      "quotaAdd": "追加",
+      "quotaTokens": "Token 数",
       "messages": {
         "created": "调用方已添加",
         "updated": "调用方已更新",
-        "deleted": "调用方已删除"
+        "deleted": "调用方已删除",
+        "quotaAdjusted": "额度已更新，剩余 {{remaining}} Token"
       }
+    },
+    "usage": {
+      "title": "用量",
+      "trend": "各调用方 Token 用量",
+      "trendHint": "每 {{minutes}} 分钟的输入与输出 Token 总数",
+      "trendHintSeconds": "每 {{seconds}} 秒的输入与输出 Token 总数",
+      "empty": "该时间范围内没有用量",
+      "caller": "调用方",
+      "model": "模型",
+      "requests": "请求数",
+      "inputTokens": "输入 Token",
+      "outputTokens": "输出 Token",
+      "avgDuration": "平均耗时"
     }
   }
 }

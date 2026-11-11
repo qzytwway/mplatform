@@ -7,6 +7,7 @@ import {
   IconActivity,
   IconBell,
   IconBox,
+  IconChartBar,
   IconChartLine,
   IconCpu,
   IconDatabase,
@@ -63,6 +64,11 @@ const MODEL_SERVING_ITEMS = [
     url: '/model-serving/gateway',
     titleKey: 'nav.gateway',
     Icon: IconRouteAltLeft,
+  },
+  {
+    url: '/model-serving/usage',
+    titleKey: 'nav.modelUsage',
+    Icon: IconChartBar,
   },
   {
     url: '/model-serving/models',

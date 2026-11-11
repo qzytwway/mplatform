@@ -9,10 +9,13 @@ export interface GatewayChart {
   name: string
   version?: string
   image?: string
+  images?: string[]
 }
 
 export interface GatewayStatus {
   installed: boolean
+  // Installed, but missing what rate limits, quotas and usage statistics need.
+  upgradeRequired: boolean
   gateway: {
     nodeHost: string
     nodePort: number
@@ -36,6 +39,9 @@ export interface ModelCaller {
   enabled: boolean
   allowAll: boolean
   models: string[]
+  // 0 means unlimited.
+  tokensPerMinute: number
+  quotaLimited: boolean
   createdAt: string
   updatedAt: string
 }
@@ -45,6 +51,9 @@ export interface CreateCallerRequest {
   description?: string
   allowAll: boolean
   models: string[]
+  tokensPerMinute: number
+  quotaLimited: boolean
+  quota?: number
 }
 
 export interface UpdateCallerRequest {
@@ -52,7 +61,21 @@ export interface UpdateCallerRequest {
   enabled: boolean
   allowAll: boolean
   models: string[]
+  tokensPerMinute: number
+  quotaLimited: boolean
 }
+
+export interface CallerQuotas {
+  items: { id: number; remaining: number }[]
+  error?: string
+}
+
+export interface AdjustQuotaRequest {
+  action: 'set' | 'add'
+  tokens: number
+}
+
+const QUOTAS_REFRESH_MS = 30000
 
 export function useGatewayStatus() {
   const { currentCluster } = useCluster()
@@ -73,6 +96,13 @@ export function installGateway(
 
 export function uninstallGateway(cluster: string) {
   return apiClient.delete<unknown>(clusterPath(cluster, '/gateway'))
+}
+
+export function upgradeGateway(cluster: string) {
+  return apiClient.post<{ message: string }>(
+    clusterPath(cluster, '/gateway/upgrade'),
+    {}
+  )
 }
 
 export function syncGateway(cluster: string) {
@@ -118,6 +148,31 @@ export function updateModelCaller(
 export function deleteModelCaller(cluster: string, id: number) {
   return apiClient.delete<{ message: string }>(
     clusterPath(cluster, `/callers/${id}`)
+  )
+}
+
+// Shares the callers key prefix, so every callers refresh also refreshes quotas.
+export function useCallerQuotas() {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['model-callers', currentCluster, 'quotas'],
+    queryFn: () =>
+      apiClient.get<CallerQuotas>(
+        clusterPath(currentCluster, '/callers/quotas')
+      ),
+    enabled: !!currentCluster,
+    refetchInterval: QUOTAS_REFRESH_MS,
+  })
+}
+
+export function adjustCallerQuota(
+  cluster: string,
+  id: number,
+  request: AdjustQuotaRequest
+) {
+  return apiClient.post<{ remaining: number }>(
+    clusterPath(cluster, `/callers/${id}/quota`),
+    request
   )
 }
 

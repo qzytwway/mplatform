@@ -13,6 +13,13 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/utils"
 	"gorm.io/gorm"
+	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 )
@@ -25,8 +32,19 @@ const (
 	gatewayNamespace   = "higress-system"
 	defaultGatewayPort = 30080
 
+	redisClaimName                = "redis-stack-server"
+	defaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
+
 	gatewaySyncTimeout  = 30 * time.Second
 	gatewaySyncInterval = 2 * time.Second
+
+	podMonitorCRD = "podmonitors.monitoring.coreos.com"
+)
+
+var (
+	prometheusListGVK = schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "PrometheusList"}
+
+	errNoDefaultStorageClass = errors.New("the cluster has no default StorageClass, which the gateway's Redis needs to keep quotas")
 )
 
 type installGatewayRequest struct {
@@ -35,24 +53,88 @@ type installGatewayRequest struct {
 	Hub      string `json:"hub"`
 }
 
-// gatewayValues exposes the gateway's HTTP port on a fixed NodePort and, when
-// hub is set, pulls the Higress images from it.
-func gatewayValues(nodePort int, hub string) map[string]any {
-	values := map[string]any{
-		"gateway": map[string]any{
-			"service": map[string]any{
-				"type": "NodePort",
-				"ports": []any{
-					map[string]any{"name": "http2", "port": 80, "protocol": "TCP", "targetPort": 80, "nodePort": nodePort},
-					map[string]any{"name": "https", "port": 443, "protocol": "TCP", "targetPort": 443},
-				},
+// gatewayValues exposes the gateway's HTTP port on a fixed NodePort, adds the
+// chart's Redis with a persistent volume for rate limits and quotas and, when
+// hub is set, pulls the Higress images from it. metrics is nil in a cluster without PodMonitors.
+func gatewayValues(gateway *model.ModelGateway, metrics map[string]any, storageClass string) map[string]any {
+	global := map[string]any{
+		"enableRedis": true,
+		// The plugins reach Redis by its Service name, which the gateway
+		// only resolves when it is given every Service of the cluster.
+		"onlyPushRouteCluster": false,
+	}
+	if gateway.Hub != "" {
+		global["hub"] = gateway.Hub
+	}
+	proxy := map[string]any{
+		"service": map[string]any{
+			"type": "NodePort",
+			"ports": []any{
+				map[string]any{"name": "http2", "port": 80, "protocol": "TCP", "targetPort": 80, "nodePort": gateway.NodePort},
+				map[string]any{"name": "https", "port": 443, "protocol": "TCP", "targetPort": 443},
 			},
 		},
 	}
-	if hub != "" {
-		values["global"] = map[string]any{"hub": hub}
+	if metrics != nil {
+		proxy["metrics"] = metrics
 	}
-	return values
+	// Quotas only live in Redis, so they have to survive a Redis restart.
+	redis := map[string]any{
+		"password":    string(gateway.RedisPassword),
+		"persistence": map[string]any{"enabled": true, "storageClass": storageClass},
+		"aof":         map[string]any{"enabled": true},
+	}
+	return map[string]any{"global": global, "gateway": proxy, "redis": map[string]any{"redis": redis}}
+}
+
+// redisStorageClass names the StorageClass of the Redis volume. Left to the
+// chart, the claim is rendered with an empty class, which a later upgrade
+// cannot apply to the bound claim.
+func redisStorageClass(ctx context.Context, cs *cluster.ClientSet) (string, error) {
+	var claim corev1.PersistentVolumeClaim
+	err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: gatewayNamespace, Name: redisClaimName}, &claim)
+	if err == nil && claim.Spec.StorageClassName != nil {
+		return *claim.Spec.StorageClassName, nil
+	} else if err != nil && !apierrors.IsNotFound(err) {
+		return "", err
+	}
+	var classes storagev1.StorageClassList
+	if err := cs.K8sClient.List(ctx, &classes); err != nil {
+		return "", err
+	}
+	for _, class := range classes.Items {
+		if class.Annotations[defaultStorageClassAnnotation] == "true" {
+			return class.Name, nil
+		}
+	}
+	return "", errNoDefaultStorageClass
+}
+
+// gatewayMetricsValues has the chart create a PodMonitor for the gateway,
+// labelled the way the cluster's Prometheus selects them. It returns nil when
+// the cluster has no PodMonitor CRD, which the chart would fail on.
+func gatewayMetricsValues(ctx context.Context, cs *cluster.ClientSet) (map[string]any, error) {
+	installed, err := crdInstalled(ctx, cs, podMonitorCRD)
+	if err != nil || !installed {
+		return nil, err
+	}
+	metrics := map[string]any{"enabled": true}
+	prometheuses := &unstructured.UnstructuredList{}
+	prometheuses.SetGroupVersionKind(prometheusListGVK)
+	if err := cs.K8sClient.List(ctx, prometheuses); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return metrics, nil
+		}
+		return nil, err
+	}
+	for _, prometheus := range prometheuses.Items {
+		labels, _, _ := unstructured.NestedMap(prometheus.Object, "spec", "podMonitorSelector", "matchLabels")
+		if len(labels) > 0 {
+			metrics["podMonitorSelector"] = labels
+			break
+		}
+	}
+	return metrics, nil
 }
 
 func (h *Handler) InstallGateway(c *gin.Context) {
@@ -90,6 +172,18 @@ func (h *Handler) InstallGateway(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	adminKey, err := newAPIKey()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	redisPassword, err := newAPIKey()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	gateway.QuotaAdminKey = model.SecretString(adminKey)
+	gateway.RedisPassword = model.SecretString(redisPassword)
 	if status, err := installGatewayRelease(c, cs, &gateway); err != nil {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
@@ -128,6 +222,16 @@ func installGatewayRelease(c *gin.Context, cs *cluster.ClientSet, gateway *model
 	} else if err != nil {
 		return http.StatusInternalServerError, err
 	}
+	metrics, err := gatewayMetricsValues(c.Request.Context(), cs)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	storageClass, err := redisStorageClass(c.Request.Context(), cs)
+	if errors.Is(err, errNoDefaultStorageClass) {
+		return http.StatusBadRequest, err
+	} else if err != nil {
+		return http.StatusInternalServerError, err
+	}
 	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, gatewayNamespace)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -137,7 +241,7 @@ func installGatewayRelease(c *gin.Context, cs *cluster.ClientSet, gateway *model
 	if err := helmutil.ClaimReleaseName(cfg, cs.Name, operatorID, gatewayReleaseName, gatewayNamespace, uninstallOpts); err != nil {
 		return installErrorStatus(err), err
 	}
-	err = helmutil.InstallPlatformRelease(c.Request.Context(), cfg, cs.Name, operatorID, loadedChart, gatewayValues(gateway.NodePort, gateway.Hub), helmutil.InstallReleaseOptions{
+	err = helmutil.InstallPlatformRelease(c.Request.Context(), cfg, cs.Name, operatorID, loadedChart, gatewayValues(gateway, metrics, storageClass), helmutil.InstallReleaseOptions{
 		ReleaseName:     gatewayReleaseName,
 		Namespace:       gatewayNamespace,
 		Timeout:         lwsActionTimeout,
@@ -177,7 +281,7 @@ func (h *Handler) UninstallGateway(c *gin.Context) {
 		return
 	}
 	// The plugins hold the callers' keys and are not part of the release.
-	err = deleteWasmPlugins(ctx, cs)
+	err = deleteGatewayObjects(ctx, cs)
 	released := false
 	if err == nil {
 		released, err = helmutil.ReleaseExists(cfg, gatewayReleaseName)

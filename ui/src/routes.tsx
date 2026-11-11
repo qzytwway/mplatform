@@ -14,6 +14,7 @@ import { GPUsPage } from './pages/model-serving/gpus-page'
 import { ModelsPage } from './pages/model-serving/models-page'
 import { ServiceDetailPage } from './pages/model-serving/service-detail-page'
 import { ServicesPage } from './pages/model-serving/services-page'
+import { UsagePage } from './pages/model-serving/usage-page'
 import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
 import { MetricsPage } from './pages/observability/metrics-page'
@@ -93,6 +94,10 @@ export const router = createBrowserRouter(
         {
           path: 'model-serving/gateway',
           element: <GatewayPage />,
+        },
+        {
+          path: 'model-serving/usage',
+          element: <UsagePage />,
         },
         {
           path: 'model-serving/models',

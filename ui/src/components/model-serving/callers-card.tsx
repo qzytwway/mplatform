@@ -1,15 +1,12 @@
 import { useState } from 'react'
 import {
-  IconCopy,
+  IconCoins,
   IconEdit,
-  IconEye,
-  IconEyeOff,
   IconPlus,
   IconRefresh,
   IconTrash,
 } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -18,24 +15,24 @@ import {
   getModelCallerKey,
   resetModelCallerKey,
   updateModelCaller,
+  useCallerQuotas,
+  useGatewayStatus,
   useModelCallers,
   type ModelCaller,
 } from '@/lib/api/model-gateway'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
+import { callerColumns } from './caller-columns'
 import { CallerDialog } from './caller-dialog'
 import { CallerKeyDialog } from './caller-key-dialog'
+import { CallerQuotaDialog } from './caller-quota-dialog'
 import { ConfirmDialog } from './confirm-dialog'
-
-const MASKED_KEY = '•'.repeat(18)
 
 export function CallersCard({
   gatewayInstalled,
@@ -46,12 +43,19 @@ export function CallersCard({
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
   const { data, isLoading, error } = useModelCallers()
+  const quotas = useCallerQuotas()
+  const { data: gateway } = useGatewayStatus()
+  const limitsAvailable = !!gateway?.installed && !gateway.upgradeRequired
+  const remainingQuotas = Object.fromEntries(
+    (quotas.data?.items ?? []).map((item) => [item.id, item.remaining])
+  )
   const [showDialog, setShowDialog] = useState(false)
   const [editingCaller, setEditingCaller] = useState<ModelCaller | null>(null)
   const [deletingCaller, setDeletingCaller] = useState<ModelCaller | null>(null)
   const [resettingCaller, setResettingCaller] = useState<ModelCaller | null>(
     null
   )
+  const [quotaCaller, setQuotaCaller] = useState<ModelCaller | null>(null)
   const [issuedKey, setIssuedKey] = useState<{
     name: string
     apiKey: string
@@ -60,6 +64,7 @@ export function CallersCard({
   const [revealedKeys, setRevealedKeys] = useState<Record<number, string>>({})
   const [pendingID, setPendingID] = useState<number | null>(null)
 
+  // Quotas share this key prefix, so they are refreshed too.
   const refreshCallers = () =>
     queryClient.invalidateQueries({ queryKey: ['model-callers'] })
 
@@ -103,6 +108,8 @@ export function CallersCard({
         enabled,
         allowAll: caller.allowAll,
         models: caller.models,
+        tokensPerMinute: caller.tokensPerMinute,
+        quotaLimited: caller.quotaLimited,
       })
     } catch (err) {
       toast.error(translateError(err, t))
@@ -159,98 +166,20 @@ export function CallersCard({
     }
   }
 
-  const columns: ColumnDef<ModelCaller>[] = [
-    {
-      id: 'name',
-      header: t('common.fields.name'),
-      cell: ({ row: { original: caller } }) => (
-        <div>
-          <span className="font-medium">{caller.name}</span>
-          {caller.description && (
-            <p className="text-xs text-muted-foreground">
-              {caller.description}
-            </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: 'models',
-      header: t('modelServing.callers.models'),
-      cell: ({ row: { original: caller } }) =>
-        caller.allowAll ? (
-          <Badge variant="secondary">
-            {t('modelServing.callers.allModels')}
-          </Badge>
-        ) : caller.models.length === 0 ? (
-          <span className="text-muted-foreground">-</span>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {caller.models.map((model) => (
-              <Badge key={model} variant="outline" className="font-mono">
-                {model}
-              </Badge>
-            ))}
-          </div>
-        ),
-    },
-    {
-      id: 'key',
-      header: 'API Key',
-      cell: ({ row: { original: caller } }) => (
-        <div className="flex items-center gap-1">
-          <code className="rounded bg-muted px-2 py-1 text-xs break-all">
-            {revealedKeys[caller.id] ?? MASKED_KEY}
-          </code>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={
-              revealedKeys[caller.id]
-                ? t('common.actions.hide')
-                : t('common.actions.show')
-            }
-            onClick={() => void toggleKey(caller)}
-          >
-            {revealedKeys[caller.id] ? (
-              <IconEyeOff className="h-4 w-4" />
-            ) : (
-              <IconEye className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={t('common.actions.copy')}
-            onClick={() => void copyKey(caller)}
-          >
-            <IconCopy className="h-4 w-4" />
-          </Button>
-        </div>
-      ),
-    },
-    {
-      id: 'enabled',
-      header: t('common.fields.status'),
-      cell: ({ row: { original: caller } }) => (
-        <Switch
-          checked={caller.enabled}
-          onCheckedChange={(checked) => void toggleEnabled(caller, checked)}
-          disabled={pendingID !== null}
-          aria-label={t('modelServing.callers.toggle', { name: caller.name })}
-        />
-      ),
-    },
-    {
-      id: 'createdAt',
-      header: t('common.fields.createdAt'),
-      cell: ({ row: { original: caller } }) => (
-        <span className="text-sm text-muted-foreground">
-          {new Date(caller.createdAt).toLocaleString()}
-        </span>
-      ),
-    },
-  ]
+  const columns = callerColumns({
+    t,
+    revealedKeys,
+    onToggleKey: (caller) => void toggleKey(caller),
+    onCopyKey: (caller) => void copyKey(caller),
+    onToggleEnabled: (caller, enabled) => void toggleEnabled(caller, enabled),
+    isPending: pendingID !== null,
+    remainingQuotas,
+    quotaHint:
+      quotas.data?.error ||
+      (quotas.error
+        ? translateError(quotas.error, t)
+        : t('modelServing.callers.quotaUnknown')),
+  })
 
   const actions: Action<ModelCaller>[] = [
     {
@@ -261,6 +190,16 @@ export function CallersCard({
         </>
       ),
       onClick: (caller) => setResettingCaller(caller),
+    },
+    {
+      label: (
+        <>
+          <IconCoins className="h-4 w-4" />
+          {t('modelServing.callers.adjustQuota')}
+        </>
+      ),
+      onClick: (caller) => setQuotaCaller(caller),
+      shouldDisable: (caller) => !caller.quotaLimited || !limitsAvailable,
     },
     {
       label: (
@@ -339,6 +278,11 @@ export function CallersCard({
       <CallerKeyDialog
         issuedKey={issuedKey}
         onClose={() => setIssuedKey(null)}
+      />
+      <CallerQuotaDialog
+        caller={quotaCaller}
+        remaining={quotaCaller ? remainingQuotas[quotaCaller.id] : undefined}
+        onClose={() => setQuotaCaller(null)}
       />
       <ConfirmDialog
         open={!!resettingCaller}

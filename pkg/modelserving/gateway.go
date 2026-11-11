@@ -11,6 +11,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/klog/v2"
 )
 
 type gatewayAddress struct {
@@ -30,8 +31,8 @@ func toGatewayAddress(gateway *model.ModelGateway) *gatewayAddress {
 }
 
 // gatewayChartStatus lists the images of the gateway, controller and pilot,
-// all of which the chart pulls from <hub>/higress at its app version. hub
-// overrides the chart's own when set.
+// all of which the chart pulls from <hub>/higress at its app version, and
+// that of its Redis. hub overrides the chart's own when set.
 func gatewayChartStatus(hub string) (chartStatus, error) {
 	status := chartStatus{Name: gatewayChartName}
 	loadedChart, err := helmutil.LoadLocalChart(gatewayChartName)
@@ -51,6 +52,11 @@ func gatewayChartStatus(hub string) (chartStatus, error) {
 		status.Images = append(status.Images, hub+"/higress/"+image+":"+loadedChart.Metadata.AppVersion)
 	}
 	status.Image = status.Images[0]
+	redisImage, _, _ := unstructured.NestedString(loadedChart.Values, "redis", "redis", "image")
+	redisTag, _, _ := unstructured.NestedString(loadedChart.Values, "redis", "redis", "tag")
+	if redisImage != "" && redisTag != "" {
+		status.Images = append(status.Images, hub+"/higress/"+redisImage+":"+redisTag)
+	}
 	return status, nil
 }
 
@@ -62,11 +68,18 @@ func (h *Handler) GetGateway(c *gin.Context) {
 	}
 	var address *gatewayAddress
 	hub := ""
+	upgradeRequired := false
 	gateway, err := loadGateway(cs.Name)
 	if err == nil {
 		address = toGatewayAddress(gateway)
 		hub = gateway.Hub
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		// The status still has to show when this cannot be worked out.
+		var detectErr error
+		if upgradeRequired, detectErr = gatewayUpgradeRequired(c.Request.Context(), cs, gateway); detectErr != nil {
+			klog.Warningf("Failed to check whether the model gateway in cluster %s needs an upgrade: %v", cs.Name, detectErr)
+		}
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -85,5 +98,7 @@ func (h *Handler) GetGateway(c *gin.Context) {
 		"gateway":   address,
 		"charts":    []chartStatus{chart},
 		"plugins":   plugins,
+
+		"upgradeRequired": upgradeRequired,
 	})
 }
