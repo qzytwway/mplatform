@@ -19,6 +19,8 @@ import (
 	"helm.sh/helm/v4/pkg/action"
 	releaseutil "helm.sh/helm/v4/pkg/release/v1/util"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
 
@@ -105,6 +107,36 @@ func loadDashboards() (*chartDashboards, error) {
 	return dashboards, nil
 }
 
+// clusterDashboards reads the dashboards that charts installed in the cluster
+// keep in ConfigMaps for Grafana's sidecar, such as the GPU Operator's. Invalid
+// ones are skipped, since anyone who can create a ConfigMap can add one.
+func clusterDashboards(ctx context.Context, cs *cluster.ClientSet) ([]dashboardSummary, map[string]json.RawMessage, error) {
+	var configMaps corev1.ConfigMapList
+	if err := cs.K8sClient.List(ctx, &configMaps, client.HasLabels{dashboardLabel}); err != nil {
+		return nil, nil, fmt.Errorf("failed to list the dashboard ConfigMaps of cluster %s: %w", cs.Name, err)
+	}
+	var summaries []dashboardSummary
+	definitions := map[string]json.RawMessage{}
+	for _, configMap := range configMaps.Items {
+		for key, definition := range configMap.Data {
+			if !strings.HasSuffix(key, ".json") {
+				continue
+			}
+			var summary dashboardSummary
+			if err := json.Unmarshal([]byte(definition), &summary); err != nil || summary.UID == "" {
+				klog.Warningf("Skipping %s of ConfigMap %s/%s in cluster %s: not a dashboard with a uid", key, configMap.Namespace, configMap.Name, cs.Name)
+				continue
+			}
+			if _, ok := definitions[summary.UID]; ok {
+				continue
+			}
+			summaries = append(summaries, summary)
+			definitions[summary.UID] = json.RawMessage(definition)
+		}
+	}
+	return summaries, definitions, nil
+}
+
 // canReadDashboards requires the grant that querying Prometheus needs, since
 // the dashboards are only shown with query results.
 func canReadDashboards(c *gin.Context) bool {
@@ -133,9 +165,25 @@ func ListDashboards(c *gin.Context) {
 		c.JSON(dashboardErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
+	summaries := append([]dashboardSummary{}, dashboards.summaries...)
+	cs := c.MustGet("cluster").(*cluster.ClientSet)
+	installed, _, err := clusterDashboards(c.Request.Context(), cs)
+	if err != nil {
+		// The chart's dashboards still work where the platform cannot list
+		// ConfigMaps across namespaces.
+		klog.Warningf("Listing only the %s dashboards: %v", chartName, err)
+	}
+	for _, summary := range installed {
+		if _, ok := dashboards.definitions[summary.UID]; !ok {
+			summaries = append(summaries, summary)
+		}
+	}
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Title < summaries[j].Title
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"chart":      chartStatus{Name: chartName, Version: dashboards.version},
-		"dashboards": dashboards.summaries,
+		"dashboards": summaries,
 	})
 }
 
@@ -149,6 +197,15 @@ func GetDashboard(c *gin.Context) {
 		return
 	}
 	definition, ok := dashboards.definitions[c.Param("uid")]
+	if !ok {
+		cs := c.MustGet("cluster").(*cluster.ClientSet)
+		_, installed, err := clusterDashboards(c.Request.Context(), cs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		definition, ok = installed[c.Param("uid")]
+	}
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "dashboard not found"})
 		return

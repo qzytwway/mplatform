@@ -1,5 +1,5 @@
 # Makefile for MPlatform project
-.PHONY: help dev build clean test docker-build docker-run frontend backend install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed
+.PHONY: help dev build clean test docker-build docker-run frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed
 
 # Variables
 BINARY_NAME=mplatform
@@ -106,6 +106,9 @@ $(BINARY_NAME): main.go pkg/**/*.go go.mod static *.go **/*.go
 	CGO_ENABLED=0 go build -trimpath $(LDFLAGS) -o $(BINARY_NAME) .
 
 # Production targets
+gpu-operator-chart: ## Build the customized GPU Operator chart into chart-packages
+	./scripts/build-gpu-operator-chart.sh
+
 run: backend ## Run the built application
 	@echo "🚀 Starting $(BINARY_NAME) server..."
 	./$(BINARY_NAME)

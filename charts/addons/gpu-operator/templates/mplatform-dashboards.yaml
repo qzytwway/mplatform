@@ -1,0 +1,11 @@
+{{- /* Added by MPlatform: the GPU dashboards, labeled the way Grafana's
+dashboard sidecar and MPlatform's metrics page find dashboards. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dashboards
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+{{ (.Files.Glob "dashboards/*.json").AsConfig | indent 2 }}
