@@ -2280,7 +2280,6 @@
       },
       "modeBlockers": {
         "pdNotInstalled": "未安装 DisaggregatedSet",
-        "pdRuntime": "需要 SGLang 运行时",
         "chatOnly": "需要对话模型"
       },
       "groups": "组数",
@@ -2289,7 +2288,10 @@
       "prefillReplicas": "Prefill 副本数",
       "decodeReplicas": "Decode 副本数",
       "routerImage": "路由镜像",
-      "routerImageHint": "留空则使用服务镜像，使路由与其转发的推理引擎版本一致。镜像需包含 sglang_router。",
+      "routerImageHints": {
+        "sglang": "留空则使用服务镜像，使路由与其转发的推理引擎版本一致。镜像需包含 sglang_router。",
+        "vllm": "留空则使用 {{image}}；vLLM 镜像不含路由。镜像需包含 vllm-router。"
+      },
       "routerReplicas": "路由副本数",
       "routerReplicasHint": "副本尽量分散到不同节点，单个节点故障时路由仍可提供服务。",
       "routerPolicy": "路由策略",
@@ -2314,6 +2316,7 @@
       "roleEnvHint": "每行一个 KEY=VALUE，追加在服务级环境变量之后；与服务级同名的变量以这里为准。",
       "inheritService": "沿用服务设置",
       "nodesPerReplica": "每副本节点数",
+      "nodesPerReplicaVLLMHint": "vLLM 下固定为 1。其 NIXL 连接器不支持混合 KV 缓存的模型跨节点流水线并行，其它模型也未经验证。",
       "extraArgsHintPD": "同时追加到 Prefill 和 Decode 的启动命令末尾；各角色的额外参数排在后面，可覆盖这里的设置。",
       "transferBackend": "KV 传输方式",
       "transferBackends": {
@@ -2326,6 +2329,8 @@
         "mooncake-tcp": "不需要 RDMA，任何网络都可用，但传输较慢。",
         "nixl": "需要镜像内置 NIXL，由 UCX 按网络情况选择 RDMA 或 TCP。"
       },
+      "transferBackendHintVLLM": "vLLM 使用其 NIXL 连接器传输 KV Cache，这是 vllm-router 对自动发现的 Pod 唯一支持的方式。官方 vLLM 镜像已内置 NIXL，由 UCX 按网络情况选择 RDMA 或 TCP。",
+      "ucxTCPHint": "未配置 RDMA 网络时 UCX 走 TCP。可在环境变量中加入 UCX_TLS=tcp,cuda_copy，并调大 UCX_TCP_TX_SEG_SIZE 和 UCX_TCP_RX_SEG_SIZE（例如 256k）以加快传输。",
       "ibDevices": "RDMA 网卡",
       "ibDevicesHint": "可选，逗号分隔，例如 mlx5_0,mlx5_1。留空则自动检测。",
       "rdma": "RDMA 网络",

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import type {
   DeploymentMode,
+  InferenceRuntime,
   RouterPolicy,
   TransferBackend,
 } from '@/lib/api/model-serving'
@@ -26,11 +27,15 @@ import { Textarea } from '@/components/ui/textarea'
 
 import { DEPLOYMENT_MODES } from './service-modes'
 
-const TRANSFER_BACKENDS: TransferBackend[] = [
-  'mooncake',
-  'mooncake-tcp',
-  'nixl',
-]
+// vllm-router finds the Mooncake bootstrap servers only of prefill servers
+// it is given at startup, not of the pods it discovers, so vLLM uses NIXL.
+const TRANSFER_BACKENDS: Record<InferenceRuntime, TransferBackend[]> = {
+  vllm: ['nixl'],
+  sglang: ['mooncake', 'mooncake-tcp', 'nixl'],
+}
+
+// The backend's default for vLLM, whose images do not include the router.
+const VLLM_ROUTER_IMAGE = 'vllm/vllm-router:v0.1.17'
 
 // Radix Select items cannot have an empty value; default leaves --policy out.
 export type RouterPolicyChoice = RouterPolicy | 'default'
@@ -44,6 +49,32 @@ const ROUTER_POLICIES: RouterPolicyChoice[] = [
 ]
 
 type PDRole = 'prefill' | 'decode'
+
+const ROLE_PLACEHOLDERS: Record<
+  InferenceRuntime,
+  Record<PDRole, { extraArgs: string; env: string }>
+> = {
+  vllm: {
+    prefill: {
+      extraArgs: '--max-num-batched-tokens 16384',
+      env: 'UCX_NET_DEVICES=mlx5_0:1',
+    },
+    decode: {
+      extraArgs: '--max-num-seqs 128',
+      env: 'UCX_NET_DEVICES=mlx5_0:1',
+    },
+  },
+  sglang: {
+    prefill: {
+      extraArgs: '--chunked-prefill-size 16384',
+      env: 'SGLANG_DISAGGREGATION_THREAD_POOL_SIZE=4',
+    },
+    decode: {
+      extraArgs: '--max-running-requests 128',
+      env: 'SGLANG_DISAGGREGATION_QUEUE_SIZE=4',
+    },
+  },
+}
 
 // image, cpu and memory are empty to keep the service's; env holds one
 // KEY=VALUE per line.
@@ -76,6 +107,7 @@ interface ServiceModeFieldsProps {
   blockers: Record<DeploymentMode, string | undefined>
   values: ServiceModeValues
   onValuesChange: (values: ServiceModeValues) => void
+  runtime: InferenceRuntime
   // Labels the per-pod GPU count of PD roles, which follows the GPU type.
   gpuCountLabel: string
   // The service image, which PD roles use unless they set their own.
@@ -90,6 +122,7 @@ export function ServiceModeFields({
   blockers,
   values,
   onValuesChange,
+  runtime,
   gpuCountLabel,
   image,
   rdmaEnabled,
@@ -128,6 +161,7 @@ export function ServiceModeFields({
         <PDFields
           values={values}
           update={update}
+          runtime={runtime}
           gpuCountLabel={gpuCountLabel}
           image={image}
           rdmaEnabled={rdmaEnabled}
@@ -173,6 +207,7 @@ export function ServiceModeFields({
 interface PDFieldsProps {
   values: ServiceModeValues
   update: (patch: Partial<ServiceModeValues>) => void
+  runtime: InferenceRuntime
   gpuCountLabel: string
   image: string
   rdmaEnabled: boolean
@@ -181,11 +216,13 @@ interface PDFieldsProps {
 function PDFields({
   values,
   update,
+  runtime,
   gpuCountLabel,
   image,
   rdmaEnabled,
 }: PDFieldsProps) {
   const { t } = useTranslation()
+  const isVLLM = runtime === 'vllm'
   // The router's default policy is cache_aware.
   const cacheAware =
     values.routerPolicy === 'cache_aware' || values.routerPolicy === 'default'
@@ -202,10 +239,12 @@ function PDFields({
             id="inference-router-image"
             value={values.routerImage}
             onChange={(event) => update({ routerImage: event.target.value })}
-            placeholder={image}
+            placeholder={isVLLM ? VLLM_ROUTER_IMAGE : image}
           />
           <p className="text-xs text-muted-foreground">
-            {t('modelServing.services.routerImageHint')}
+            {t(`modelServing.services.routerImageHints.${runtime}`, {
+              image: VLLM_ROUTER_IMAGE,
+            })}
           </p>
         </div>
         <div className="space-y-2">
@@ -260,7 +299,10 @@ function PDFields({
           <Label htmlFor="inference-transfer-backend">
             {t('modelServing.services.transferBackend')}
           </Label>
+          {/* Remounts with the runtime's options: in a form, Radix empties a
+              select whose value and options change together. */}
           <Select
+            key={runtime}
             value={values.transferBackend}
             onValueChange={(value) =>
               update({ transferBackend: value as TransferBackend })
@@ -270,7 +312,7 @@ function PDFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {TRANSFER_BACKENDS.map((item) => (
+              {TRANSFER_BACKENDS[runtime].map((item) => (
                 <SelectItem key={item} value={item}>
                   {t(`modelServing.services.transferBackends.${item}`)}
                 </SelectItem>
@@ -278,13 +320,20 @@ function PDFields({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {t(
-              `modelServing.services.transferBackendHints.${values.transferBackend}`
-            )}
+            {isVLLM
+              ? t('modelServing.services.transferBackendHintVLLM')
+              : t(
+                  `modelServing.services.transferBackendHints.${values.transferBackend}`
+                )}
           </p>
           {values.transferBackend === 'mooncake' && !rdmaEnabled && (
             <p className="text-xs text-destructive">
               {t('modelServing.services.transferBackendNeedsRDMA')}
+            </p>
+          )}
+          {isVLLM && !rdmaEnabled && (
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.ucxTCPHint')}
             </p>
           )}
         </div>
@@ -319,6 +368,7 @@ function PDFields({
           onChange={(patch) =>
             update({ [role]: { ...values[role], ...patch } })
           }
+          runtime={runtime}
           gpuCountLabel={gpuCountLabel}
           image={image}
         />
@@ -331,6 +381,7 @@ interface PDRoleFieldsProps {
   role: PDRole
   values: PDRoleValues
   onChange: (patch: Partial<PDRoleValues>) => void
+  runtime: InferenceRuntime
   gpuCountLabel: string
   image: string
 }
@@ -339,11 +390,15 @@ function PDRoleFields({
   role,
   values,
   onChange,
+  runtime,
   gpuCountLabel,
   image,
 }: PDRoleFieldsProps) {
   const { t } = useTranslation()
   const id = (field: string) => `inference-${role}-${field}`
+  const placeholders = ROLE_PLACEHOLDERS[runtime][role]
+  // The create dialog sets one node per replica when it switches to vLLM.
+  const singleNode = runtime === 'vllm'
   // Starts open when the role overrides anything, so it is not hidden.
   const [advancedOpen, setAdvancedOpen] = useState(
     () => !!(values.image || values.cpu || values.memory || values.env)
@@ -374,8 +429,14 @@ function PDRoleFields({
             min={1}
             value={values.groupSize}
             onChange={(event) => onChange({ groupSize: event.target.value })}
+            disabled={singleNode}
             required
           />
+          {singleNode && (
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.nodesPerReplicaVLLMHint')}
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor={id('gpu-count')}>{gpuCountLabel}</Label>
@@ -397,11 +458,7 @@ function PDRoleFields({
           id={id('extra-args')}
           value={values.extraArgs}
           onChange={(event) => onChange({ extraArgs: event.target.value })}
-          placeholder={
-            role === 'prefill'
-              ? '--chunked-prefill-size 16384'
-              : '--max-running-requests 128'
-          }
+          placeholder={placeholders.extraArgs}
           className="font-mono"
         />
       </div>
@@ -460,11 +517,7 @@ function PDRoleFields({
               id={id('env')}
               value={values.env}
               onChange={(event) => onChange({ env: event.target.value })}
-              placeholder={
-                role === 'prefill'
-                  ? 'SGLANG_DISAGGREGATION_THREAD_POOL_SIZE=4'
-                  : 'SGLANG_DISAGGREGATION_QUEUE_SIZE=4'
-              }
+              placeholder={placeholders.env}
               className="font-mono"
               rows={2}
             />

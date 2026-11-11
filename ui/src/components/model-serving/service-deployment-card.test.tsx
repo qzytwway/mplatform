@@ -70,6 +70,51 @@ describe('ServiceDeploymentCard', () => {
     expect(screen.queryByText('IPC_LOCK')).not.toBeInTheDocument()
   })
 
+  it('shows a vLLM PD service over NIXL', () => {
+    const vllm: PodConfig = {
+      ...POD,
+      image: 'vllm/vllm-openai:v0.33.0',
+      command: ['vllm', 'serve'],
+      args: [
+        '/models/qwen',
+        '--kv-transfer-config',
+        '{"kv_connector":"NixlConnector","kv_role":"kv_producer"}',
+      ],
+      env: [
+        {
+          name: 'VLLM_NIXL_SIDE_CHANNEL_HOST',
+          value: '',
+          valueFrom: 'fieldRef: status.podIP',
+        },
+      ],
+      hostNetwork: false,
+      privileged: false,
+    }
+    const { container } = render(
+      <ServiceDeploymentCard
+        config={{
+          rdma: 'none',
+          transferBackend: 'nixl',
+          ibDevices: '',
+          roles: [{ name: 'prefill', replicas: 1, groupSize: 1, pods: [vllm] }],
+        }}
+        mode="pd"
+      />
+    )
+
+    expect(
+      screen.getByText('modelServing.services.transferBackends.nixl')
+    ).toBeInTheDocument()
+    const [command, env] = container.querySelectorAll('pre')
+    expect(command).toHaveTextContent(
+      'vllm serve /models/qwen \\ --kv-transfer-config {"kv_connector":"NixlConnector","kv_role":"kv_producer"}',
+      { normalizeWhitespace: true }
+    )
+    expect(env.textContent).toBe(
+      'VLLM_NIXL_SIDE_CHANNEL_HOST=(fieldRef: status.podIP)'
+    )
+  })
+
   it.each([
     ['single', false, false],
     ['multi', true, false],

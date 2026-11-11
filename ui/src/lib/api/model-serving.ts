@@ -191,7 +191,7 @@ export interface CreateInferenceServiceRequest {
 
 export type TransferBackend = 'mooncake' | 'mooncake-tcp' | 'nixl'
 
-// The --policy values of sglang_router.launch_router.
+// --policy values that sglang_router.launch_router and vllm-router both take.
 export type RouterPolicy =
   'cache_aware' | 'power_of_two' | 'round_robin' | 'random'
 

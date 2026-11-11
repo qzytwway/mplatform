@@ -16,6 +16,7 @@ import {
   type ModelType,
   type PDRoleRequest,
   type RDMARequest,
+  type TransferBackend,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
@@ -54,6 +55,20 @@ import {
 const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
   vllm: 'vllm/vllm-openai:latest',
   sglang: 'lmsysorg/sglang:latest',
+}
+
+// vLLM prefill and decode refuse to transfer KV between different builds, so
+// PD pins a release whose image includes NIXL instead of following latest.
+const VLLM_PD_IMAGE = 'vllm/vllm-openai:v0.33.0'
+
+const defaultImage = (runtime: InferenceRuntime, mode: DeploymentMode) =>
+  runtime === 'vllm' && mode === 'pd' ? VLLM_PD_IMAGE : DEFAULT_IMAGES[runtime]
+
+// vLLM transfers over NIXL only. SGLang starts with Mooncake over TCP, since
+// Mooncake over RDMA needs an RDMA network, which starts unset.
+const DEFAULT_TRANSFER_BACKENDS: Record<InferenceRuntime, TransferBackend> = {
+  vllm: 'nixl',
+  sglang: 'mooncake-tcp',
 }
 
 // Radix Select items cannot have an empty value.
@@ -153,13 +168,13 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     groupSize: '2',
     prefill: DEFAULT_PD_ROLE,
     decode: DEFAULT_PD_ROLE,
-    // Empty runs the router from the service image, which matches the
-    // engine version it routes to.
+    // Empty runs the runtime's default router: SGLang's from the service
+    // image, which matches the engine version it routes to, and vLLM's from
+    // the vllm-router image.
     routerImage: '',
     routerReplicas: '1',
     routerPolicy: 'default',
-    // Mooncake over RDMA needs an RDMA network, which starts unset.
-    transferBackend: 'mooncake-tcp',
+    transferBackend: DEFAULT_TRANSFER_BACKENDS.vllm,
     ibDevices: '',
   })
   const [networkValues, setNetworkValues] = useState<NetworkValues>({
@@ -197,16 +212,39 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     if (value === 'vgpu' && Number(gpuCount) < 1) setGpuCount('1')
   }
 
+  // The image follows the default of the runtime and mode until it is edited.
+  const changeImageDefault = (
+    nextRuntime: InferenceRuntime,
+    nextMode: DeploymentMode
+  ) => {
+    if (image === defaultImage(runtime, mode))
+      setImage(defaultImage(nextRuntime, nextMode))
+  }
+
+  const handleModeChange = (next: DeploymentMode) => {
+    changeImageDefault(runtime, next)
+    setMode(next)
+  }
+
+  // vLLM PD runs each replica on one node, so switching to it drops groups
+  // of several nodes.
   const handleRuntimeChange = (value: string) => {
     const next = value as InferenceRuntime
-    if (image === DEFAULT_IMAGES[runtime]) setImage(DEFAULT_IMAGES[next])
+    changeImageDefault(next, mode)
     setRuntime(next)
-    if (modeBlocker(mode, next, modelType, status)) setMode('single')
+    setModeValues((values) => ({
+      ...values,
+      transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
+      ...(next === 'vllm' && {
+        prefill: { ...values.prefill, groupSize: '1' },
+        decode: { ...values.decode, groupSize: '1' },
+      }),
+    }))
   }
 
   const handleModelChange = (id: string) => {
     setModelId(id)
-    if (modeBlocker(mode, runtime, modelTypeOf(id), status)) setMode('single')
+    if (modeBlocker(mode, modelTypeOf(id), status)) handleModeChange('single')
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -234,7 +272,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           pd: {
             prefill: toPDRole(modeValues.prefill),
             decode: toPDRole(modeValues.decode),
-            routerImage: modeValues.routerImage.trim() || image.trim(),
+            routerImage: modeValues.routerImage.trim(),
             routerReplicas: Number(modeValues.routerReplicas),
             routerPolicy:
               modeValues.routerPolicy === 'default'
@@ -350,12 +388,13 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
         </div>
         <ServiceModeFields
           mode={mode}
-          onModeChange={setMode}
+          onModeChange={handleModeChange}
           blockers={{
             single: undefined,
-            multi: modeBlocker('multi', runtime, modelType, status),
-            pd: modeBlocker('pd', runtime, modelType, status),
+            multi: modeBlocker('multi', modelType, status),
+            pd: modeBlocker('pd', modelType, status),
           }}
+          runtime={runtime}
           values={modeValues}
           onValuesChange={setModeValues}
           gpuCountLabel={gpuCountLabel}

@@ -15,15 +15,12 @@ export const RUNTIME_LABELS: Record<InferenceRuntime, string> = {
 // Returns the i18n key explaining why a mode cannot be selected.
 export function modeBlocker(
   mode: DeploymentMode,
-  runtime: InferenceRuntime,
   modelType: ModelType | undefined,
   status: ModelServingStatus | undefined
 ): string | undefined {
   if (mode === 'single') return undefined
   if (mode === 'pd' && !status?.disaggregatedSet)
     return 'modelServing.services.modeBlockers.pdNotInstalled'
-  if (mode === 'pd' && runtime !== 'sglang')
-    return 'modelServing.services.modeBlockers.pdRuntime'
   if (modelType === 'embedding')
     return 'modelServing.services.modeBlockers.chatOnly'
   return undefined
