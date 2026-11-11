@@ -35,6 +35,7 @@ export interface RuleActions {
   onEdit: (rule: AlertRule) => void
   onDelete: (rule: AlertRule) => void
   onDisable: (rule: AlertRule) => void
+  onEnable: (rule: AlertRule) => void
 }
 
 function SourceBadge({ rule }: { rule: AlertRule }) {
@@ -49,13 +50,16 @@ function SourceBadge({ rule }: { rule: AlertRule }) {
 
 function RowActions({
   rule,
+  overridden,
   actions,
 }: {
   rule: AlertRule
+  // A custom rule replaces this built-in one; deleting it restores the rule.
+  overridden: boolean
   actions: RuleActions
 }) {
   const { t } = useTranslation()
-  if (rule.source === 'other') return null
+  if (rule.source === 'other' || (rule.disabled && overridden)) return null
   const action = (
     label: string,
     Icon: typeof Pencil,
@@ -72,6 +76,16 @@ function RowActions({
       <Icon className="size-3.5" />
     </Button>
   )
+  if (rule.disabled)
+    return (
+      <div className="flex justify-end gap-1">
+        {action(
+          t('observability.alerts.rules.actions.enable'),
+          RotateCcw,
+          actions.onEnable
+        )}
+      </div>
+    )
   return (
     <div className="flex justify-end gap-1">
       {action(
@@ -109,6 +123,10 @@ export function AlertRulesTable({
 }) {
   const { t } = useTranslation()
   const [filter, setFilter] = useState('')
+  const overridden = useMemo(
+    () => new Set(rules.map((rule) => rule.overrides).filter(Boolean)),
+    [rules]
+  )
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase()
     // A group may hold several rules with one name (e.g. per severity), so key by position.
@@ -185,7 +203,17 @@ export function AlertRulesTable({
                     <div className="flex flex-wrap items-center gap-2">
                       {rule.name}
                       <SourceBadge rule={rule} />
+                      {rule.disabled && (
+                        <Badge variant="outline">
+                          {t('observability.alerts.rules.disabled.badge')}
+                        </Badge>
+                      )}
                     </div>
+                    {rule.disabled && overridden.has(rule.name) && (
+                      <p className="text-xs font-normal text-muted-foreground">
+                        {t('observability.alerts.rules.disabled.restoreHint')}
+                      </p>
+                    )}
                     {rule.health !== 'ok' && rule.health !== 'unknown' && (
                       <p
                         className="text-xs font-normal text-destructive"
@@ -203,7 +231,11 @@ export function AlertRulesTable({
                     {rule.query}
                   </TableCell>
                   <TableCell>
-                    <RowActions rule={rule} actions={actions} />
+                    <RowActions
+                      rule={rule}
+                      overridden={overridden.has(rule.name)}
+                      actions={actions}
+                    />
                   </TableCell>
                 </TableRow>
               ))

@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
-  enableAlertmanager,
   sendTestNotification,
   updateAlertNotifications,
   useAlertNotifications,
@@ -55,7 +54,7 @@ const PREFIX = 'observability.alerts.notifications'
 // The backend error for a test sent before Alertmanager reloaded.
 const NOT_LOADED_MESSAGE = 'has not loaded the latest configuration'
 
-type ConfirmKind = 'enable' | 'deleteChannel' | 'deleteRoute'
+type ConfirmKind = 'deleteChannel' | 'deleteRoute'
 
 interface PendingConfirm {
   kind: ConfirmKind
@@ -286,25 +285,6 @@ export function AlertNotificationsPanel() {
       <p className="max-w-lg text-sm text-muted-foreground">
         {t(`${PREFIX}.disabled.description`)}
       </p>
-      <Button
-        onClick={() =>
-          setConfirm({
-            kind: 'enable',
-            run: async () => {
-              try {
-                await enableAlertmanager()
-                toast.success(t(`${PREFIX}.confirm.enable.done`))
-                await refresh()
-              } catch (err) {
-                toast.error(translateError(err, t))
-                throw err
-              }
-            },
-          })
-        }
-      >
-        {t(`${PREFIX}.disabled.enable`)}
-      </Button>
     </div>
   )
 
@@ -594,9 +574,7 @@ export function AlertNotificationsPanel() {
                   {t('common.actions.cancel')}
                 </Button>
                 <Button
-                  variant={
-                    confirm.kind === 'enable' ? 'default' : 'destructive'
-                  }
+                  variant="destructive"
                   onClick={() => void runConfirm()}
                   disabled={isWorking}
                 >

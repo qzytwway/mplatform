@@ -38,6 +38,9 @@ export interface AlertRule {
   ruleIndex: number
   // The built-in alert a custom rule replaces.
   overrides?: string
+  // A built-in rule muted in Alertmanager: Prometheus still evaluates it,
+  // but its alerts are not notified.
+  disabled?: boolean
 }
 
 export interface AlertRuleRequest {
@@ -47,11 +50,6 @@ export interface AlertRuleRequest {
   severity: string
   summary: string
   description: string
-}
-
-export interface DisabledBuiltinRule {
-  alert: string
-  overridden: boolean
 }
 
 export interface SilenceMatcher {
@@ -95,22 +93,6 @@ export function useAlertRules(options: { refetchInterval?: number } = {}) {
       query.state.error
         ? false
         : (options.refetchInterval ?? ALERTS_REFRESH_MS),
-  })
-}
-
-export function useDisabledBuiltinRules() {
-  const { currentCluster } = useCluster()
-  return useQuery({
-    queryKey: ['disabled-builtin-rules', currentCluster],
-    queryFn: () =>
-      apiClient.get<DisabledBuiltinRule[]>(
-        withCurrentClusterPath(
-          '/prometheus/builtin-rules/disabled',
-          currentCluster
-        )
-      ),
-    enabled: !!currentCluster,
-    retry: false,
   })
 }
 
@@ -284,12 +266,6 @@ export function updateAlertNotifications(
   return apiClient.put(
     withCurrentClusterPath('/alertmanager/notifications'),
     config
-  )
-}
-
-export function enableAlertmanager(): Promise<{ message: string }> {
-  return apiClient.post(
-    withCurrentClusterPath('/alertmanager/notifications/enable')
   )
 }
 

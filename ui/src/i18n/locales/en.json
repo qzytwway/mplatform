@@ -1580,9 +1580,8 @@
           "enable": "Enable"
         },
         "disabled": {
-          "title": "Disabled built-in rules",
-          "description": "Prometheus no longer evaluates these rules of kube-prometheus-stack.",
-          "restoreHint": "Delete the modified rule to restore it"
+          "restoreHint": "Delete the modified rule to restore it",
+          "badge": "Disabled"
         },
         "confirm": {
           "working": "Working...",
@@ -1593,20 +1592,21 @@
           },
           "restore": {
             "title": "Restore built-in rule {{name}}?",
-            "description": "Deletes the modified rule and turns the built-in rule back on. This upgrades kube-prometheus-stack and can take a minute.",
+            "description": "Deletes the modified rule and notifies the alerts of the built-in rule again. It takes a minute or so.",
             "done": "Built-in rule {{name}} restored"
           },
           "disable": {
             "title": "Disable built-in rule {{name}}?",
-            "description": "Every built-in rule with this name stops firing, including other severities. This upgrades kube-prometheus-stack and can take a minute.",
+            "description": "Every built-in rule with this name stops notifying, including other severities. Prometheus keeps evaluating them; Alertmanager drops their alerts. It takes a minute or so.",
             "done": "Built-in rule {{name}} disabled"
           },
           "enable": {
             "title": "Enable built-in rule {{name}}?",
-            "description": "This upgrades kube-prometheus-stack and can take a minute.",
+            "description": "Alertmanager notifies its alerts again in a minute or so.",
             "done": "Built-in rule {{name}} enabled"
           }
-        }
+        },
+        "mutingUnavailable": "Built-in rules are disabled through the Alertmanager configuration MPlatform manages. The cluster needs an Alertmanager, and the notification settings must be saved once in the Notifications tab first."
       },
       "ruleEditor": {
         "title": {
@@ -1614,7 +1614,7 @@
           "edit": "Edit alert rule",
           "override": "Modify built-in rule"
         },
-        "overrideNote": "Saving disables this built-in alert and creates an editable copy of it. Other built-in rules with the same name, such as other severities, are copied unchanged. This upgrades kube-prometheus-stack and can take a minute.",
+        "overrideNote": "Saving creates an editable copy of this built-in alert and stops notifying the built-in one. Other built-in rules with the same name, such as other severities, are copied unchanged. It takes a minute or so.",
         "name": "Alert name",
         "nameHint": "Letters, digits and underscores, such as HighPodRestarts.",
         "expr": "PromQL expression",
@@ -1634,12 +1634,11 @@
         "saving": "Saving...",
         "edit": "Edit",
         "delete": "Delete",
-        "unmanaged": "Alertmanager still uses the configuration from the kube-prometheus-stack values. The first save here replaces it with the configuration managed in MPlatform.",
+        "unmanaged": "Alertmanager still uses the configuration of its installation. Saving here points the spec.configSecret of the Alertmanager resource at the Secret MPlatform manages, which replaces that configuration. If the installation sets configSecret in its values, or is upgraded with --force, it is changed back.",
         "reconcileError": "prometheus-operator could not apply the Alertmanager configuration: {{error}}",
         "disabled": {
-          "title": "Alertmanager is not enabled",
-          "description": "The kube-prometheus-stack of this cluster runs without Alertmanager, so firing alerts are not sent anywhere. Enabling it upgrades the release and starts Alertmanager with the configuration managed here.",
-          "enable": "Enable Alertmanager"
+          "title": "No Alertmanager in this cluster",
+          "description": "This cluster has no Alertmanager managed by prometheus-operator, so firing alerts are not sent anywhere. Turn it on in your installation, such as alertmanager.enabled=true for kube-prometheus-stack. MPlatform does not change the installation."
         },
         "types": {
           "email": "Email",
@@ -1756,12 +1755,6 @@
         },
         "confirm": {
           "working": "Working...",
-          "enable": {
-            "title": "Enable Alertmanager?",
-            "description": "Upgrades kube-prometheus-stack in this cluster with Alertmanager turned on. It may take a minute or so.",
-            "action": "Enable",
-            "done": "Alertmanager enabled"
-          },
           "deleteChannel": {
             "title": "Delete channel {{name}}?",
             "description": "Alertmanager stops sending to it in a minute or so.",

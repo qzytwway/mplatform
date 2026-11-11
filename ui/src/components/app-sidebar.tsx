@@ -96,7 +96,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const firingAlerts =
     alertRules?.reduce(
       (count, rule) =>
-        count + rule.alerts.filter((alert) => alert.state === 'firing').length,
+        rule.disabled
+          ? count
+          : count +
+            rule.alerts.filter((alert) => alert.state === 'firing').length,
       0
     ) ?? 0
   const [openAPIGroupItems, setOpenAPIGroupItems] = useState<

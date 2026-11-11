@@ -20,8 +20,27 @@ export const SEVERITY_GROUPS: SeverityGroup[] = [
   'pending',
 ]
 
+// Built-in alerts are muted in the Alertmanager configuration the platform
+// manages; the backend refuses to disable or modify them while there is none.
+const MUTING_UNAVAILABLE_MESSAGES = [
+  'save the notification settings once in the Notifications tab first',
+  'no Alertmanager managed by prometheus-operator',
+]
+
+export function isMutingUnavailable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    MUTING_UNAVAILABLE_MESSAGES.some((message) =>
+      error.message.includes(message)
+    )
+  )
+}
+
+// Alerts of disabled built-in rules still fire in Prometheus but are not
+// notified, so they are left out.
 export function flattenAlerts(rules: AlertRule[]): ActiveAlert[] {
   return rules
+    .filter((rule) => !rule.disabled)
     .flatMap((rule) =>
       rule.alerts.map((alert) => ({
         id: `${rule.group}/${rule.name}/${JSON.stringify(

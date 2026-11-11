@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -55,6 +56,9 @@ type alertRule struct {
 	RuleName      string `json:"ruleName,omitempty"`
 	RuleIndex     int    `json:"ruleIndex"`
 	Overrides     string `json:"overrides,omitempty"`
+	// Disabled is a built-in rule turned off in the platform: Prometheus
+	// still evaluates it, and its alerts are not sent.
+	Disabled bool `json:"disabled"`
 }
 
 func labelSetToMap(labels prommodel.LabelSet) map[string]string {
@@ -90,6 +94,10 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 	sources, err := monitoring.RuleSources(ctx, cs)
 	if err != nil {
 		klog.V(2).Infof("Failed to look up the PrometheusRules of cluster %s: %v", cs.Name, err)
+	}
+	muted, err := monitoring.MutedAlerts(ctx, cs)
+	if err != nil {
+		klog.V(2).Infof("Failed to look up the muted alerts of cluster %s: %v", cs.Name, err)
 	}
 
 	rules := []alertRule{}
@@ -132,6 +140,7 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 				RuleName:      source.Name,
 				RuleIndex:     index,
 				Overrides:     source.Overrides,
+				Disabled:      source.Source == monitoring.RuleSourceBuiltin && slices.Contains(muted, rule.Name),
 			})
 		}
 	}

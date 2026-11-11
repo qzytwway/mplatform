@@ -11,9 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/qzytwway/mplatform/pkg/alertnotify"
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/common"
-	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -248,7 +248,14 @@ func checkExpr(ctx context.Context, cs *cluster.ClientSet, expr string) error {
 	return nil
 }
 
+// newPrometheusRule marks the alerts of every rule it holds as the platform's,
+// so they come through while the built-in alert of the same name is muted.
 func newPrometheusRule(target *ruleTarget, alert string, rules []any) *unstructured.Unstructured {
+	for _, item := range rules {
+		if rule, ok := item.(map[string]any); ok {
+			setRuleField(rule, "labels", alertnotify.OverrideLabel, "true")
+		}
+	}
 	prefix := strings.Trim(nonNameChars.ReplaceAllString(strings.ToLower(alert), "-"), "-")
 	if len(prefix) > maxNamePrefix {
 		prefix = strings.TrimRight(prefix[:maxNamePrefix], "-")
@@ -316,8 +323,8 @@ func findOverride(rules []unstructured.Unstructured, alert string) *unstructured
 	return nil
 }
 
-// builtinCopies copies every built-in rule named alert, since disabling an
-// alert in the chart removes all of them; the rule at loc gets the request.
+// builtinCopies copies every built-in rule named alert, since muting an alert
+// mutes all of them; the rule at loc gets the request.
 func builtinCopies(target *ruleTarget, rules []unstructured.Unstructured, alert string, loc ruleLocation, req *ruleRequest) (copies []any, edited bool) {
 	for i := range rules {
 		obj := &rules[i]
@@ -344,31 +351,6 @@ func builtinCopies(target *ruleTarget, rules []unstructured.Unstructured, alert 
 	return copies, edited
 }
 
-// setBuiltinDisabled turns a built-in alert off or back on through the
-// defaultRules.disabled values of the release that ships it. The release keeps
-// its deployed chart and values; only this key changes.
-func setBuiltinDisabled(c *gin.Context, cs *cluster.ClientSet, target *ruleTarget, alert string, disabled bool) error {
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, target.releaseNamespace)
-	if err != nil {
-		return err
-	}
-	rel, err := helmutil.GetRelease(cfg, target.releaseName)
-	if err != nil {
-		return err
-	}
-	action := "enabled"
-	if disabled {
-		action = "disabled"
-	}
-	values := map[string]any{"defaultRules": map[string]any{"disabled": map[string]any{alert: disabled}}}
-	return helmutil.UpgradePlatformRelease(c.Request.Context(), cfg, cs.Name, c.MustGet("user").(model.User).ID, target.releaseName, rel.Chart, values, helmutil.UpgradeReleaseOptions{
-		Namespace:   target.releaseNamespace,
-		Timeout:     helmActionTimeout,
-		ReuseValues: true,
-		Description: fmt.Sprintf("Alert %s %s by MPlatform", alert, action),
-	})
-}
-
 // canWriteRules requires a cluster-wide alertrules grant, since rules see
 // series from every namespace. It writes the error response itself.
 func canWriteRules(c *gin.Context, verb common.Verb) bool {
@@ -383,7 +365,8 @@ func canWriteRules(c *gin.Context, verb common.Verb) bool {
 
 func ruleErrorStatus(err error) int {
 	switch {
-	case errors.Is(err, errNoPrometheus), errors.Is(err, errNoRuleSelector), errors.Is(err, errNotHelmManaged):
+	case errors.Is(err, errNoPrometheus), errors.Is(err, errNoRuleSelector), errors.Is(err, errNotHelmManaged),
+		errors.Is(err, errAlertmanagerDisabled), errors.Is(err, errNotificationsUnmanaged):
 		return http.StatusConflict
 	case errors.Is(err, errNotPlatform):
 		return http.StatusForbidden
@@ -479,7 +462,7 @@ func UpdateAlertRule(c *gin.Context) {
 }
 
 // DeleteAlertRule deletes a platform rule. Deleting a modified built-in rule
-// turns the built-in one back on first, so the alert is never missing.
+// unmutes the built-in one first, so the alert is never missing.
 func DeleteAlertRule(c *gin.Context) {
 	if !canWriteRules(c, common.VerbDelete) {
 		return
@@ -492,14 +475,7 @@ func DeleteAlertRule(c *gin.Context) {
 		return
 	}
 	if alert := obj.GetAnnotations()[overridesAnnotation]; alert != "" {
-		target, err := findRuleTarget(ctx, cs)
-		if err == nil && target.releaseName == "" {
-			err = errNotHelmManaged
-		}
-		if err == nil {
-			err = setBuiltinDisabled(c, cs, target, alert, false)
-		}
-		if err != nil {
+		if err := setAlertMuted(ctx, cs, alert, false); err != nil {
 			writeRuleError(c, err)
 			return
 		}
@@ -511,8 +487,8 @@ func DeleteAlertRule(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "rule deleted"})
 }
 
-// builtinTarget is the rule target of a request on built-in rules, which
-// needs the Helm release shipping them.
+// builtinTarget is the rule target of a request on built-in rules, which are
+// told apart by the Helm release annotations of the cluster's Prometheus.
 func builtinTarget(c *gin.Context, cs *cluster.ClientSet) (*ruleTarget, bool) {
 	target, err := findRuleTarget(c.Request.Context(), cs)
 	if err == nil && target.releaseName == "" {
@@ -525,52 +501,10 @@ func builtinTarget(c *gin.Context, cs *cluster.ClientSet) (*ruleTarget, bool) {
 	return target, true
 }
 
-type disabledRule struct {
-	Alert      string `json:"alert"`
-	Overridden bool   `json:"overridden"`
-}
-
-// ListDisabledBuiltinRules lists the built-in alerts turned off in the
-// release values. Prometheus no longer reports them, so this is the only
-// place they can be turned back on.
-func ListDisabledBuiltinRules(c *gin.Context) {
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	user := c.MustGet("user").(model.User)
-	if !rbac.CanAccessAllNamespaces(user, "prometheus", string(common.VerbGet), cs.Name) {
-		c.JSON(http.StatusForbidden, gin.H{"error": rbac.NoAccess(user.Key(), "get", "prometheus", common.AllNamespaces, cs.Name)})
-		return
-	}
-	target, ok := builtinTarget(c, cs)
-	if !ok {
-		return
-	}
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, target.releaseNamespace)
-	if err != nil {
-		writeRuleError(c, err)
-		return
-	}
-	rel, err := helmutil.GetRelease(cfg, target.releaseName)
-	if err != nil {
-		writeRuleError(c, err)
-		return
-	}
-	rules, err := listPrometheusRules(c.Request.Context(), cs)
-	if err != nil {
-		writeRuleError(c, err)
-		return
-	}
-	disabled, _, _ := unstructured.NestedMap(rel.Config, "defaultRules", "disabled")
-	result := []disabledRule{}
-	for alert, value := range disabled {
-		if off, _ := value.(bool); off {
-			result = append(result, disabledRule{Alert: alert, Overridden: findOverride(rules, alert) != nil})
-		}
-	}
-	c.JSON(http.StatusOK, result)
-}
-
-// SetBuiltinRuleEnabled turns a built-in alert off or back on. A modified
-// alert comes back by deleting its replacement instead.
+// SetBuiltinRuleEnabled turns a built-in alert off or back on by muting it in
+// the platform's Alertmanager configuration: Prometheus keeps evaluating it,
+// and its alerts are no longer sent. A modified alert comes back by deleting
+// its replacement instead.
 func SetBuiltinRuleEnabled(c *gin.Context) {
 	if !canWriteRules(c, common.VerbUpdate) {
 		return
@@ -603,7 +537,7 @@ func SetBuiltinRuleEnabled(c *gin.Context) {
 			return
 		}
 	}
-	if err := setBuiltinDisabled(c, cs, target, alert, !req.Enabled); err != nil {
+	if err := setAlertMuted(c.Request.Context(), cs, alert, !req.Enabled); err != nil {
 		writeRuleError(c, err)
 		return
 	}
@@ -612,7 +546,7 @@ func SetBuiltinRuleEnabled(c *gin.Context) {
 
 // OverrideBuiltinRule modifies a built-in rule: it adds a platform rule with
 // every rule of that alert name, the one at the request's location changed,
-// and then turns the built-in alert off.
+// and then mutes the built-in alert.
 func OverrideBuiltinRule(c *gin.Context) {
 	if !canWriteRules(c, common.VerbCreate) {
 		return
@@ -664,7 +598,7 @@ func OverrideBuiltinRule(c *gin.Context) {
 		writeRuleError(c, err)
 		return
 	}
-	if err := setBuiltinDisabled(c, cs, target, alert, true); err != nil {
+	if err := setAlertMuted(ctx, cs, alert, true); err != nil {
 		if deleteErr := cs.K8sClient.Delete(ctx, obj); deleteErr != nil {
 			err = fmt.Errorf("%w; the modified rule %s/%s was also left in place: %w", err, obj.GetNamespace(), obj.GetName(), deleteErr)
 		}

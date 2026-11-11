@@ -1667,9 +1667,8 @@
           "enable": "启用"
         },
         "disabled": {
-          "title": "已停用的内置规则",
-          "description": "Prometheus 不再计算 kube-prometheus-stack 自带的这些规则。",
-          "restoreHint": "删除修改后的规则即可恢复"
+          "restoreHint": "删除修改后的规则即可恢复",
+          "badge": "已停用"
         },
         "confirm": {
           "working": "处理中...",
@@ -1680,20 +1679,21 @@
           },
           "restore": {
             "title": "恢复内置规则 {{name}}？",
-            "description": "会删除修改后的规则，并重新启用内置规则。需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+            "description": "会删除修改后的规则，并恢复发送内置规则的告警，大约一分钟后生效。",
             "done": "已恢复内置规则 {{name}}"
           },
           "disable": {
             "title": "停用内置规则 {{name}}？",
-            "description": "同名的所有内置规则都会停用，包括其他级别的。需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+            "description": "同名的所有内置规则都会停止通知，包括其他级别的。Prometheus 仍会计算这些规则，只是 Alertmanager 不再发送它们的告警，大约一分钟后生效。",
             "done": "已停用内置规则 {{name}}"
           },
           "enable": {
             "title": "启用内置规则 {{name}}？",
-            "description": "需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+            "description": "Alertmanager 大约一分钟后恢复发送它的告警。",
             "done": "已启用内置规则 {{name}}"
           }
-        }
+        },
+        "mutingUnavailable": "内置规则通过 MPlatform 管理的 Alertmanager 配置停用。集群需要有 Alertmanager，并且要先在「通知」标签页保存一次通知设置。"
       },
       "ruleEditor": {
         "title": {
@@ -1701,7 +1701,7 @@
           "edit": "编辑告警规则",
           "override": "修改内置规则"
         },
-        "overrideNote": "保存后会停用这条内置告警，并生成一份可编辑的副本；同名的其他内置规则（例如其他级别）会原样一并复制。需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+        "overrideNote": "保存后会生成这条内置告警的可编辑副本，内置告警不再通知；同名的其他内置规则（例如其他级别）会原样一并复制。大约一分钟后生效。",
         "name": "告警名称",
         "nameHint": "只能包含字母、数字和下划线，例如 HighPodRestarts。",
         "expr": "PromQL 表达式",
@@ -1721,12 +1721,11 @@
         "saving": "保存中...",
         "edit": "编辑",
         "delete": "删除",
-        "unmanaged": "Alertmanager 目前还在使用 kube-prometheus-stack values 里的配置。在这里第一次保存后，会改用 MPlatform 管理的配置。",
+        "unmanaged": "Alertmanager 还在使用安装自带的配置。在这里保存后，平台会把 Alertmanager 资源的 spec.configSecret 指向 MPlatform 管理的 Secret，替换原有配置。如果安装的 values 里自己设置了 configSecret，或者用 --force 升级，会被改回去。",
         "reconcileError": "prometheus-operator 无法应用 Alertmanager 配置：{{error}}",
         "disabled": {
-          "title": "未启用 Alertmanager",
-          "description": "这个集群的 kube-prometheus-stack 没有启用 Alertmanager，触发的告警不会发送到任何地方。启用后会升级该发布，并以这里管理的配置启动 Alertmanager。",
-          "enable": "启用 Alertmanager"
+          "title": "集群中没有 Alertmanager",
+          "description": "这个集群没有由 prometheus-operator 管理的 Alertmanager，触发的告警不会发送到任何地方。请在安装中开启，例如 kube-prometheus-stack 的 alertmanager.enabled=true。MPlatform 不会改动安装包。"
         },
         "types": {
           "email": "邮件",
@@ -1843,12 +1842,6 @@
         },
         "confirm": {
           "working": "处理中...",
-          "enable": {
-            "title": "启用 Alertmanager？",
-            "description": "会升级这个集群的 kube-prometheus-stack 并开启 Alertmanager，可能需要一分钟左右。",
-            "action": "启用",
-            "done": "已启用 Alertmanager"
-          },
           "deleteChannel": {
             "title": "删除渠道 {{name}}？",
             "description": "Alertmanager 大约一分钟后停止向它发送通知。",

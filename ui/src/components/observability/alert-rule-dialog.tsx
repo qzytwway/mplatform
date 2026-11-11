@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+import { isMutingUnavailable } from './alert-utils'
+
 // create: a new custom rule; edit: change a custom rule; override: change a
 // built-in rule by replacing it with a custom copy.
 export type RuleEditorMode = 'create' | 'edit' | 'override'
@@ -101,13 +103,14 @@ export function AlertRuleDialog({ mode, rule, onClose }: AlertRuleDialogProps) {
       else if (mode === 'edit') await updateAlertRule(rule!, form)
       else await overrideBuiltinRule(rule!, form)
       toast.success(t('observability.alerts.ruleEditor.saved'))
-      await queryClient.invalidateQueries({
-        queryKey: ['disabled-builtin-rules'],
-      })
       await queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
       onClose()
     } catch (err) {
-      toast.error(translateError(err, t))
+      toast.error(
+        isMutingUnavailable(err)
+          ? t('observability.alerts.rules.mutingUnavailable')
+          : translateError(err, t)
+      )
     } finally {
       setIsSaving(false)
     }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/alertnotify"
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/common"
-	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"gopkg.in/yaml.v3"
@@ -24,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -41,27 +43,23 @@ const (
 )
 
 var (
+	alertmanagerGVK     = schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "Alertmanager"}
 	alertmanagerListGVK = schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "AlertmanagerList"}
 
-	errAlertmanagerDisabled = errors.New("alertmanager is not enabled in the cluster's kube-prometheus-stack")
-	errAlertmanagerEnabled  = errors.New("alertmanager is already enabled")
-	errConfigNotLoaded      = errors.New("alertmanager has not loaded the latest configuration yet; try again in a minute")
-	errChannelNotFound      = errors.New("channel not found")
+	errAlertmanagerDisabled   = errors.New("no Alertmanager managed by prometheus-operator in this cluster")
+	errNotificationsUnmanaged = errors.New("built-in alerts are turned off through the Alertmanager configuration managed by MPlatform; save the notification settings once in the Notifications tab first")
+	errConfigNotLoaded        = errors.New("alertmanager has not loaded the latest configuration yet; try again in a minute")
+	errChannelNotFound        = errors.New("channel not found")
 )
 
-// notificationTarget is the Helm release of the cluster's Prometheus and the
-// Alertmanager it ships, nil while the release has it disabled.
+// notificationTarget is the cluster's Alertmanager managed by
+// prometheus-operator, nil when it runs none.
 type notificationTarget struct {
-	releaseName      string
-	releaseNamespace string
-	alertmanager     *unstructured.Unstructured
+	alertmanager *unstructured.Unstructured
 }
 
 func (t *notificationTarget) namespace() string {
-	if t.alertmanager != nil {
-		return t.alertmanager.GetNamespace()
-	}
-	return t.releaseNamespace
+	return t.alertmanager.GetNamespace()
 }
 
 func (t *notificationTarget) managed() bool {
@@ -72,32 +70,43 @@ func (t *notificationTarget) managed() bool {
 	return configSecret == notificationSecretName
 }
 
+// findNotificationTarget finds the Alertmanager through prometheus-operator
+// only, whatever installed it, and prefers the one next to the cluster's
+// Prometheus when there are several.
 func findNotificationTarget(ctx context.Context, cs *cluster.ClientSet) (*notificationTarget, error) {
-	prometheus, err := findPrometheus(ctx, cs)
-	if err != nil {
-		return nil, err
-	}
-	annotations := prometheus.GetAnnotations()
-	target := &notificationTarget{
-		releaseName:      annotations[helmReleaseNameAnnotation],
-		releaseNamespace: annotations[helmReleaseNamespaceAnnotation],
-	}
-	if target.releaseName == "" {
-		return nil, errNotHelmManaged
-	}
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(alertmanagerListGVK)
-	if err := cs.K8sClient.List(ctx, list); err != nil && !apimeta.IsNoMatchError(err) {
+	if err := cs.K8sClient.List(ctx, list); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return &notificationTarget{}, nil
+		}
 		return nil, err
 	}
-	for i := range list.Items {
-		annotations := list.Items[i].GetAnnotations()
-		if annotations[helmReleaseNameAnnotation] == target.releaseName && annotations[helmReleaseNamespaceAnnotation] == target.releaseNamespace {
-			target.alertmanager = &list.Items[i]
-			break
+	if len(list.Items) == 0 {
+		return &notificationTarget{}, nil
+	}
+	target := &notificationTarget{alertmanager: &list.Items[0]}
+	if prometheus, err := findPrometheus(ctx, cs); err == nil {
+		for i := range list.Items {
+			if list.Items[i].GetNamespace() == prometheus.GetNamespace() {
+				target.alertmanager = &list.Items[i]
+				break
+			}
 		}
 	}
 	return target, nil
+}
+
+// useNotificationSecret points the Alertmanager at the platform's
+// configuration. It changes spec.configSecret only, which charts such as
+// kube-prometheus-stack leave unset, so upgrades of the installation keep it.
+func useNotificationSecret(ctx context.Context, cs *cluster.ClientSet, alertmanager *unstructured.Unstructured) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(alertmanagerGVK)
+	obj.SetNamespace(alertmanager.GetNamespace())
+	obj.SetName(alertmanager.GetName())
+	patch := fmt.Appendf(nil, `{"spec":{"configSecret":%q}}`, notificationSecretName)
+	return cs.K8sClient.Patch(ctx, obj, client.RawPatch(types.MergePatchType, patch), client.FieldOwner(managedByPlatform))
 }
 
 // reconcileError is why prometheus-operator could not apply the
@@ -168,23 +177,48 @@ func saveNotifications(ctx context.Context, cs *cluster.ClientSet, namespace str
 	return nil
 }
 
-// setAlertmanagerValues upgrades the release with its deployed chart and
-// values, changing only the given alertmanager values.
-func setAlertmanagerValues(c *gin.Context, cs *cluster.ClientSet, target *notificationTarget, values map[string]any, description string) error {
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, target.releaseNamespace)
+// setAlertMuted adds a built-in alert to the alerts the platform's
+// Alertmanager configuration drops, or removes it. It never takes over an
+// Alertmanager that loads another configuration.
+func setAlertMuted(ctx context.Context, cs *cluster.ClientSet, alert string, muted bool) error {
+	target, err := findNotificationTarget(ctx, cs)
 	if err != nil {
 		return err
 	}
-	rel, err := helmutil.GetRelease(cfg, target.releaseName)
+	if target.alertmanager == nil {
+		return errAlertmanagerDisabled
+	}
+	if !target.managed() {
+		return errNotificationsUnmanaged
+	}
+	cfg, err := loadNotifications(ctx, cs, target.namespace())
 	if err != nil {
 		return err
 	}
-	return helmutil.UpgradePlatformRelease(c.Request.Context(), cfg, cs.Name, c.MustGet("user").(model.User).ID, target.releaseName, rel.Chart, map[string]any{"alertmanager": values}, helmutil.UpgradeReleaseOptions{
-		Namespace:   target.releaseNamespace,
-		Timeout:     helmActionTimeout,
-		ReuseValues: true,
-		Description: description,
-	})
+	cfg.MutedAlerts = slices.DeleteFunc(slices.Clone(cfg.MutedAlerts), func(name string) bool { return name == alert })
+	if muted {
+		cfg.MutedAlerts = append(cfg.MutedAlerts, alert)
+	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		return err
+	}
+	return saveNotifications(ctx, cs, target.namespace(), normalized)
+}
+
+// MutedAlerts returns the built-in alerts turned off in the platform, none
+// while the cluster's Alertmanager does not load the platform's
+// configuration.
+func MutedAlerts(ctx context.Context, cs *cluster.ClientSet) ([]string, error) {
+	target, err := findNotificationTarget(ctx, cs)
+	if err != nil || !target.managed() {
+		return nil, err
+	}
+	cfg, err := loadNotifications(ctx, cs, target.namespace())
+	if err != nil {
+		return nil, err
+	}
+	return cfg.MutedAlerts, nil
 }
 
 // canManageNotifications requires a cluster-wide alertnotifications grant,
@@ -203,7 +237,7 @@ func canManageNotifications(c *gin.Context, verb common.Verb) bool {
 func writeNotificationError(c *gin.Context, err error) {
 	status := ruleErrorStatus(err)
 	switch {
-	case errors.Is(err, errAlertmanagerDisabled), errors.Is(err, errAlertmanagerEnabled), errors.Is(err, errConfigNotLoaded):
+	case errors.Is(err, errConfigNotLoaded):
 		status = http.StatusConflict
 	case errors.Is(err, errChannelNotFound):
 		status = http.StatusNotFound
@@ -212,7 +246,7 @@ func writeNotificationError(c *gin.Context, err error) {
 }
 
 type notificationsResponse struct {
-	// Enabled is whether the release ships an Alertmanager, and Managed
+	// Enabled is whether the cluster runs an Alertmanager, and Managed
 	// whether it loads the platform's configuration.
 	Enabled        bool                        `json:"enabled"`
 	Managed        bool                        `json:"managed"`
@@ -232,10 +266,12 @@ func GetAlertNotifications(c *gin.Context) {
 		writeNotificationError(c, err)
 		return
 	}
-	cfg, err := loadNotifications(ctx, cs, target.namespace())
-	if err != nil {
-		writeNotificationError(c, err)
-		return
+	cfg := alertnotify.DefaultConfig()
+	if target.alertmanager != nil {
+		if cfg, err = loadNotifications(ctx, cs, target.namespace()); err != nil {
+			writeNotificationError(c, err)
+			return
+		}
 	}
 	response := notificationsResponse{
 		Enabled:  target.alertmanager != nil,
@@ -250,8 +286,8 @@ func GetAlertNotifications(c *gin.Context) {
 }
 
 // UpdateAlertNotifications saves the channels and routing. The first save
-// points the release's Alertmanager at the platform's configuration, which
-// replaces the one in the release values.
+// points the cluster's Alertmanager at the platform's configuration, which
+// replaces the one it loaded before.
 func UpdateAlertNotifications(c *gin.Context) {
 	if !canManageNotifications(c, common.VerbUpdate) {
 		return
@@ -276,56 +312,26 @@ func UpdateAlertNotifications(c *gin.Context) {
 		writeNotificationError(c, err)
 		return
 	}
+	// The muted alerts belong to the rules page.
+	req.MutedAlerts = stored.MutedAlerts
 	cfg, err := req.WithStoredSecrets(stored).Normalize()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// The Secret goes first: prometheus-operator cannot apply an Alertmanager
+	// whose configSecret is missing.
 	if err := saveNotifications(ctx, cs, target.namespace(), cfg); err != nil {
 		writeNotificationError(c, err)
 		return
 	}
 	if !target.managed() {
-		values := map[string]any{"alertmanagerSpec": map[string]any{"configSecret": notificationSecretName}}
-		if err := setAlertmanagerValues(c, cs, target, values, "Alertmanager configuration managed by MPlatform"); err != nil {
+		if err := useNotificationSecret(ctx, cs, target.alertmanager); err != nil {
 			writeNotificationError(c, err)
 			return
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "notifications updated"})
-}
-
-// EnableAlertmanager turns on the Alertmanager of the release, loading the
-// platform's configuration from the start.
-func EnableAlertmanager(c *gin.Context) {
-	if !canManageNotifications(c, common.VerbUpdate) {
-		return
-	}
-	cs := c.MustGet("cluster").(*cluster.ClientSet)
-	ctx := c.Request.Context()
-	target, err := findNotificationTarget(ctx, cs)
-	if err == nil && target.alertmanager != nil {
-		err = errAlertmanagerEnabled
-	}
-	if err != nil {
-		writeNotificationError(c, err)
-		return
-	}
-	cfg, err := loadNotifications(ctx, cs, target.namespace())
-	if err == nil {
-		err = saveNotifications(ctx, cs, target.namespace(), cfg)
-	}
-	if err == nil {
-		values := map[string]any{"enabled": true, "alertmanagerSpec": map[string]any{"configSecret": notificationSecretName}}
-		err = setAlertmanagerValues(c, cs, target, values, "Alertmanager enabled by MPlatform")
-	}
-	if err != nil {
-		writeNotificationError(c, err)
-		return
-	}
-	// Connect the new Alertmanager.
-	cluster.TriggerClusterSync()
-	c.JSON(http.StatusOK, gin.H{"message": "alertmanager enabled"})
 }
 
 // SendTestNotification posts an alert that the configuration routes straight
@@ -341,6 +347,9 @@ func SendTestNotification(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	target, err := findNotificationTarget(ctx, cs)
+	if err == nil && target.alertmanager == nil {
+		err = errAlertmanagerDisabled
+	}
 	if err != nil {
 		writeNotificationError(c, err)
 		return
@@ -389,8 +398,8 @@ func SendTestNotification(c *gin.Context) {
 // checkReceiverLoaded fails while Alertmanager runs a configuration without
 // the channel: a saved Secret takes a minute or so to reach it, and a test
 // alert sent before would go to the default receiver instead.
-func checkReceiverLoaded(ctx context.Context, client *alertmanager.Client, name string) error {
-	loaded, err := client.LoadedConfig(ctx)
+func checkReceiverLoaded(ctx context.Context, am *alertmanager.Client, name string) error {
+	loaded, err := am.LoadedConfig(ctx)
 	if err != nil {
 		return err
 	}

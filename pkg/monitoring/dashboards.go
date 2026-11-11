@@ -48,12 +48,10 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	api.POST("/prometheus/alert-rules", CreateAlertRule)
 	api.PUT("/prometheus/alert-rules/:namespace/:name", UpdateAlertRule)
 	api.DELETE("/prometheus/alert-rules/:namespace/:name", DeleteAlertRule)
-	api.GET("/prometheus/builtin-rules/disabled", ListDisabledBuiltinRules)
 	api.PUT("/prometheus/builtin-rules/:alert", SetBuiltinRuleEnabled)
 	api.POST("/prometheus/builtin-rules/:alert/override", OverrideBuiltinRule)
 	api.GET("/alertmanager/notifications", GetAlertNotifications)
 	api.PUT("/alertmanager/notifications", UpdateAlertNotifications)
-	api.POST("/alertmanager/notifications/enable", EnableAlertmanager)
 	api.POST("/alertmanager/notifications/channels/:id/test", SendTestNotification)
 }
 

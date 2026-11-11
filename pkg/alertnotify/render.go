@@ -9,9 +9,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestChannelLabel routes a test alert straight to the channel whose ID it
-// holds.
-const TestChannelLabel = "mplatform_test_channel"
+const (
+	// TestChannelLabel routes a test alert straight to the channel whose ID
+	// it holds.
+	TestChannelLabel = "mplatform_test_channel"
+	// OverrideLabel marks the alerts of rules the platform writes, so a muted
+	// built-in alert still comes through from the platform's copy of it.
+	OverrideLabel = "mplatform_override"
+)
 
 type amConfig struct {
 	Global       map[string]string `yaml:"global"`
@@ -106,6 +111,12 @@ func Render(cfg Config, forwarderURL string) ([]byte, error) {
 	}
 	// Watchdog always fires to show the alerting pipeline works.
 	root.Routes = append(root.Routes, amRoute{Receiver: nullReceiver, Matchers: []string{matcher("alertname", "=", "Watchdog")}})
+	if len(cfg.MutedAlerts) > 0 {
+		root.Routes = append(root.Routes, amRoute{
+			Receiver: nullReceiver,
+			Matchers: []string{anyOf("alertname", cfg.MutedAlerts), matcher(OverrideLabel, "!=", "true")},
+		})
+	}
 	for _, route := range cfg.Routing.Routes {
 		matchers := routeMatchers(route)
 		// A route with several receivers sends to each of them in turn.

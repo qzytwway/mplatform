@@ -49,6 +49,9 @@ var (
 type Config struct {
 	Channels []Channel `json:"channels"`
 	Routing  Routing   `json:"routing"`
+	// MutedAlerts are built-in alerts turned off in the platform: their
+	// alerts are dropped unless a platform rule raised them.
+	MutedAlerts []string `json:"mutedAlerts"`
 }
 
 type Channel struct {
@@ -131,7 +134,8 @@ type Matcher struct {
 // DefaultConfig has no channels and the timing kube-prometheus-stack ships.
 func DefaultConfig() Config {
 	return Config{
-		Channels: []Channel{},
+		Channels:    []Channel{},
+		MutedAlerts: []string{},
 		Routing: Routing{
 			GroupBy:        []string{"namespace", "alertname"},
 			GroupWait:      "30s",
@@ -272,6 +276,17 @@ func (c Config) Normalize() (Config, error) {
 		return Config{}, err
 	}
 	out.Routing = routing
+	out.MutedAlerts = []string{}
+	for _, alert := range c.MutedAlerts {
+		alert = strings.TrimSpace(alert)
+		if !labelNamePattern.MatchString(alert) {
+			return Config{}, fmt.Errorf("invalid alert name %q", alert)
+		}
+		if !slices.Contains(out.MutedAlerts, alert) {
+			out.MutedAlerts = append(out.MutedAlerts, alert)
+		}
+	}
+	slices.Sort(out.MutedAlerts)
 	return out, nil
 }
 
