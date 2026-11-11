@@ -8,12 +8,9 @@ import (
 	"time"
 
 	"github.com/qzytwway/mplatform/pkg/cluster"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -59,7 +56,8 @@ type servicePod struct {
 
 type serviceDetail struct {
 	inferenceService
-	Pods []servicePod `json:"pods"`
+	Pods       []servicePod      `json:"pods"`
+	Deployment *deploymentConfig `json:"deployment"`
 }
 
 // describeWorkload reports a LeaderWorkerSet or DisaggregatedSet as an
@@ -165,14 +163,16 @@ func pdRoles(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.
 		roles = append(roles, role)
 	}
 
-	var router appsv1.Deployment
-	routerKey := types.NamespacedName{Namespace: workload.GetNamespace(), Name: workload.GetName() + routerSuffix}
-	if err := cs.K8sClient.Get(ctx, routerKey, &router); err != nil && !apierrors.IsNotFound(err) {
+	router, err := getRouter(ctx, cs, workload)
+	if err != nil {
 		return nil, err
 	}
-	routerRole := serviceRole{Name: roleRouter, ReadyReplicas: router.Status.ReadyReplicas}
-	if router.Spec.Replicas != nil {
-		routerRole.Replicas = *router.Spec.Replicas
+	routerRole := serviceRole{Name: roleRouter}
+	if router != nil {
+		routerRole.ReadyReplicas = router.Status.ReadyReplicas
+		if router.Spec.Replicas != nil {
+			routerRole.Replicas = *router.Spec.Replicas
+		}
 	}
 	return append(roles, routerRole), nil
 }
