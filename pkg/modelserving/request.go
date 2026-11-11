@@ -3,6 +3,7 @@ package modelserving
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/distribution/reference"
 	"github.com/qzytwway/mplatform/pkg/model"
@@ -26,9 +27,16 @@ type serviceRequest struct {
 	Memory    string     `json:"memory"`
 	NodeName  string     `json:"nodeName"`
 	ExtraArgs []string   `json:"extraArgs"`
+	Env       []envVar   `json:"env"`
 	PD        *pdRequest `json:"pd"`
 	// VGPU asks HAMi for GPUCount vGPUs; without it the pods get whole GPUs.
 	VGPU *vgpuRequest `json:"vgpu"`
+	RDMA *rdmaRequest `json:"rdma"`
+}
+
+type envVar struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // vgpuRequest sizes each vGPU. Memory is in MiB; zero memory means the whole
@@ -39,10 +47,32 @@ type vgpuRequest struct {
 	Cores            int64 `json:"cores"`
 }
 
+// rdmaRequest gives the pods of multi-node groups and pd roles the RDMA NICs
+// that NCCL and KV transfer use: through a device plugin resource, optionally
+// attached as Multus networks, or by running privileged in the node network.
+type rdmaRequest struct {
+	Mode          string `json:"mode"`
+	Resource      string `json:"resource"`
+	ResourceCount int64  `json:"resourceCount"`
+	Networks      string `json:"networks"`
+}
+
 type pdRequest struct {
-	PrefillReplicas int32  `json:"prefillReplicas"`
-	DecodeReplicas  int32  `json:"decodeReplicas"`
-	RouterImage     string `json:"routerImage"`
+	Prefill         pdRoleRequest `json:"prefill"`
+	Decode          pdRoleRequest `json:"decode"`
+	RouterImage     string        `json:"routerImage"`
+	TransferBackend string        `json:"transferBackend"`
+	// IBDevices names the HCAs Mooncake transfers over; empty lets it detect them.
+	IBDevices string `json:"ibDevices"`
+}
+
+// pdRoleRequest sizes one pd role. Its extraArgs follow the service's and
+// override them.
+type pdRoleRequest struct {
+	Replicas  int32    `json:"replicas"`
+	GroupSize int32    `json:"groupSize"`
+	GPUCount  int64    `json:"gpuCount"`
+	ExtraArgs []string `json:"extraArgs"`
 }
 
 type scaleRequest struct {
@@ -66,8 +96,10 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 		Memory:    strings.TrimSpace(body.Memory),
 		NodeName:  strings.TrimSpace(body.NodeName),
 		ExtraArgs: body.ExtraArgs,
+		Env:       body.Env,
 		PD:        body.PD,
 		VGPU:      body.VGPU,
+		RDMA:      body.RDMA,
 	}
 	// A Service is created under the same name, which must start with a letter.
 	// LeaderWorkerSet and DisaggregatedSet append role, revision and index
@@ -87,9 +119,12 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	if _, err := reference.ParseNormalizedNamed(req.Image); err != nil {
 		return req, fmt.Errorf("image must be a valid image reference")
 	}
-	for _, arg := range req.ExtraArgs {
-		if arg == "" {
-			return req, fmt.Errorf("extraArgs must not contain empty arguments")
+	if err := validateArgs("extraArgs", req.ExtraArgs); err != nil {
+		return req, err
+	}
+	for _, env := range req.Env {
+		if len(validation.IsEnvVarName(env.Name)) > 0 {
+			return req, fmt.Errorf("env name %q is not a valid environment variable name", env.Name)
 		}
 	}
 	if err := validateServiceResources(&req); err != nil {
@@ -110,9 +145,16 @@ func parseServiceMode(req serviceRequest) (serviceRequest, error) {
 			return req, fmt.Errorf("replicas must be at least 1")
 		}
 	}
+	rdma, err := parseRDMARequest(req.RDMA)
+	if err != nil {
+		return req, err
+	}
+	req.RDMA = rdma
 	switch req.Mode {
 	case modeSingle:
 		req.GroupSize = 1
+		// A single node needs no RDMA between pods.
+		req.RDMA = nil
 		if req.NodeName != "" && len(validation.IsDNS1123Subdomain(req.NodeName)) > 0 {
 			return req, fmt.Errorf("nodeName must be a valid node name")
 		}
@@ -139,20 +181,78 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 		return req, fmt.Errorf("pd is required in %s mode", modePD)
 	}
 	pd := pdRequest{
-		PrefillReplicas: req.PD.PrefillReplicas,
-		DecodeReplicas:  req.PD.DecodeReplicas,
+		Prefill:         req.PD.Prefill,
+		Decode:          req.PD.Decode,
 		RouterImage:     strings.TrimSpace(req.PD.RouterImage),
+		TransferBackend: req.PD.TransferBackend,
+		IBDevices:       strings.TrimSpace(req.PD.IBDevices),
 	}
-	if pd.PrefillReplicas < 1 || pd.DecodeReplicas < 1 {
-		return req, fmt.Errorf("pd.prefillReplicas and pd.decodeReplicas must be at least 1")
+	for name, role := range map[string]pdRoleRequest{rolePrefill: pd.Prefill, roleDecode: pd.Decode} {
+		if role.Replicas < 1 || role.GroupSize < 1 || role.GPUCount < 1 {
+			return req, fmt.Errorf("pd.%s replicas, groupSize and gpuCount must be at least 1", name)
+		}
+		if err := validateArgs("pd."+name+".extraArgs", role.ExtraArgs); err != nil {
+			return req, err
+		}
 	}
 	if _, err := reference.ParseNormalizedNamed(pd.RouterImage); err != nil {
 		return req, fmt.Errorf("pd.routerImage must be a valid image reference")
 	}
+	switch pd.TransferBackend {
+	case "":
+		pd.TransferBackend = transferMooncake
+	case transferMooncake, transferMooncakeTCP, transferNIXL:
+	default:
+		return req, fmt.Errorf("pd.transferBackend must be %s, %s or %s", transferMooncake, transferMooncakeTCP, transferNIXL)
+	}
+	if pd.TransferBackend != transferMooncake {
+		pd.IBDevices = ""
+	}
+	if strings.ContainsFunc(pd.IBDevices, unicode.IsSpace) {
+		return req, fmt.Errorf("pd.ibDevices must be comma-separated device names without spaces")
+	}
 	req.PD = &pd
+	// Each role sizes its own groups.
 	req.Replicas = 0
 	req.GroupSize = 1
+	req.GPUCount = 0
 	return req, nil
+}
+
+func parseRDMARequest(body *rdmaRequest) (*rdmaRequest, error) {
+	if body == nil {
+		return nil, nil
+	}
+	switch body.Mode {
+	case rdmaModeHost:
+		return &rdmaRequest{Mode: rdmaModeHost}, nil
+	case rdmaModeDevicePlugin:
+	default:
+		return nil, fmt.Errorf("rdma.mode must be %s or %s", rdmaModeDevicePlugin, rdmaModeHost)
+	}
+	rdma := rdmaRequest{
+		Mode:          rdmaModeDevicePlugin,
+		Resource:      strings.TrimSpace(body.Resource),
+		ResourceCount: body.ResourceCount,
+		Networks:      strings.TrimSpace(body.Networks),
+	}
+	// Device plugins serve extended resources, which are domain-prefixed.
+	if len(validation.IsQualifiedName(rdma.Resource)) > 0 || !strings.Contains(rdma.Resource, "/") {
+		return nil, fmt.Errorf("rdma.resource must be a domain-prefixed resource name such as rdma/hca")
+	}
+	if rdma.ResourceCount < 1 {
+		return nil, fmt.Errorf("rdma.resourceCount must be at least 1")
+	}
+	return &rdma, nil
+}
+
+func validateArgs(field string, args []string) error {
+	for _, arg := range args {
+		if arg == "" {
+			return fmt.Errorf("%s must not contain empty arguments", field)
+		}
+	}
+	return nil
 }
 
 func validateServiceResources(req *serviceRequest) error {
@@ -175,7 +275,8 @@ func validateVGPU(req *serviceRequest) error {
 	switch {
 	case vgpu == nil:
 		return nil
-	case req.GPUCount < 1:
+	// pd roles each set and check their own count.
+	case req.Mode != modePD && req.GPUCount < 1:
 		return fmt.Errorf("gpuCount must be at least 1 for vGPUs")
 	case vgpu.Memory < 0 || vgpu.MemoryPercentage < 0 || vgpu.Cores < 0:
 		return fmt.Errorf("vgpu memory, memoryPercentage and cores must not be negative")

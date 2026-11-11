@@ -13,7 +13,21 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-const ROLE_ORDER = ['router', 'leader', 'worker', 'prefill', 'decode']
+const ROLE_ORDER = [
+  'router',
+  'leader',
+  'worker',
+  'prefill',
+  'prefill-worker',
+  'decode',
+  'decode-worker',
+]
+
+// Workers sort with the leader of their group.
+const groupRole = (role: string) =>
+  ROLE_ORDER.indexOf(
+    role === 'worker' ? 'leader' : role.replace(/-worker$/, '')
+  )
 
 interface ServicePodsTableProps {
   namespace: string
@@ -30,16 +44,14 @@ export function ServicePodsTable({ namespace, pods }: ServicePodsTableProps) {
       </p>
     )
 
-  // Leader and worker pods of one group stay together; PD roles are grouped by role.
-  const isGrouped = pods.some((pod) => pod.role === 'worker')
-  const sortedPods = [...pods].sort((a, b) => {
-    const byRole = ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role)
-    const byGroup = a.groupIndex - b.groupIndex
-    return (
-      (isGrouped ? byGroup || byRole : byRole || byGroup) ||
+  // Pods are listed by role, then group, with each leader before its workers.
+  const sortedPods = [...pods].sort(
+    (a, b) =>
+      groupRole(a.role) - groupRole(b.role) ||
+      a.groupIndex - b.groupIndex ||
+      ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) ||
       a.name.localeCompare(b.name)
-    )
-  })
+  )
 
   return (
     <div className="rounded-md border">

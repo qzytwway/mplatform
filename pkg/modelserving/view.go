@@ -17,10 +17,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// serviceRole sets GroupSize and GPUCount only on pd roles, which size their
+// groups apart.
 type serviceRole struct {
 	Name          string `json:"name"`
 	Replicas      int32  `json:"replicas"`
 	ReadyReplicas int32  `json:"readyReplicas"`
+	GroupSize     int64  `json:"groupSize,omitempty"`
+	GPUCount      int64  `json:"gpuCount,omitempty"`
 }
 
 type inferenceService struct {
@@ -87,33 +91,42 @@ func describeWorkload(ctx context.Context, cs *cluster.ClientSet, workload *unst
 		ready, _, _ := unstructured.NestedInt64(workload.Object, "status", "readyReplicas")
 		service.Roles = []serviceRole{{Name: roleDefault, Replicas: int32(replicas), ReadyReplicas: int32(ready)}}
 	}
-	service.GroupSize, _, _ = unstructured.NestedInt64(template, "size")
-	if containers, _, _ := unstructured.NestedSlice(template, "workerTemplate", "spec", "containers"); len(containers) > 0 {
-		container, _ := containers[0].(map[string]any)
-		service.Image, _, _ = unstructured.NestedString(container, "image")
-		limits, _, _ := unstructured.NestedStringMap(container, "resources", "limits")
-		limit := func(name corev1.ResourceName) int64 {
-			quantity, err := resource.ParseQuantity(limits[string(name)])
-			if err != nil {
-				return 0
-			}
-			return quantity.Value()
-		}
-		service.GPUCount = limit(gpuResource)
-		if _, ok := limits[string(vgpuResource)]; ok {
-			service.GPUCount = limit(vgpuResource)
-			service.VGPU = &vgpuRequest{
-				Memory:           limit(vgpuMemoryResource),
-				MemoryPercentage: limit(vgpuMemoryPercentageResource),
-				Cores:            limit(vgpuCoresResource),
-			}
-		}
-	}
+	service.GroupSize, service.Image, service.GPUCount, service.VGPU = readGroupTemplate(template)
 	service.Ready = true
 	for _, role := range service.Roles {
 		service.Ready = service.Ready && role.Replicas > 0 && role.ReadyReplicas == role.Replicas
 	}
 	return service, nil
+}
+
+// readGroupTemplate reads the group size of a leaderWorkerTemplate and the
+// image and GPUs of each of its pods.
+func readGroupTemplate(template map[string]any) (groupSize int64, image string, gpuCount int64, vgpu *vgpuRequest) {
+	groupSize, _, _ = unstructured.NestedInt64(template, "size")
+	containers, _, _ := unstructured.NestedSlice(template, "workerTemplate", "spec", "containers")
+	if len(containers) == 0 {
+		return groupSize, "", 0, nil
+	}
+	container, _ := containers[0].(map[string]any)
+	image, _, _ = unstructured.NestedString(container, "image")
+	limits, _, _ := unstructured.NestedStringMap(container, "resources", "limits")
+	limit := func(name corev1.ResourceName) int64 {
+		quantity, err := resource.ParseQuantity(limits[string(name)])
+		if err != nil {
+			return 0
+		}
+		return quantity.Value()
+	}
+	gpuCount = limit(gpuResource)
+	if _, ok := limits[string(vgpuResource)]; ok {
+		gpuCount = limit(vgpuResource)
+		vgpu = &vgpuRequest{
+			Memory:           limit(vgpuMemoryResource),
+			MemoryPercentage: limit(vgpuMemoryPercentageResource),
+			Cores:            limit(vgpuCoresResource),
+		}
+	}
+	return groupSize, image, gpuCount, vgpu
 }
 
 // pdRoleSpecs returns the spec of each DisaggregatedSet role by role name.
@@ -146,7 +159,10 @@ func pdRoles(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.
 	roles := []serviceRole{}
 	for _, name := range []string{rolePrefill, roleDecode} {
 		replicas, _, _ := unstructured.NestedInt64(specs[name], "replicas")
-		roles = append(roles, serviceRole{Name: name, Replicas: int32(replicas), ReadyReplicas: int32(ready[name])})
+		template, _, _ := unstructured.NestedMap(specs[name], "leaderWorkerTemplate")
+		role := serviceRole{Name: name, Replicas: int32(replicas), ReadyReplicas: int32(ready[name])}
+		role.GroupSize, _, role.GPUCount, _ = readGroupTemplate(template)
+		roles = append(roles, role)
 	}
 
 	var router appsv1.Deployment
@@ -200,13 +216,20 @@ func toServicePod(pod *corev1.Pod) servicePod {
 	return item
 }
 
+// podRole names workers of a multi-node pd group after their role, as in
+// prefill-worker. Router pods have no worker index.
 func podRole(labels map[string]string) string {
+	role, worker := labels[roleLabel], labels[lwsWorkerIndexLabel] != "0"
 	switch {
-	case labels[roleLabel] != "":
-		return labels[roleLabel]
-	case labels[lwsWorkerIndexLabel] == "0":
-		return roleLeader
-	default:
+	case role == roleRouter:
+		return roleRouter
+	case role != "" && worker:
+		return role + "-" + roleWorker
+	case role != "":
+		return role
+	case worker:
 		return roleWorker
+	default:
+		return roleLeader
 	}
 }

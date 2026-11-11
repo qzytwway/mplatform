@@ -10,9 +10,12 @@ import {
   useModelServingStatus,
   useServedModels,
   type DeploymentMode,
+  type EnvVar,
   type GPUMode,
   type InferenceRuntime,
   type ModelType,
+  type PDRoleRequest,
+  type RDMARequest,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
@@ -34,13 +37,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
 import {
   ServiceModeFields,
+  type PDRoleValues,
   type ServiceModeValues,
 } from './service-mode-fields'
 import { modeBlocker } from './service-modes'
+import {
+  ServiceNetworkFields,
+  type NetworkValues,
+} from './service-network-fields'
 
 const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
   vllm: 'vllm/vllm-openai:latest',
@@ -50,7 +59,49 @@ const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
 // Radix Select items cannot have an empty value.
 const ANY_NODE = '__any__'
 
+const DEFAULT_PD_ROLE: PDRoleValues = {
+  replicas: '1',
+  groupSize: '1',
+  gpuCount: '1',
+  extraArgs: '',
+}
+
 type VGPUMemoryUnit = 'mib' | 'percentage'
+
+const splitArgs = (value: string) => value.split(/\s+/).filter(Boolean)
+
+function toPDRole(values: PDRoleValues): PDRoleRequest {
+  return {
+    replicas: Number(values.replicas),
+    groupSize: Number(values.groupSize),
+    gpuCount: Number(values.gpuCount),
+    extraArgs: splitArgs(values.extraArgs),
+  }
+}
+
+function toRDMA(values: NetworkValues): RDMARequest | undefined {
+  if (values.rdma === 'none') return undefined
+  if (values.rdma === 'host') return { mode: 'host' }
+  return {
+    mode: 'device-plugin',
+    resource: values.resource.trim(),
+    resourceCount: Number(values.resourceCount),
+    networks: values.networks.trim(),
+  }
+}
+
+// Reads one KEY=VALUE per line; a line without '=' sets an empty value.
+function parseEnv(value: string): EnvVar[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const index = line.indexOf('=')
+      if (index < 0) return { name: line, value: '' }
+      return { name: line.slice(0, index).trim(), value: line.slice(index + 1) }
+    })
+}
 
 interface CreateServiceDialogProps {
   open: boolean
@@ -87,9 +138,17 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
   const [modeValues, setModeValues] = useState<ServiceModeValues>({
     replicas: '1',
     groupSize: '2',
-    prefillReplicas: '1',
-    decodeReplicas: '1',
+    prefill: DEFAULT_PD_ROLE,
+    decode: DEFAULT_PD_ROLE,
     routerImage: DEFAULT_IMAGES.sglang,
+    transferBackend: 'mooncake',
+    ibDevices: '',
+  })
+  const [networkValues, setNetworkValues] = useState<NetworkValues>({
+    rdma: 'none',
+    resource: '',
+    resourceCount: '1',
+    networks: '',
   })
   const [gpuType, setGpuType] = useState<GPUMode>('whole')
   const [gpuCount, setGpuCount] = useState('1')
@@ -100,6 +159,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
   const [memory, setMemory] = useState('')
   const [nodeName, setNodeName] = useState(ANY_NODE)
   const [extraArgs, setExtraArgs] = useState('')
+  const [env, setEnv] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
   const modelTypeOf = (id: string): ModelType | undefined =>
@@ -107,6 +167,10 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
   const modelType = modelTypeOf(modelId)
   const hamiInstalled = !!gpuComponents?.hami.installed
   const modeNodes = gpuNodes?.items.filter((node) => node.mode === gpuType)
+  const gpuCountLabel =
+    gpuType === 'vgpu'
+      ? t('modelServing.services.vgpuCount')
+      : t('modelServing.services.gpuCount')
 
   // A node serves either whole GPUs or vGPUs.
   const handleGpuTypeChange = (value: string) => {
@@ -141,18 +205,26 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
         mode,
         replicas: Number(modeValues.replicas),
         groupSize: mode === 'multi' ? Number(modeValues.groupSize) : 1,
-        gpuCount: Number(gpuCount),
+        // PD roles set their own GPU counts.
+        gpuCount: mode === 'pd' ? 0 : Number(gpuCount),
         cpu: cpu.trim(),
         memory: memory.trim(),
         nodeName: mode === 'single' && nodeName !== ANY_NODE ? nodeName : '',
-        extraArgs: extraArgs.split(/\s+/).filter(Boolean),
+        extraArgs: splitArgs(extraArgs),
+        env: parseEnv(env),
         ...(mode === 'pd' && {
           pd: {
-            prefillReplicas: Number(modeValues.prefillReplicas),
-            decodeReplicas: Number(modeValues.decodeReplicas),
+            prefill: toPDRole(modeValues.prefill),
+            decode: toPDRole(modeValues.decode),
             routerImage: modeValues.routerImage.trim(),
+            transferBackend: modeValues.transferBackend,
+            ibDevices:
+              modeValues.transferBackend === 'mooncake'
+                ? modeValues.ibDevices.trim()
+                : '',
           },
         }),
+        ...(mode !== 'single' && { rdma: toRDMA(networkValues) }),
         ...(gpuType === 'vgpu' && {
           vgpu: {
             memory: vgpuMemoryUnit === 'mib' ? Number(vgpuMemory) : 0,
@@ -262,9 +334,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             pd: modeBlocker('pd', runtime, modelType, status),
           }}
           values={modeValues}
-          onValueChange={(field, value) =>
-            setModeValues((current) => ({ ...current, [field]: value }))
-          }
+          onValuesChange={setModeValues}
+          gpuCountLabel={gpuCountLabel}
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
@@ -349,21 +420,19 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="inference-gpu-count">
-              {gpuType === 'vgpu'
-                ? t('modelServing.services.vgpuCount')
-                : t('modelServing.services.gpuCount')}
-            </Label>
-            <Input
-              id="inference-gpu-count"
-              type="number"
-              min={gpuType === 'vgpu' ? 1 : 0}
-              value={gpuCount}
-              onChange={(event) => setGpuCount(event.target.value)}
-              required
-            />
-          </div>
+          {mode !== 'pd' && (
+            <div className="space-y-2">
+              <Label htmlFor="inference-gpu-count">{gpuCountLabel}</Label>
+              <Input
+                id="inference-gpu-count"
+                type="number"
+                min={gpuType === 'vgpu' ? 1 : 0}
+                value={gpuCount}
+                onChange={(event) => setGpuCount(event.target.value)}
+                required
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="inference-cpu">{t('common.fields.cpu')}</Label>
             <Input
@@ -409,6 +478,12 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             </p>
           </div>
         )}
+        {mode !== 'single' && (
+          <ServiceNetworkFields
+            values={networkValues}
+            onValuesChange={setNetworkValues}
+          />
+        )}
         <div className="space-y-2">
           <Label htmlFor="inference-extra-args">
             {t('modelServing.services.extraArgs')}
@@ -421,7 +496,25 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             className="font-mono"
           />
           <p className="text-xs text-muted-foreground">
-            {t('modelServing.services.extraArgsHint')}
+            {mode === 'pd'
+              ? t('modelServing.services.extraArgsHintPD')
+              : t('modelServing.services.extraArgsHint')}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="inference-env">
+            {t('modelServing.services.env')}
+          </Label>
+          <Textarea
+            id="inference-env"
+            value={env}
+            onChange={(event) => setEnv(event.target.value)}
+            placeholder="NCCL_IB_GID_INDEX=3"
+            className="font-mono"
+            rows={3}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('modelServing.services.envHint')}
           </p>
         </div>
         <DialogFooter>

@@ -162,7 +162,15 @@ export function ServiceDetailPage() {
               {formatGPUSpec(service, t)}
             </DetailItem>
             <DetailItem label={t('modelServing.services.groupSize')}>
-              {service.groupSize}
+              {service.mode === 'pd'
+                ? service.roles
+                    .filter((role) => role.groupSize)
+                    .map(
+                      (role) =>
+                        `${t(`modelServing.roles.${role.name}`)} ${role.groupSize}`
+                    )
+                    .join(' / ')
+                : service.groupSize}
             </DetailItem>
             <div className="sm:col-span-2">
               <DetailItem label={t('common.fields.image')}>

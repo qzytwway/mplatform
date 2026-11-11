@@ -71,11 +71,7 @@ func noSurgeRollout() map[string]any {
 }
 
 func buildLeaderWorkerSet(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage) (*unstructured.Unstructured, error) {
-	leader := runtimePodTemplate(req, served, storage, roleLeader)
-	template, err := leaderWorkerTemplate(req.GroupSize, nil, leader)
-	if req.Mode == modeMulti {
-		template, err = leaderWorkerTemplate(req.GroupSize, &leader, runtimePodTemplate(req, served, storage, roleWorker))
-	}
+	template, err := groupTemplate(req, served, storage, "")
 	if err != nil {
 		return nil, err
 	}

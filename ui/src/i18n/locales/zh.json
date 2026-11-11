@@ -2289,6 +2289,38 @@
       "prefillReplicas": "Prefill 副本数",
       "decodeReplicas": "Decode 副本数",
       "routerImage": "路由镜像",
+      "nodesPerReplica": "每副本节点数",
+      "extraArgsHintPD": "同时追加到 Prefill 和 Decode 的启动命令末尾；各角色的额外参数排在后面，可覆盖这里的设置。",
+      "transferBackend": "KV 传输方式",
+      "transferBackends": {
+        "mooncake": "Mooncake (RDMA)",
+        "mooncake-tcp": "Mooncake (TCP)",
+        "nixl": "NIXL"
+      },
+      "transferBackendHints": {
+        "mooncake": "通过 RDMA 网卡传输 KV Cache，需要在下方配置 RDMA 网络。",
+        "mooncake-tcp": "不需要 RDMA，任何网络都可用，但传输较慢。",
+        "nixl": "需要镜像内置 NIXL，由 UCX 按网络情况选择 RDMA 或 TCP。"
+      },
+      "ibDevices": "RDMA 网卡",
+      "ibDevicesHint": "可选，逗号分隔，例如 mlx5_0,mlx5_1。留空则自动检测。",
+      "rdma": "RDMA 网络",
+      "rdmaModes": {
+        "none": "不使用",
+        "device-plugin": "设备插件",
+        "host": "主机网络"
+      },
+      "rdmaModeHints": {
+        "none": "节点间通信和 KV 传输走 Pod 网络。",
+        "device-plugin": "通过 RDMA 设备插件（如 NVIDIA Network Operator、SR-IOV）把网卡分配给 Pod，并授予 IPC_LOCK 权限。",
+        "host": "Pod 以特权方式运行在节点网络中，直接使用节点的 RDMA 网卡。命名空间需允许特权 Pod，同一节点上同一端口只能被一个 Pod 占用。"
+      },
+      "rdmaResource": "RDMA 资源名",
+      "rdmaResourceCount": "每 Pod 资源数",
+      "rdmaNetworks": "附加网络 (Multus)",
+      "rdmaNetworksHint": "资源名以设备插件的配置为准。附加网络可选，会写入 Pod 的 k8s.v1.cni.cncf.io/networks 注解，SR-IOV 等需要独立网卡的方案需要填写。",
+      "env": "环境变量",
+      "envHint": "每行一个 KEY=VALUE，加到所有推理容器，例如 NCCL_IB_GID_INDEX、NCCL_SOCKET_IFNAME。",
       "scaleTitle": "伸缩推理服务",
       "scaleDescription": "设置副本数。每个副本都需要独占 GPU。",
       "scaleDescriptionPD": "设置 Prefill 和 Decode 的副本数。路由不支持伸缩。",
@@ -2429,7 +2461,9 @@
       "worker": "Worker",
       "prefill": "Prefill",
       "decode": "Decode",
-      "router": "路由"
+      "router": "路由",
+      "prefill-worker": "Prefill Worker",
+      "decode-worker": "Decode Worker"
     },
     "lws": {
       "title": "LeaderWorkerSet",

@@ -81,6 +81,9 @@ export interface InferenceServiceRole {
   name: string
   replicas: number
   readyReplicas: number
+  // Set on PD roles, which size their groups apart.
+  groupSize?: number
+  gpuCount?: number
 }
 
 export interface InferencePod {
@@ -123,12 +126,39 @@ export interface CreateInferenceServiceRequest {
   memory?: string
   nodeName?: string
   extraArgs?: string[]
+  env?: EnvVar[]
   pd?: {
-    prefillReplicas: number
-    decodeReplicas: number
+    prefill: PDRoleRequest
+    decode: PDRoleRequest
     routerImage: string
+    transferBackend: TransferBackend
+    ibDevices?: string
   }
   vgpu?: VGPUSpec
+  rdma?: RDMARequest
+}
+
+export type TransferBackend = 'mooncake' | 'mooncake-tcp' | 'nixl'
+
+export type RDMAMode = 'device-plugin' | 'host'
+
+export interface PDRoleRequest {
+  replicas: number
+  groupSize: number
+  gpuCount: number
+  extraArgs?: string[]
+}
+
+export interface RDMARequest {
+  mode: RDMAMode
+  resource?: string
+  resourceCount?: number
+  networks?: string
+}
+
+export interface EnvVar {
+  name: string
+  value: string
 }
 
 export type ScaleInferenceServiceRequest =

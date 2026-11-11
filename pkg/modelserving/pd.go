@@ -2,6 +2,7 @@ package modelserving
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/qzytwway/mplatform/pkg/model"
 	appsv1 "k8s.io/api/apps/v1"
@@ -18,17 +19,20 @@ const routerSuffix = "-router"
 func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage) (*unstructured.Unstructured, error) {
 	roles := []any{}
 	for _, role := range []struct {
-		name     string
-		replicas int32
-	}{{rolePrefill, req.PD.PrefillReplicas}, {roleDecode, req.PD.DecodeReplicas}} {
-		template, err := leaderWorkerTemplate(1, nil, runtimePodTemplate(req, served, storage, role.name))
+		name string
+		spec pdRoleRequest
+	}{{rolePrefill, req.PD.Prefill}, {roleDecode, req.PD.Decode}} {
+		roleReq := *req
+		roleReq.GroupSize, roleReq.GPUCount = role.spec.GroupSize, role.spec.GPUCount
+		roleReq.ExtraArgs = append(slices.Clone(req.ExtraArgs), role.spec.ExtraArgs...)
+		template, err := groupTemplate(&roleReq, served, storage, role.name)
 		if err != nil {
 			return nil, err
 		}
 		roles = append(roles, map[string]any{
 			"name": role.name,
 			"spec": map[string]any{
-				"replicas":             int64(role.replicas),
+				"replicas":             int64(role.spec.Replicas),
 				"rolloutStrategy":      noSurgeRollout(),
 				"leaderWorkerTemplate": template,
 			},
@@ -86,16 +90,18 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 }
 
 // routerArgs lets the router find prefill and decode pods by label, so it
-// follows scaling and rollouts without being reconfigured.
+// follows scaling and rollouts without being reconfigured. Only group leaders
+// serve HTTP.
 func routerArgs(req *serviceRequest) []string {
 	service := serviceLabel + "=" + req.Name
+	leader := lwsWorkerIndexLabel + "=0"
 	return []string{
 		"--pd-disaggregation",
 		"--service-discovery",
 		"--service-discovery-namespace", req.Namespace,
 		"--service-discovery-port", fmt.Sprint(servingPort),
-		"--prefill-selector", service, roleLabel + "=" + rolePrefill,
-		"--decode-selector", service, roleLabel + "=" + roleDecode,
+		"--prefill-selector", service, roleLabel + "=" + rolePrefill, leader,
+		"--decode-selector", service, roleLabel + "=" + roleDecode, leader,
 		"--host", "0.0.0.0",
 		"--port", fmt.Sprint(servingPort),
 	}

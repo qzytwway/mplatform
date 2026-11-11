@@ -2202,6 +2202,38 @@
       "prefillReplicas": "Prefill replicas",
       "decodeReplicas": "Decode replicas",
       "routerImage": "Router image",
+      "nodesPerReplica": "Nodes per replica",
+      "extraArgsHintPD": "Appended to both the prefill and decode start commands; each role's own arguments come after them and can override them.",
+      "transferBackend": "KV transfer",
+      "transferBackends": {
+        "mooncake": "Mooncake (RDMA)",
+        "mooncake-tcp": "Mooncake (TCP)",
+        "nixl": "NIXL"
+      },
+      "transferBackendHints": {
+        "mooncake": "Transfers the KV cache over RDMA NICs. Configure the RDMA network below.",
+        "mooncake-tcp": "Needs no RDMA and works on any network, but transfers more slowly.",
+        "nixl": "Needs NIXL in the image. UCX picks RDMA or TCP depending on the network."
+      },
+      "ibDevices": "RDMA devices",
+      "ibDevicesHint": "Optional, comma-separated, such as mlx5_0,mlx5_1. Leave empty to detect them.",
+      "rdma": "RDMA network",
+      "rdmaModes": {
+        "none": "None",
+        "device-plugin": "Device plugin",
+        "host": "Host network"
+      },
+      "rdmaModeHints": {
+        "none": "Traffic between nodes and KV transfer go over the pod network.",
+        "device-plugin": "An RDMA device plugin, such as the NVIDIA Network Operator or SR-IOV, assigns NICs to pods, which get the IPC_LOCK capability.",
+        "host": "Pods run privileged in the node network and use the node's RDMA NICs directly. The namespace must allow privileged pods, and a port on a node can be used by only one pod."
+      },
+      "rdmaResource": "RDMA resource",
+      "rdmaResourceCount": "Per pod",
+      "rdmaNetworks": "Networks (Multus)",
+      "rdmaNetworksHint": "Use the resource name your device plugin serves. Networks are optional and go into the pod's k8s.v1.cni.cncf.io/networks annotation; setups with dedicated NICs such as SR-IOV need them.",
+      "env": "Environment variables",
+      "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME.",
       "scaleTitle": "Scale inference service",
       "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
       "scaleDescriptionPD": "Set the prefill and decode replicas. The router is not scalable.",
@@ -2342,7 +2374,9 @@
       "worker": "Worker",
       "prefill": "Prefill",
       "decode": "Decode",
-      "router": "Router"
+      "router": "Router",
+      "prefill-worker": "Prefill worker",
+      "decode-worker": "Decode worker"
     },
     "lws": {
       "title": "LeaderWorkerSet",

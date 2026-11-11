@@ -47,6 +47,16 @@ const (
 	pdBootstrapPort     = 8998
 	bootstrapAnnotation = "sglang.ai/bootstrap-port"
 
+	// KV transfer backends of pd mode. Mooncake transfers over RDMA unless
+	// forced to TCP, which works on any network but is much slower.
+	transferMooncake    = "mooncake"
+	transferMooncakeTCP = "mooncake-tcp"
+	transferNIXL        = "nixl"
+
+	rdmaModeDevicePlugin = "device-plugin"
+	rdmaModeHost         = "host"
+	multusAnnotation     = "k8s.v1.cni.cncf.io/networks"
+
 	modelMountRoot = "/models/"
 	modelCacheRoot = "/var/lib/mplatform/models/"
 	modelVolume    = "model"
@@ -92,11 +102,21 @@ func workloadMeta(req *serviceRequest, served *model.ServedModel) metav1.ObjectM
 	}
 }
 
-// runtimePodTemplate builds the pod of one role. storage is only needed for
-// s3 models.
-func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage, role string) corev1.PodTemplateSpec {
+// groupTemplate returns the leaderWorkerTemplate of req's groups. pdRole is
+// empty outside pd mode.
+func groupTemplate(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage, pdRole string) (map[string]any, error) {
+	leader := runtimePodTemplate(req, served, storage, pdRole, false)
+	if req.GroupSize == 1 {
+		return leaderWorkerTemplate(1, nil, leader)
+	}
+	return leaderWorkerTemplate(req.GroupSize, &leader, runtimePodTemplate(req, served, storage, pdRole, true))
+}
+
+// runtimePodTemplate builds the leader or a worker pod of a group. storage is
+// only needed for s3 models.
+func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage, pdRole string, worker bool) corev1.PodTemplateSpec {
 	podSpec := corev1.PodSpec{
-		Containers: []corev1.Container{runtimeContainer(req, served, role)},
+		Containers: []corev1.Container{runtimeContainer(req, served, pdRole, worker)},
 		Volumes: []corev1.Volume{
 			modelSourceVolume(served),
 			{Name: shmVolume, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}}},
@@ -108,33 +128,48 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 	if req.NodeName != "" {
 		podSpec.NodeSelector = map[string]string{corev1.LabelHostname: req.NodeName}
 	}
-	template := corev1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{Labels: serviceLabels(req.Name)},
+	annotations := map[string]string{}
+	if req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
+		podSpec.HostNetwork = true
+		// Keeps cluster DNS, which resolves the group leader's address.
+		podSpec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+	}
+	if req.RDMA != nil && req.RDMA.Networks != "" {
+		annotations[multusAnnotation] = req.RDMA.Networks
+	}
+	// Every pod of a pd role carries its role; the router only takes leaders.
+	labels := serviceLabels(req.Name)
+	if pdRole != "" {
+		labels[roleLabel] = pdRole
+	}
+	if pdRole == rolePrefill {
+		annotations[bootstrapAnnotation] = fmt.Sprint(pdBootstrapPort)
+	}
+	if len(annotations) == 0 {
+		annotations = nil
+	}
+	return corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: annotations},
 		Spec:       podSpec,
 	}
-	if role == rolePrefill || role == roleDecode {
-		template.Labels[roleLabel] = role
-	}
-	if role == rolePrefill {
-		template.Annotations = map[string]string{bootstrapAnnotation: fmt.Sprint(pdBootstrapPort)}
-	}
-	return template
 }
 
-func runtimeContainer(req *serviceRequest, served *model.ServedModel, role string) corev1.Container {
+func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole string, worker bool) corev1.Container {
 	container := corev1.Container{
-		Name:      req.Runtime,
-		Image:     req.Image,
-		Command:   runtimeCommand(req.Runtime),
-		Args:      append(runtimeArgs(req, served, role), req.ExtraArgs...),
-		Resources: runtimeResources(req),
+		Name:            req.Runtime,
+		Image:           req.Image,
+		Command:         runtimeCommand(req.Runtime),
+		Args:            append(runtimeArgs(req, served, pdRole, worker), req.ExtraArgs...),
+		Env:             runtimeEnv(req),
+		Resources:       runtimeResources(req),
+		SecurityContext: rdmaSecurityContext(req.RDMA),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: modelVolume, MountPath: modelMountRoot + served.Name, ReadOnly: true},
 			{Name: shmVolume, MountPath: "/dev/shm"},
 		},
 	}
 	// Workers of a multi-node group serve no HTTP; only their leader does.
-	if role == roleWorker {
+	if worker {
 		return container
 	}
 	healthProbe := corev1.ProbeHandler{
@@ -159,7 +194,7 @@ func runtimeCommand(runtime string) []string {
 
 // runtimeArgs follows the multi-node examples of the LeaderWorkerSet project:
 // $(LWS_*) are environment variables it injects into every pod of a group.
-func runtimeArgs(req *serviceRequest, served *model.ServedModel, role string) []string {
+func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, worker bool) []string {
 	modelPath := modelMountRoot + served.Name
 	// vllm serve takes the model as its first positional argument; --model is
 	// deprecated there.
@@ -167,26 +202,30 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, role string) []
 	if req.Runtime == runtimeSGLang {
 		args = append([]string{"--model-path"}, args...)
 	}
-	if role != roleWorker {
+	if !worker {
 		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
 	}
 	// Parallelism defaults to using every GPU of the group, as the examples
-	// do; extraArgs come later on the command line and override it.
+	// do; extraArgs come later on the command line and override it. Groups
+	// of several nodes come from multi mode or a pd role.
 	switch {
-	case req.Mode == modeMulti && req.Runtime == runtimeSGLang:
+	case req.GroupSize > 1 && req.Runtime == runtimeSGLang:
 		args = append(args, "--tp", fmt.Sprint(req.GPUCount*int64(req.GroupSize)),
 			"--dist-init-addr", fmt.Sprintf("$(LWS_LEADER_ADDRESS):%d", sglangDistInitPort),
 			"--nnodes", "$(LWS_GROUP_SIZE)", "--node-rank", "$(LWS_WORKER_INDEX)")
-	case req.Mode == modeMulti:
+	case req.GroupSize > 1:
 		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount), "--pipeline-parallel-size", "$(LWS_GROUP_SIZE)",
 			"--nnodes", "$(LWS_GROUP_SIZE)", "--node-rank", "$(LWS_WORKER_INDEX)", "--master-addr", "$(LWS_LEADER_ADDRESS)")
-		if role == roleWorker {
+		if worker {
 			args = append(args, "--headless")
 		}
-	case role == rolePrefill:
-		args = append(args, "--disaggregation-mode", rolePrefill, "--disaggregation-bootstrap-port", fmt.Sprint(pdBootstrapPort))
-	case role == roleDecode:
-		args = append(args, "--disaggregation-mode", roleDecode)
+	case req.GPUCount > 1 && req.Runtime == runtimeSGLang:
+		args = append(args, "--tp", fmt.Sprint(req.GPUCount))
+	case req.GPUCount > 1:
+		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount))
+	}
+	if pdRole != "" {
+		args = append(args, disaggregationArgs(req.PD, pdRole)...)
 	}
 	if served.Type != modelTypeEmbedding {
 		return args
@@ -195,6 +234,51 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, role string) []
 		return append(args, "--is-embedding")
 	}
 	return append(args, "--runner", "pooling")
+}
+
+// disaggregationArgs makes a pd role's server prefill or decode and pick the
+// KV transfer backend. Every node of a prefill group registers with the
+// bootstrap server its leader runs on the given port.
+func disaggregationArgs(pd *pdRequest, pdRole string) []string {
+	args := []string{"--disaggregation-mode", pdRole}
+	if pdRole == rolePrefill {
+		args = append(args, "--disaggregation-bootstrap-port", fmt.Sprint(pdBootstrapPort))
+	}
+	backend := transferMooncake
+	if pd.TransferBackend == transferNIXL {
+		backend = transferNIXL
+	}
+	args = append(args, "--disaggregation-transfer-backend", backend)
+	if pd.IBDevices != "" {
+		args = append(args, "--disaggregation-ib-device", pd.IBDevices)
+	}
+	return args
+}
+
+// runtimeEnv puts the env the platform sets before the user's, so the user's
+// win.
+func runtimeEnv(req *serviceRequest) []corev1.EnvVar {
+	var env []corev1.EnvVar
+	if req.PD != nil && req.PD.TransferBackend == transferMooncakeTCP {
+		env = append(env, corev1.EnvVar{Name: "MOONCAKE_PROTOCOL", Value: "tcp"}, corev1.EnvVar{Name: "MC_FORCE_TCP", Value: "1"})
+	}
+	for _, item := range req.Env {
+		env = append(env, corev1.EnvVar{Name: item.Name, Value: item.Value})
+	}
+	return env
+}
+
+// rdmaSecurityContext lets RDMA register pinned memory. Host mode also needs
+// privileged to reach the node's RDMA devices without a device plugin.
+func rdmaSecurityContext(rdma *rdmaRequest) *corev1.SecurityContext {
+	switch {
+	case rdma == nil:
+		return nil
+	case rdma.Mode == rdmaModeHost:
+		return &corev1.SecurityContext{Privileged: new(true)}
+	default:
+		return &corev1.SecurityContext{Capabilities: &corev1.Capabilities{Add: []corev1.Capability{"IPC_LOCK"}}}
+	}
 }
 
 func runtimeResources(req *serviceRequest) corev1.ResourceRequirements {
@@ -206,6 +290,9 @@ func runtimeResources(req *serviceRequest) corev1.ResourceRequirements {
 		requests[corev1.ResourceMemory] = resource.MustParse(req.Memory)
 	}
 	limits := requests.DeepCopy()
+	if req.RDMA != nil && req.RDMA.Mode == rdmaModeDevicePlugin {
+		limits[corev1.ResourceName(req.RDMA.Resource)] = *resource.NewQuantity(req.RDMA.ResourceCount, resource.DecimalSI)
+	}
 	// HAMi's admission webhook sends pods asking for vGPUs to its scheduler.
 	switch {
 	case req.VGPU != nil:
