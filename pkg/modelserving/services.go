@@ -17,6 +17,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -163,17 +164,31 @@ func (h *Handler) GetService(c *gin.Context) {
 	if !ok {
 		return
 	}
-	service, err := describeWorkload(c.Request.Context(), cs, workload)
+	ctx := c.Request.Context()
+	var router *appsv1.Deployment
+	var err error
+	if workload.GetKind() == disaggregatedSetGVK.Kind {
+		if router, err = getRouter(ctx, cs, workload); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	service, err := describeService(ctx, cs, workload, router)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	pods, err := listServicePods(c.Request.Context(), cs, workload.GetNamespace(), workload.GetName())
+	pods, err := listServicePods(ctx, cs, workload.GetNamespace(), workload.GetName())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, serviceDetail{inferenceService: service, Pods: pods})
+	config, err := readDeploymentConfig(workload, router)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, serviceDetail{inferenceService: service, Pods: pods, Deployment: config})
 }
 
 func (h *Handler) CreateService(c *gin.Context) {
@@ -217,8 +232,11 @@ func (h *Handler) CreateService(c *gin.Context) {
 		}
 	}
 	objects, workload, err := buildServiceObjects(&req, served, storage)
+	if err == nil {
+		objects, err = withPodMonitor(ctx, cs, &req, objects)
+	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
 
@@ -342,13 +360,35 @@ func (h *Handler) ScaleService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	// Look the router up first so a missing one fails before anything changes.
+	var router *appsv1.Deployment
+	if req.RouterReplicas != nil && workload.GetKind() == disaggregatedSetGVK.Kind {
+		if router, err = getRouter(ctx, cs, workload); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if router == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "the router of this service is missing"})
+			return
+		}
+	}
 	err = cs.K8sClient.Update(ctx, scaled)
 	recordHistory(c, cs, crd, "update", workload, scaled, err)
 	if err != nil {
 		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	service, err := describeWorkload(ctx, cs, scaled)
+	var service inferenceService
+	if router == nil {
+		service, err = describeWorkload(ctx, cs, scaled)
+	} else {
+		if router, err = scaleRouter(ctx, cs, router, *req.RouterReplicas); err != nil {
+			c.JSON(createErrorStatus(err), gin.H{"error": fmt.Sprintf("prefill and decode were scaled, but scaling the router failed: %v", err)})
+			return
+		}
+		// The patched router, since the informer cache may not have it yet.
+		service, err = describeService(ctx, cs, scaled, router)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -357,6 +397,7 @@ func (h *Handler) ScaleService(c *gin.Context) {
 }
 
 // scaleWorkload returns a copy of workload with the requested replica counts.
+// The router of a pd service is scaled apart.
 func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*unstructured.Unstructured, error) {
 	scaled := workload.DeepCopy()
 	if workload.GetKind() != disaggregatedSetGVK.Kind {
@@ -367,6 +408,12 @@ func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*uns
 	}
 	if req.PrefillReplicas < 1 || req.DecodeReplicas < 1 {
 		return nil, fmt.Errorf("prefillReplicas and decodeReplicas must be at least 1")
+	}
+	if req.PrefillReplicas > maxPDRoleReplicas || req.DecodeReplicas > maxPDRoleReplicas {
+		return nil, fmt.Errorf("prefillReplicas and decodeReplicas must be at most %d", maxPDRoleReplicas)
+	}
+	if req.RouterReplicas != nil && *req.RouterReplicas < 1 {
+		return nil, fmt.Errorf("routerReplicas must be at least 1")
 	}
 	replicas := map[string]int32{rolePrefill: req.PrefillReplicas, roleDecode: req.DecodeReplicas}
 	roles, _, _ := unstructured.NestedSlice(scaled.Object, "spec", "roles")
@@ -413,6 +460,7 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 		{networkingv1.SchemeGroupVersion.WithKind("Ingress"), name + ingressSuffix},
 		{corev1.SchemeGroupVersion.WithKind("Service"), name},
 		{corev1.SchemeGroupVersion.WithKind("Secret"), name + storageSecretSuffix},
+		{podMonitorGVK, name},
 	}
 	for _, companion := range companions {
 		// Unstructured reads skip the informer cache, which may not have seen
@@ -420,7 +468,8 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 		object := &unstructured.Unstructured{}
 		object.SetGroupVersionKind(companion.gvk)
 		err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: companion.name}, object)
-		if apierrors.IsNotFound(err) {
+		// Only the PodMonitor kind may be missing, in clusters without its CRD.
+		if apierrors.IsNotFound(err) || (companion.gvk == podMonitorGVK && apimeta.IsNoMatchError(err)) {
 			continue
 		} else if err != nil {
 			return err

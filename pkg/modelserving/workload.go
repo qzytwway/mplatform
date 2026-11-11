@@ -23,6 +23,12 @@ const (
 	runtimeAnnotation    = "model-serving.mplatform.io/runtime"
 	sourceTypeAnnotation = "model-serving.mplatform.io/source-type"
 	modeAnnotation       = "model-serving.mplatform.io/mode"
+	// Settings pod templates only imply, recorded so the service detail need
+	// not infer them. Workloads created before them carry none.
+	rdmaAnnotation            = "model-serving.mplatform.io/rdma"
+	transferBackendAnnotation = "model-serving.mplatform.io/transfer-backend"
+	ibDevicesAnnotation       = "model-serving.mplatform.io/ib-devices"
+	routerPolicyAnnotation    = "model-serving.mplatform.io/router-policy"
 
 	runtimeVLLM   = "vllm"
 	runtimeSGLang = "sglang"
@@ -46,6 +52,12 @@ const (
 	// transfer metadata from; the router reads it from bootstrapAnnotation.
 	pdBootstrapPort     = 8998
 	bootstrapAnnotation = "sglang.ai/bootstrap-port"
+	// vLLM pd servers transfer KV with the NIXL connector. Decode servers
+	// handshake with a prefill server on its side channel, at the address
+	// the prefill server reports from nixlSideChannelHostEnv.
+	nixlConnector          = "NixlConnector"
+	nixlSideChannelPort    = 5600
+	nixlSideChannelHostEnv = "VLLM_NIXL_SIDE_CHANNEL_HOST"
 
 	// KV transfer backends of pd mode. Mooncake transfers over RDMA unless
 	// forced to TCP, which works on any network but is much slower.
@@ -53,6 +65,7 @@ const (
 	transferMooncakeTCP = "mooncake-tcp"
 	transferNIXL        = "nixl"
 
+	rdmaModeNone         = "none"
 	rdmaModeDevicePlugin = "device-plugin"
 	rdmaModeHost         = "host"
 	multusAnnotation     = "k8s.v1.cni.cncf.io/networks"
@@ -88,17 +101,28 @@ func serviceLabels(name string) map[string]string {
 }
 
 func workloadMeta(req *serviceRequest, served *model.ServedModel) metav1.ObjectMeta {
+	annotations := map[string]string{
+		modelAnnotation:      served.Name,
+		modelTypeAnnotation:  served.Type,
+		runtimeAnnotation:    req.Runtime,
+		sourceTypeAnnotation: served.SourceType,
+		modeAnnotation:       req.Mode,
+		rdmaAnnotation:       rdmaModeNone,
+	}
+	if req.RDMA != nil {
+		annotations[rdmaAnnotation] = req.RDMA.Mode
+	}
+	// Empty values are kept: they tell an unset setting from an old workload.
+	if req.PD != nil {
+		annotations[transferBackendAnnotation] = req.PD.TransferBackend
+		annotations[ibDevicesAnnotation] = req.PD.IBDevices
+		annotations[routerPolicyAnnotation] = req.PD.RouterPolicy
+	}
 	return metav1.ObjectMeta{
-		Name:      req.Name,
-		Namespace: req.Namespace,
-		Labels:    serviceLabels(req.Name),
-		Annotations: map[string]string{
-			modelAnnotation:      served.Name,
-			modelTypeAnnotation:  served.Type,
-			runtimeAnnotation:    req.Runtime,
-			sourceTypeAnnotation: served.SourceType,
-			modeAnnotation:       req.Mode,
-		},
+		Name:        req.Name,
+		Namespace:   req.Namespace,
+		Labels:      serviceLabels(req.Name),
+		Annotations: annotations,
 	}
 }
 
@@ -142,7 +166,7 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 	if pdRole != "" {
 		labels[roleLabel] = pdRole
 	}
-	if pdRole == rolePrefill {
+	if pdRole == rolePrefill && req.Runtime == runtimeSGLang {
 		annotations[bootstrapAnnotation] = fmt.Sprint(pdBootstrapPort)
 	}
 	if len(annotations) == 0 {
@@ -170,12 +194,21 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 	}
 	// Workers of a multi-node group serve no HTTP; only their leader does.
 	if worker {
+		// In the node network a declared port also becomes a host port, so
+		// the scheduler puts at most one inference pod on each node and pods
+		// do not contend for the ports they open there.
+		if req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
+			container.Ports = []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
+		}
 		return container
 	}
 	healthProbe := corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(servingPort)},
 	}
 	container.Ports = []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
+	if pdRole != "" && req.Runtime == runtimeVLLM {
+		container.Ports = append(container.Ports, corev1.ContainerPort{Name: "nixl", ContainerPort: nixlSideChannelPort})
+	}
 	container.ReadinessProbe = &corev1.Probe{ProbeHandler: healthProbe, PeriodSeconds: probePeriodSeconds}
 	container.StartupProbe = &corev1.Probe{
 		ProbeHandler:     healthProbe,
@@ -204,6 +237,16 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 	}
 	if !worker {
 		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
+		// vLLM always serves /metrics on its HTTP port; SGLang only when asked.
+		if req.Runtime == runtimeSGLang {
+			args = append(args, "--enable-metrics")
+		}
+	}
+	// SGLang nodes past the first serve a health check, on 127.0.0.1:30000
+	// unless told otherwise; in the node network it moves to the port the
+	// worker declares.
+	if worker && req.Runtime == runtimeSGLang && req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
+		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
 	}
 	// Parallelism defaults to using every GPU of the group, as the examples
 	// do; extraArgs come later on the command line and override it. Groups
@@ -225,7 +268,7 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount))
 	}
 	if pdRole != "" {
-		args = append(args, disaggregationArgs(req.PD, pdRole)...)
+		args = append(args, disaggregationArgs(req.Runtime, req.PD, pdRole)...)
 	}
 	if served.Type != modelTypeEmbedding {
 		return args
@@ -237,9 +280,17 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 }
 
 // disaggregationArgs makes a pd role's server prefill or decode and pick the
-// KV transfer backend. Every node of a prefill group registers with the
-// bootstrap server its leader runs on the given port.
-func disaggregationArgs(pd *pdRequest, pdRole string) []string {
+// KV transfer backend. With SGLang, every node of a prefill group registers
+// with the bootstrap server its leader runs on the given port. vLLM prefill
+// servers produce the KV cache that decode servers pull over NIXL.
+func disaggregationArgs(runtime string, pd *pdRequest, pdRole string) []string {
+	if runtime == runtimeVLLM {
+		kvRole := "kv_consumer"
+		if pdRole == rolePrefill {
+			kvRole = "kv_producer"
+		}
+		return []string{"--kv-transfer-config", fmt.Sprintf(`{"kv_connector":"%s","kv_role":"%s"}`, nixlConnector, kvRole)}
+	}
 	args := []string{"--disaggregation-mode", pdRole}
 	if pdRole == rolePrefill {
 		args = append(args, "--disaggregation-bootstrap-port", fmt.Sprint(pdBootstrapPort))
@@ -262,10 +313,32 @@ func runtimeEnv(req *serviceRequest) []corev1.EnvVar {
 	if req.PD != nil && req.PD.TransferBackend == transferMooncakeTCP {
 		env = append(env, corev1.EnvVar{Name: "MOONCAKE_PROTOCOL", Value: "tcp"}, corev1.EnvVar{Name: "MC_FORCE_TCP", Value: "1"})
 	}
+	// Left unset, the address is localhost and decode servers reach themselves.
+	if req.PD != nil && req.Runtime == runtimeVLLM {
+		env = append(env, corev1.EnvVar{Name: nixlSideChannelHostEnv, ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+		}})
+	}
 	for _, item := range req.Env {
 		env = append(env, corev1.EnvVar{Name: item.Name, Value: item.Value})
 	}
-	return env
+	return mergeEnv(env)
+}
+
+// mergeEnv keeps one variable per name, where the name first appears, with
+// its last definition, which is the one the container would get.
+func mergeEnv(env []corev1.EnvVar) []corev1.EnvVar {
+	var merged []corev1.EnvVar
+	positions := map[string]int{}
+	for _, item := range env {
+		if position, ok := positions[item.Name]; ok {
+			merged[position] = item
+			continue
+		}
+		positions[item.Name] = len(merged)
+		merged = append(merged, item)
+	}
+	return merged
 }
 
 // rdmaSecurityContext lets RDMA register pinned memory. Host mode also needs

@@ -16,6 +16,7 @@ import {
   type ModelType,
   type PDRoleRequest,
   type RDMARequest,
+  type TransferBackend,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
@@ -45,7 +46,11 @@ import {
   type PDRoleValues,
   type ServiceModeValues,
 } from './service-mode-fields'
-import { modeBlocker } from './service-modes'
+import {
+  MAX_PD_NAME_LENGTH,
+  modeBlocker,
+  pdRoleImagesDiffer,
+} from './service-modes'
 import {
   ServiceNetworkFields,
   type NetworkValues,
@@ -56,14 +61,34 @@ const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
   sglang: 'lmsysorg/sglang:latest',
 }
 
+// vLLM prefill and decode refuse to transfer KV between different builds, so
+// PD pins a release whose image includes NIXL instead of following latest.
+const VLLM_PD_IMAGE = 'vllm/vllm-openai:v0.33.0'
+
+const defaultImage = (runtime: InferenceRuntime, mode: DeploymentMode) =>
+  runtime === 'vllm' && mode === 'pd' ? VLLM_PD_IMAGE : DEFAULT_IMAGES[runtime]
+
+// vLLM transfers over NIXL only. SGLang starts with Mooncake over TCP, since
+// Mooncake over RDMA needs an RDMA network, which starts unset.
+const DEFAULT_TRANSFER_BACKENDS: Record<InferenceRuntime, TransferBackend> = {
+  vllm: 'nixl',
+  sglang: 'mooncake-tcp',
+}
+
 // Radix Select items cannot have an empty value.
 const ANY_NODE = '__any__'
+
+const MAX_NAME_LENGTH = 40
 
 const DEFAULT_PD_ROLE: PDRoleValues = {
   replicas: '1',
   groupSize: '1',
   gpuCount: '1',
   extraArgs: '',
+  image: '',
+  cpu: '',
+  memory: '',
+  env: '',
 }
 
 type VGPUMemoryUnit = 'mib' | 'percentage'
@@ -76,6 +101,10 @@ function toPDRole(values: PDRoleValues): PDRoleRequest {
     groupSize: Number(values.groupSize),
     gpuCount: Number(values.gpuCount),
     extraArgs: splitArgs(values.extraArgs),
+    image: values.image.trim(),
+    cpu: values.cpu.trim(),
+    memory: values.memory.trim(),
+    env: parseEnv(values.env),
   }
 }
 
@@ -140,8 +169,12 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     groupSize: '2',
     prefill: DEFAULT_PD_ROLE,
     decode: DEFAULT_PD_ROLE,
-    routerImage: DEFAULT_IMAGES.sglang,
-    transferBackend: 'mooncake',
+    // The backend runs the router from the service image with SGLang and
+    // from vllm-router's image with vLLM when empty.
+    routerImage: '',
+    routerReplicas: '1',
+    routerPolicy: 'default',
+    transferBackend: DEFAULT_TRANSFER_BACKENDS.vllm,
     ibDevices: '',
   })
   const [networkValues, setNetworkValues] = useState<NetworkValues>({
@@ -166,6 +199,9 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     models?.items.find((model) => String(model.id) === id)?.type
   const modelType = modelTypeOf(modelId)
   const hamiInstalled = !!gpuComponents?.hami.installed
+  // The backend rejects it; the PD fields say why.
+  const vllmImagesDiffer =
+    mode === 'pd' && runtime === 'vllm' && pdRoleImagesDiffer(modeValues, image)
   const modeNodes = gpuNodes?.items.filter((node) => node.mode === gpuType)
   const gpuCountLabel =
     gpuType === 'vgpu'
@@ -179,16 +215,39 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     if (value === 'vgpu' && Number(gpuCount) < 1) setGpuCount('1')
   }
 
+  // The image follows the default of the runtime and mode until it is edited.
+  const changeImageDefault = (
+    nextRuntime: InferenceRuntime,
+    nextMode: DeploymentMode
+  ) => {
+    if (image === defaultImage(runtime, mode))
+      setImage(defaultImage(nextRuntime, nextMode))
+  }
+
+  const handleModeChange = (next: DeploymentMode) => {
+    changeImageDefault(runtime, next)
+    setMode(next)
+  }
+
+  // vLLM PD runs each replica on one node, so switching to it drops groups
+  // of several nodes.
   const handleRuntimeChange = (value: string) => {
     const next = value as InferenceRuntime
-    if (image === DEFAULT_IMAGES[runtime]) setImage(DEFAULT_IMAGES[next])
+    changeImageDefault(next, mode)
     setRuntime(next)
-    if (modeBlocker(mode, next, modelType, status)) setMode('single')
+    setModeValues((values) => ({
+      ...values,
+      transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
+      ...(next === 'vllm' && {
+        prefill: { ...values.prefill, groupSize: '1' },
+        decode: { ...values.decode, groupSize: '1' },
+      }),
+    }))
   }
 
   const handleModelChange = (id: string) => {
     setModelId(id)
-    if (modeBlocker(mode, runtime, modelTypeOf(id), status)) setMode('single')
+    if (modeBlocker(mode, modelTypeOf(id), status)) handleModeChange('single')
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -216,7 +275,13 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           pd: {
             prefill: toPDRole(modeValues.prefill),
             decode: toPDRole(modeValues.decode),
+            // Empty runs the runtime's default router.
             routerImage: modeValues.routerImage.trim(),
+            routerReplicas: Number(modeValues.routerReplicas),
+            routerPolicy:
+              modeValues.routerPolicy === 'default'
+                ? ''
+                : modeValues.routerPolicy,
             transferBackend: modeValues.transferBackend,
             ibDevices:
               modeValues.transferBackend === 'mooncake'
@@ -264,9 +329,16 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
               onChange={(event) => setName(event.target.value)}
               placeholder="qwen-chat"
               pattern="[a-z]([a-z0-9\-]*[a-z0-9])?"
-              maxLength={40}
+              maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
               required
             />
+            {mode === 'pd' && (
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.pdNameHint', {
+                  max: MAX_PD_NAME_LENGTH,
+                })}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>{t('common.fields.namespace')}</Label>
@@ -327,15 +399,18 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
         </div>
         <ServiceModeFields
           mode={mode}
-          onModeChange={setMode}
+          onModeChange={handleModeChange}
           blockers={{
             single: undefined,
-            multi: modeBlocker('multi', runtime, modelType, status),
-            pd: modeBlocker('pd', runtime, modelType, status),
+            multi: modeBlocker('multi', modelType, status),
+            pd: modeBlocker('pd', modelType, status),
           }}
+          runtime={runtime}
           values={modeValues}
           onValuesChange={setModeValues}
           gpuCountLabel={gpuCountLabel}
+          service={{ image, cpu, memory }}
+          rdmaEnabled={networkValues.rdma !== 'none'}
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
@@ -521,7 +596,10 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.actions.cancel')}
           </Button>
-          <Button type="submit" disabled={isCreating || !modelId || !namespace}>
+          <Button
+            type="submit"
+            disabled={isCreating || !modelId || !namespace || vllmImagesDiffer}
+          >
             {isCreating
               ? t('common.messages.creating')
               : t('common.actions.create')}

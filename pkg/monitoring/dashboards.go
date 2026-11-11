@@ -2,9 +2,12 @@ package monitoring
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"net/http"
 	"sort"
 	"strings"
@@ -26,6 +29,12 @@ import (
 
 // dashboardLabel marks the ConfigMaps the chart writes for Grafana's sidecar.
 const dashboardLabel = "grafana_dashboard"
+
+// builtinDashboardFiles are the dashboards of the platform's own features,
+// such as inference services, listed with the chart's.
+//
+//go:embed dashboards/*.json
+var builtinDashboardFiles embed.FS
 
 type dashboardSummary struct {
 	UID   string   `json:"uid"`
@@ -58,11 +67,18 @@ func RegisterRoutes(api *gin.RouterGroup) {
 }
 
 // loadDashboards renders the local chart the way it deploys dashboards for
-// Grafana and keeps them for the chart version. The dashboards only depend on
-// the chart, so rendering needs no cluster.
+// Grafana and keeps them for the chart version, with the built-in dashboards.
+// The dashboards only depend on the chart, so rendering needs no cluster.
+// Without the chart, only the built-in dashboards are listed, with no version.
 func loadDashboards() (*chartDashboards, error) {
 	loadedChart, err := helmutil.LoadLocalChart(chartName)
-	if err != nil {
+	if errors.Is(err, helmutil.ErrLocalChartNotFound) {
+		summaries, definitions, err := builtinDashboards()
+		if err != nil {
+			return nil, err
+		}
+		return &chartDashboards{summaries: summaries, definitions: definitions}, nil
+	} else if err != nil {
 		return nil, err
 	}
 	dashboardsMu.Lock()
@@ -100,11 +116,39 @@ func loadDashboards() (*chartDashboards, error) {
 			dashboards.definitions[summary.UID] = json.RawMessage(definition)
 		}
 	}
+	builtins, definitions, err := builtinDashboards()
+	if err != nil {
+		return nil, err
+	}
+	dashboards.summaries = append(dashboards.summaries, builtins...)
+	maps.Copy(dashboards.definitions, definitions)
 	sort.Slice(dashboards.summaries, func(i, j int) bool {
 		return dashboards.summaries[i].Title < dashboards.summaries[j].Title
 	})
 	dashboardsCache = dashboards
 	return dashboards, nil
+}
+
+func builtinDashboards() ([]dashboardSummary, map[string]json.RawMessage, error) {
+	files, err := fs.Glob(builtinDashboardFiles, "dashboards/*.json")
+	if err != nil {
+		return nil, nil, err
+	}
+	var summaries []dashboardSummary
+	definitions := map[string]json.RawMessage{}
+	for _, file := range files {
+		definition, err := builtinDashboardFiles.ReadFile(file)
+		if err != nil {
+			return nil, nil, err
+		}
+		var summary dashboardSummary
+		if err := json.Unmarshal(definition, &summary); err != nil || summary.UID == "" {
+			return nil, nil, fmt.Errorf("built-in dashboard %s is not valid", file)
+		}
+		summaries = append(summaries, summary)
+		definitions[summary.UID] = definition
+	}
+	return summaries, definitions, nil
 }
 
 // clusterDashboards reads the dashboards that charts installed in the cluster
@@ -149,29 +193,22 @@ func canReadDashboards(c *gin.Context) bool {
 	return true
 }
 
-func dashboardErrorStatus(err error) int {
-	if errors.Is(err, helmutil.ErrLocalChartNotFound) {
-		return http.StatusNotFound
-	}
-	return http.StatusInternalServerError
-}
-
 func ListDashboards(c *gin.Context) {
 	if !canReadDashboards(c) {
 		return
 	}
 	dashboards, err := loadDashboards()
 	if err != nil {
-		c.JSON(dashboardErrorStatus(err), gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	summaries := append([]dashboardSummary{}, dashboards.summaries...)
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
 	installed, _, err := clusterDashboards(c.Request.Context(), cs)
 	if err != nil {
-		// The chart's dashboards still work where the platform cannot list
-		// ConfigMaps across namespaces.
-		klog.Warningf("Listing only the %s dashboards: %v", chartName, err)
+		// The chart's and built-in dashboards still work where the platform
+		// cannot list ConfigMaps across namespaces.
+		klog.Warningf("Listing only the %s and built-in dashboards: %v", chartName, err)
 	}
 	for _, summary := range installed {
 		if _, ok := dashboards.definitions[summary.UID]; !ok {
@@ -181,6 +218,7 @@ func ListDashboards(c *gin.Context) {
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].Title < summaries[j].Title
 	})
+	// The chart has no version when it is not in the local chart directory.
 	c.JSON(http.StatusOK, gin.H{
 		"chart":      chartStatus{Name: chartName, Version: dashboards.version},
 		"dashboards": summaries,
@@ -193,7 +231,7 @@ func GetDashboard(c *gin.Context) {
 	}
 	dashboards, err := loadDashboards()
 	if err != nil {
-		c.JSON(dashboardErrorStatus(err), gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	definition, ok := dashboards.definitions[c.Param("uid")]

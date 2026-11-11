@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { IconCopy } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
@@ -26,28 +26,15 @@ import {
 } from '@/components/ui/table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { ErrorMessage } from '@/components/error-message'
+import { DetailItem } from '@/components/model-serving/detail-item'
 import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { ScaleServiceDialog } from '@/components/model-serving/scale-service-dialog'
+import { ServiceDeploymentCard } from '@/components/model-serving/service-deployment-card'
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
 import { ServicePublishCard } from '@/components/model-serving/service-publish-card'
 
 const SERVICES_PATH = '/model-serving/services'
-
-function DetailItem({
-  label,
-  children,
-}: {
-  label: string
-  children: ReactNode
-}) {
-  return (
-    <div className="grid gap-1">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
-    </div>
-  )
-}
 
 export function ServiceDetailPage() {
   const { namespace = '', name = '' } = useParams()
@@ -247,6 +234,13 @@ export function ServiceDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {service.deployment && (
+        <ServiceDeploymentCard
+          config={service.deployment}
+          mode={service.mode}
+        />
+      )}
 
       <Card>
         <CardHeader>

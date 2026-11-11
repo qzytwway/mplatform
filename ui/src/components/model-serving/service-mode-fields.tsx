@@ -1,6 +1,19 @@
+import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import type { DeploymentMode, TransferBackend } from '@/lib/api/model-serving'
+import type {
+  DeploymentMode,
+  InferenceRuntime,
+  RouterPolicy,
+  TransferBackend,
+} from '@/lib/api/model-serving'
+import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -10,22 +23,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
-import { DEPLOYMENT_MODES } from './service-modes'
+import {
+  DEPLOYMENT_MODES,
+  MAX_PD_ROLE_REPLICAS,
+  pdRoleImagesDiffer,
+} from './service-modes'
 
-const TRANSFER_BACKENDS: TransferBackend[] = [
-  'mooncake',
-  'mooncake-tcp',
-  'nixl',
+// vllm-router finds the Mooncake bootstrap servers only of prefill servers
+// it is given at startup, not of the pods it discovers, so vLLM uses NIXL.
+const TRANSFER_BACKENDS: Record<InferenceRuntime, TransferBackend[]> = {
+  vllm: ['nixl'],
+  sglang: ['mooncake', 'mooncake-tcp', 'nixl'],
+}
+
+// The backend's default for vLLM, whose images do not include the router.
+const VLLM_ROUTER_IMAGE = 'vllm/vllm-router:v0.1.17'
+
+// Radix Select items cannot have an empty value; default leaves --policy out.
+export type RouterPolicyChoice = RouterPolicy | 'default'
+
+const ROUTER_POLICIES: RouterPolicyChoice[] = [
+  'default',
+  'cache_aware',
+  'power_of_two',
+  'round_robin',
+  'random',
 ]
 
 type PDRole = 'prefill' | 'decode'
 
+const ROLE_PLACEHOLDERS: Record<
+  InferenceRuntime,
+  Record<PDRole, { extraArgs: string; env: string }>
+> = {
+  vllm: {
+    prefill: {
+      extraArgs: '--max-num-batched-tokens 16384',
+      env: 'UCX_NET_DEVICES=mlx5_0:1',
+    },
+    decode: {
+      extraArgs: '--max-num-seqs 128',
+      env: 'UCX_NET_DEVICES=mlx5_0:1',
+    },
+  },
+  sglang: {
+    prefill: {
+      extraArgs: '--chunked-prefill-size 16384',
+      env: 'SGLANG_DISAGGREGATION_THREAD_POOL_SIZE=4',
+    },
+    decode: {
+      extraArgs: '--max-running-requests 128',
+      env: 'SGLANG_DISAGGREGATION_QUEUE_SIZE=4',
+    },
+  },
+}
+
+// image, cpu and memory are empty to keep the service's; env holds one
+// KEY=VALUE per line.
 export interface PDRoleValues {
   replicas: string
   groupSize: string
   gpuCount: string
   extraArgs: string
+  image: string
+  cpu: string
+  memory: string
+  env: string
+}
+
+// The service settings PD roles use unless they set their own.
+export interface ServiceDefaults {
+  image: string
+  cpu: string
+  memory: string
 }
 
 export interface ServiceModeValues {
@@ -34,6 +106,8 @@ export interface ServiceModeValues {
   prefill: PDRoleValues
   decode: PDRoleValues
   routerImage: string
+  routerReplicas: string
+  routerPolicy: RouterPolicyChoice
   transferBackend: TransferBackend
   ibDevices: string
 }
@@ -44,8 +118,12 @@ interface ServiceModeFieldsProps {
   blockers: Record<DeploymentMode, string | undefined>
   values: ServiceModeValues
   onValuesChange: (values: ServiceModeValues) => void
+  runtime: InferenceRuntime
   // Labels the per-pod GPU count of PD roles, which follows the GPU type.
   gpuCountLabel: string
+  service: ServiceDefaults
+  // Whether an RDMA network is chosen, which Mooncake over RDMA needs.
+  rdmaEnabled: boolean
 }
 
 export function ServiceModeFields({
@@ -54,7 +132,10 @@ export function ServiceModeFields({
   blockers,
   values,
   onValuesChange,
+  runtime,
   gpuCountLabel,
+  service,
+  rdmaEnabled,
 }: ServiceModeFieldsProps) {
   const { t } = useTranslation()
   const update = (patch: Partial<ServiceModeValues>) =>
@@ -90,7 +171,10 @@ export function ServiceModeFields({
         <PDFields
           values={values}
           update={update}
+          runtime={runtime}
           gpuCountLabel={gpuCountLabel}
+          service={service}
+          rdmaEnabled={rdmaEnabled}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -133,11 +217,25 @@ export function ServiceModeFields({
 interface PDFieldsProps {
   values: ServiceModeValues
   update: (patch: Partial<ServiceModeValues>) => void
+  runtime: InferenceRuntime
   gpuCountLabel: string
+  service: ServiceDefaults
+  rdmaEnabled: boolean
 }
 
-function PDFields({ values, update, gpuCountLabel }: PDFieldsProps) {
+function PDFields({
+  values,
+  update,
+  runtime,
+  gpuCountLabel,
+  service,
+  rdmaEnabled,
+}: PDFieldsProps) {
   const { t } = useTranslation()
+  const isVLLM = runtime === 'vllm'
+  // The router's default policy is cache_aware.
+  const cacheAware =
+    values.routerPolicy === 'cache_aware' || values.routerPolicy === 'default'
 
   return (
     <>
@@ -150,24 +248,81 @@ function PDFields({ values, update, gpuCountLabel }: PDFieldsProps) {
             id="inference-router-image"
             value={values.routerImage}
             onChange={(event) => update({ routerImage: event.target.value })}
+            placeholder={isVLLM ? VLLM_ROUTER_IMAGE : service.image}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t(`modelServing.services.routerImageHints.${runtime}`, {
+              image: VLLM_ROUTER_IMAGE,
+            })}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="inference-router-replicas">
+            {t('modelServing.services.routerReplicas')}
+          </Label>
+          <Input
+            id="inference-router-replicas"
+            type="number"
+            min={1}
+            value={values.routerReplicas}
+            onChange={(event) => update({ routerReplicas: event.target.value })}
             required
           />
+          <p className="text-xs text-muted-foreground">
+            {t('modelServing.services.routerReplicasHint')}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="inference-router-policy">
+            {t('modelServing.services.routerPolicy')}
+          </Label>
+          <Select
+            value={values.routerPolicy}
+            onValueChange={(value) =>
+              update({ routerPolicy: value as RouterPolicyChoice })
+            }
+          >
+            <SelectTrigger id="inference-router-policy" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROUTER_POLICIES.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {t(`modelServing.services.routerPolicies.${item}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              `modelServing.services.routerPolicyHints.${values.routerPolicy}`
+            )}
+          </p>
+          {cacheAware && Number(values.routerReplicas) > 1 && (
+            <p className="text-xs text-destructive">
+              {t('modelServing.services.routerCacheWarning')}
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="inference-transfer-backend">
             {t('modelServing.services.transferBackend')}
           </Label>
+          {/* Remounts with the runtime's options: in a form, Radix empties a
+              select whose value and options change together. */}
           <Select
+            key={runtime}
             value={values.transferBackend}
+            // Never empty, as a further guard against Radix's reset.
             onValueChange={(value) =>
-              update({ transferBackend: value as TransferBackend })
+              value && update({ transferBackend: value as TransferBackend })
             }
           >
             <SelectTrigger id="inference-transfer-backend" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {TRANSFER_BACKENDS.map((item) => (
+              {TRANSFER_BACKENDS[runtime].map((item) => (
                 <SelectItem key={item} value={item}>
                   {t(`modelServing.services.transferBackends.${item}`)}
                 </SelectItem>
@@ -175,10 +330,22 @@ function PDFields({ values, update, gpuCountLabel }: PDFieldsProps) {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {t(
-              `modelServing.services.transferBackendHints.${values.transferBackend}`
-            )}
+            {isVLLM
+              ? t('modelServing.services.transferBackendHintVLLM')
+              : t(
+                  `modelServing.services.transferBackendHints.${values.transferBackend}`
+                )}
           </p>
+          {values.transferBackend === 'mooncake' && !rdmaEnabled && (
+            <p className="text-xs text-destructive">
+              {t('modelServing.services.transferBackendNeedsRDMA')}
+            </p>
+          )}
+          {values.transferBackend === 'nixl' && !rdmaEnabled && (
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.ucxTCPHint')}
+            </p>
+          )}
         </div>
       </div>
       {values.transferBackend === 'mooncake' && (
@@ -198,6 +365,13 @@ function PDFields({ values, update, gpuCountLabel }: PDFieldsProps) {
           </p>
         </div>
       )}
+      {pdRoleImagesDiffer(values, service.image) && (
+        <p className="text-xs text-destructive">
+          {isVLLM
+            ? t('modelServing.services.roleImagesMustMatchVLLM')
+            : t('modelServing.services.roleImagesDiffer')}
+        </p>
+      )}
       {(['prefill', 'decode'] as const).map((role) => (
         <PDRoleFields
           key={role}
@@ -206,7 +380,9 @@ function PDFields({ values, update, gpuCountLabel }: PDFieldsProps) {
           onChange={(patch) =>
             update({ [role]: { ...values[role], ...patch } })
           }
+          runtime={runtime}
           gpuCountLabel={gpuCountLabel}
+          service={service}
         />
       ))}
     </>
@@ -217,17 +393,28 @@ interface PDRoleFieldsProps {
   role: PDRole
   values: PDRoleValues
   onChange: (patch: Partial<PDRoleValues>) => void
+  runtime: InferenceRuntime
   gpuCountLabel: string
+  service: ServiceDefaults
 }
 
 function PDRoleFields({
   role,
   values,
   onChange,
+  runtime,
   gpuCountLabel,
+  service,
 }: PDRoleFieldsProps) {
   const { t } = useTranslation()
   const id = (field: string) => `inference-${role}-${field}`
+  const placeholders = ROLE_PLACEHOLDERS[runtime][role]
+  // The create dialog sets one node per replica when it switches to vLLM.
+  const singleNode = runtime === 'vllm'
+  // Starts open when the role overrides anything, so it is not hidden.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    () => !!(values.image || values.cpu || values.memory || values.env)
+  )
 
   return (
     <div className="space-y-4 rounded-md border p-4">
@@ -239,6 +426,7 @@ function PDRoleFields({
             id={id('replicas')}
             type="number"
             min={1}
+            max={MAX_PD_ROLE_REPLICAS}
             value={values.replicas}
             onChange={(event) => onChange({ replicas: event.target.value })}
             required
@@ -254,8 +442,18 @@ function PDRoleFields({
             min={1}
             value={values.groupSize}
             onChange={(event) => onChange({ groupSize: event.target.value })}
+            disabled={singleNode}
+            aria-describedby={singleNode ? id('group-size-hint') : undefined}
             required
           />
+          {singleNode && (
+            <p
+              id={id('group-size-hint')}
+              className="text-xs text-muted-foreground"
+            >
+              {t('modelServing.services.nodesPerReplicaVLLMHint')}
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor={id('gpu-count')}>{gpuCountLabel}</Label>
@@ -277,14 +475,81 @@ function PDRoleFields({
           id={id('extra-args')}
           value={values.extraArgs}
           onChange={(event) => onChange({ extraArgs: event.target.value })}
-          placeholder={
-            role === 'prefill'
-              ? '--chunked-prefill-size 16384'
-              : '--max-running-requests 128'
-          }
+          placeholder={placeholders.extraArgs}
           className="font-mono"
         />
       </div>
+      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ml-2 text-muted-foreground"
+          >
+            {advancedOpen ? (
+              <ChevronDown className="size-4" />
+            ) : (
+              <ChevronRight className="size-4" />
+            )}
+            {t('common.fields.advancedSettings')}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor={id('image')}>{t('common.fields.image')}</Label>
+            <Input
+              id={id('image')}
+              value={values.image}
+              onChange={(event) => onChange({ image: event.target.value })}
+              placeholder={service.image}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.roleImageHint')}
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={id('cpu')}>{t('common.fields.cpu')}</Label>
+              <Input
+                id={id('cpu')}
+                value={values.cpu}
+                onChange={(event) => onChange({ cpu: event.target.value })}
+                placeholder={
+                  service.cpu.trim() ||
+                  t('modelServing.services.inheritService')
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={id('memory')}>{t('common.fields.memory')}</Label>
+              <Input
+                id={id('memory')}
+                value={values.memory}
+                onChange={(event) => onChange({ memory: event.target.value })}
+                placeholder={
+                  service.memory.trim() ||
+                  t('modelServing.services.inheritService')
+                }
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={id('env')}>{t('modelServing.services.env')}</Label>
+            <Textarea
+              id={id('env')}
+              value={values.env}
+              onChange={(event) => onChange({ env: event.target.value })}
+              placeholder={placeholders.env}
+              className="font-mono"
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.roleEnvHint')}
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   )
 }
