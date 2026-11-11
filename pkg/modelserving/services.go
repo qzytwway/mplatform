@@ -164,17 +164,31 @@ func (h *Handler) GetService(c *gin.Context) {
 	if !ok {
 		return
 	}
-	service, err := describeWorkload(c.Request.Context(), cs, workload)
+	ctx := c.Request.Context()
+	var router *appsv1.Deployment
+	var err error
+	if workload.GetKind() == disaggregatedSetGVK.Kind {
+		if router, err = getRouter(ctx, cs, workload); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	service, err := describeService(ctx, cs, workload, router)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	pods, err := listServicePods(c.Request.Context(), cs, workload.GetNamespace(), workload.GetName())
+	pods, err := listServicePods(ctx, cs, workload.GetNamespace(), workload.GetName())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, serviceDetail{inferenceService: service, Pods: pods})
+	config, err := readDeploymentConfig(workload, router)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, serviceDetail{inferenceService: service, Pods: pods, Deployment: config})
 }
 
 func (h *Handler) CreateService(c *gin.Context) {
@@ -346,13 +360,35 @@ func (h *Handler) ScaleService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	// Look the router up first so a missing one fails before anything changes.
+	var router *appsv1.Deployment
+	if req.RouterReplicas != nil && workload.GetKind() == disaggregatedSetGVK.Kind {
+		if router, err = getRouter(ctx, cs, workload); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if router == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "the router of this service is missing"})
+			return
+		}
+	}
 	err = cs.K8sClient.Update(ctx, scaled)
 	recordHistory(c, cs, crd, "update", workload, scaled, err)
 	if err != nil {
 		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	service, err := describeWorkload(ctx, cs, scaled)
+	var service inferenceService
+	if router == nil {
+		service, err = describeWorkload(ctx, cs, scaled)
+	} else {
+		if router, err = scaleRouter(ctx, cs, router, *req.RouterReplicas); err != nil {
+			c.JSON(createErrorStatus(err), gin.H{"error": fmt.Sprintf("prefill and decode were scaled, but scaling the router failed: %v", err)})
+			return
+		}
+		// The patched router, since the informer cache may not have it yet.
+		service, err = describeService(ctx, cs, scaled, router)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -361,6 +397,7 @@ func (h *Handler) ScaleService(c *gin.Context) {
 }
 
 // scaleWorkload returns a copy of workload with the requested replica counts.
+// The router of a pd service is scaled apart.
 func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*unstructured.Unstructured, error) {
 	scaled := workload.DeepCopy()
 	if workload.GetKind() != disaggregatedSetGVK.Kind {
@@ -371,6 +408,12 @@ func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*uns
 	}
 	if req.PrefillReplicas < 1 || req.DecodeReplicas < 1 {
 		return nil, fmt.Errorf("prefillReplicas and decodeReplicas must be at least 1")
+	}
+	if req.PrefillReplicas > maxPDRoleReplicas || req.DecodeReplicas > maxPDRoleReplicas {
+		return nil, fmt.Errorf("prefillReplicas and decodeReplicas must be at most %d", maxPDRoleReplicas)
+	}
+	if req.RouterReplicas != nil && *req.RouterReplicas < 1 {
+		return nil, fmt.Errorf("routerReplicas must be at least 1")
 	}
 	replicas := map[string]int32{rolePrefill: req.PrefillReplicas, roleDecode: req.DecodeReplicas}
 	roles, _, _ := unstructured.NestedSlice(scaled.Object, "spec", "roles")

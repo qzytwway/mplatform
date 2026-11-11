@@ -45,7 +45,7 @@ import {
   type PDRoleValues,
   type ServiceModeValues,
 } from './service-mode-fields'
-import { modeBlocker } from './service-modes'
+import { MAX_PD_NAME_LENGTH, modeBlocker } from './service-modes'
 import {
   ServiceNetworkFields,
   type NetworkValues,
@@ -59,11 +59,17 @@ const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
 // Radix Select items cannot have an empty value.
 const ANY_NODE = '__any__'
 
+const MAX_NAME_LENGTH = 40
+
 const DEFAULT_PD_ROLE: PDRoleValues = {
   replicas: '1',
   groupSize: '1',
   gpuCount: '1',
   extraArgs: '',
+  image: '',
+  cpu: '',
+  memory: '',
+  env: '',
 }
 
 type VGPUMemoryUnit = 'mib' | 'percentage'
@@ -76,6 +82,10 @@ function toPDRole(values: PDRoleValues): PDRoleRequest {
     groupSize: Number(values.groupSize),
     gpuCount: Number(values.gpuCount),
     extraArgs: splitArgs(values.extraArgs),
+    image: values.image.trim(),
+    cpu: values.cpu.trim(),
+    memory: values.memory.trim(),
+    env: parseEnv(values.env),
   }
 }
 
@@ -140,8 +150,12 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     groupSize: '2',
     prefill: DEFAULT_PD_ROLE,
     decode: DEFAULT_PD_ROLE,
-    routerImage: DEFAULT_IMAGES.sglang,
-    transferBackend: 'mooncake',
+    // The backend runs the router from the service image when empty.
+    routerImage: '',
+    routerReplicas: '1',
+    routerPolicy: 'default',
+    // Mooncake over RDMA needs an RDMA network, which starts unset.
+    transferBackend: 'mooncake-tcp',
     ibDevices: '',
   })
   const [networkValues, setNetworkValues] = useState<NetworkValues>({
@@ -216,7 +230,13 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           pd: {
             prefill: toPDRole(modeValues.prefill),
             decode: toPDRole(modeValues.decode),
+            // Empty runs the router from the service image.
             routerImage: modeValues.routerImage.trim(),
+            routerReplicas: Number(modeValues.routerReplicas),
+            routerPolicy:
+              modeValues.routerPolicy === 'default'
+                ? ''
+                : modeValues.routerPolicy,
             transferBackend: modeValues.transferBackend,
             ibDevices:
               modeValues.transferBackend === 'mooncake'
@@ -264,9 +284,16 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
               onChange={(event) => setName(event.target.value)}
               placeholder="qwen-chat"
               pattern="[a-z]([a-z0-9\-]*[a-z0-9])?"
-              maxLength={40}
+              maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
               required
             />
+            {mode === 'pd' && (
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.pdNameHint', {
+                  max: MAX_PD_NAME_LENGTH,
+                })}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>{t('common.fields.namespace')}</Label>
@@ -336,6 +363,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           values={modeValues}
           onValuesChange={setModeValues}
           gpuCountLabel={gpuCountLabel}
+          service={{ image, cpu, memory }}
+          rdmaEnabled={networkValues.rdma !== 'none'}
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">

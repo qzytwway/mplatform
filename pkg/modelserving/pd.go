@@ -1,15 +1,21 @@
 package modelserving
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"slices"
 
+	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/model"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -25,6 +31,10 @@ func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, stora
 		roleReq := *req
 		roleReq.GroupSize, roleReq.GPUCount = role.spec.GroupSize, role.spec.GPUCount
 		roleReq.ExtraArgs = append(slices.Clone(req.ExtraArgs), role.spec.ExtraArgs...)
+		roleReq.Env = append(slices.Clone(req.Env), role.spec.Env...)
+		roleReq.Image = cmp.Or(role.spec.Image, req.Image)
+		roleReq.CPU = cmp.Or(role.spec.CPU, req.CPU)
+		roleReq.Memory = cmp.Or(role.spec.Memory, req.Memory)
 		template, err := groupTemplate(&roleReq, served, storage, role.name)
 		if err != nil {
 			return nil, err
@@ -66,20 +76,41 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 	return &appsv1.Deployment{
 		ObjectMeta: meta,
 		Spec: appsv1.DeploymentSpec{
-			Replicas: new(int32(1)),
+			Replicas: new(req.PD.RouterReplicas),
 			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: meta.Name,
+					// Spreads router replicas over nodes when it can, so one node
+					// going down leaves the others serving. It is set even for one
+					// replica so that scaling up later spreads too, and only counts
+					// pods of the same revision so rollouts do not skew it.
+					TopologySpreadConstraints: []corev1.TopologySpreadConstraint{{
+						MaxSkew:           1,
+						TopologyKey:       corev1.LabelHostname,
+						WhenUnsatisfiable: corev1.ScheduleAnyway,
+						LabelSelector:     &metav1.LabelSelector{MatchLabels: labels},
+						MatchLabelKeys:    []string{appsv1.DefaultDeploymentUniqueLabelKey},
+					}},
 					Containers: []corev1.Container{{
 						Name:    roleRouter,
 						Image:   req.PD.RouterImage,
 						Command: []string{"python3", "-m", "sglang_router.launch_router"},
 						Args:    routerArgs(req),
 						Ports:   []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}},
+						// Requests keep the router out of the BestEffort class,
+						// whose pods are evicted first.
+						Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						}},
 						ReadinessProbe: &corev1.Probe{
-							ProbeHandler:  corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(servingPort)}},
+							ProbeHandler:  routerProbe("/readiness"),
+							PeriodSeconds: probePeriodSeconds,
+						},
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler:  routerProbe("/liveness"),
 							PeriodSeconds: probePeriodSeconds,
 						},
 					}},
@@ -89,13 +120,17 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 	}
 }
 
+func routerProbe(path string) corev1.ProbeHandler {
+	return corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: path, Port: intstr.FromInt32(servingPort)}}
+}
+
 // routerArgs lets the router find prefill and decode pods by label, so it
 // follows scaling and rollouts without being reconfigured. Only group leaders
 // serve HTTP.
 func routerArgs(req *serviceRequest) []string {
 	service := serviceLabel + "=" + req.Name
 	leader := lwsWorkerIndexLabel + "=0"
-	return []string{
+	args := []string{
 		"--pd-disaggregation",
 		"--service-discovery",
 		"--service-discovery-namespace", req.Namespace,
@@ -105,4 +140,36 @@ func routerArgs(req *serviceRequest) []string {
 		"--host", "0.0.0.0",
 		"--port", fmt.Sprint(servingPort),
 	}
+	if req.PD.RouterPolicy != "" {
+		args = append(args, "--policy", req.PD.RouterPolicy)
+	}
+	return args
+}
+
+// getRouter returns the router of a pd service, or nil when it has none.
+func getRouter(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) (*appsv1.Deployment, error) {
+	var router appsv1.Deployment
+	key := types.NamespacedName{Namespace: workload.GetNamespace(), Name: workload.GetName() + routerSuffix}
+	if err := cs.K8sClient.Get(ctx, key, &router); apierrors.IsNotFound(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	// A same-named Deployment without the service label is not ours.
+	if router.Labels[serviceLabel] != workload.GetName() {
+		return nil, nil
+	}
+	return &router, nil
+}
+
+// scaleRouter patches only the replicas, so it cannot undo concurrent
+// changes to the rest of the router, and returns the router the API server
+// answers with.
+func scaleRouter(ctx context.Context, cs *cluster.ClientSet, router *appsv1.Deployment, replicas int32) (*appsv1.Deployment, error) {
+	scaled := router.DeepCopy()
+	scaled.Spec.Replicas = new(replicas)
+	if err := cs.K8sClient.Patch(ctx, scaled, client.MergeFrom(router)); err != nil {
+		return nil, err
+	}
+	return scaled, nil
 }

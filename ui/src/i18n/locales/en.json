@@ -2179,7 +2179,7 @@
       "anyNode": "Any node",
       "nodeHint": "Optional. Node-local models must run on a node that has the model directory.",
       "extraArgs": "Extra arguments",
-      "extraArgsHint": "Appended to the runtime start command, separated by spaces.",
+      "extraArgsHint": "Appended to the runtime start command, separated by spaces. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "mode": "Mode",
       "modes": {
         "single": "Single node",
@@ -2202,8 +2202,34 @@
       "prefillReplicas": "Prefill replicas",
       "decodeReplicas": "Decode replicas",
       "routerImage": "Router image",
+      "routerMissing": "The router is missing, so it cannot be scaled here.",
+      "pdNameHint": "PD service names are at most {{max}} characters.",
+      "routerImageHint": "Leave empty to use the service image, so the router matches the engine version it routes to. The image must include sglang_router.",
+      "routerReplicas": "Router replicas",
+      "routerReplicasHint": "Replicas prefer different nodes, so the router keeps serving when one node fails.",
+      "routerPolicy": "Routing policy",
+      "routerPolicies": {
+        "default": "Router default (cache_aware)",
+        "cache_aware": "Cache aware",
+        "power_of_two": "Power of two",
+        "round_robin": "Round robin",
+        "random": "Random"
+      },
+      "routerPolicyHints": {
+        "default": "Leaves --policy unset, so the router uses its default, cache_aware.",
+        "cache_aware": "Sends requests that share a prompt prefix to the server that has it cached, and balances load when servers become uneven.",
+        "power_of_two": "Picks the less loaded of two random servers.",
+        "round_robin": "Picks servers in turn.",
+        "random": "Picks a random server."
+      },
+      "roleImageHint": "Leave empty to use the service image.",
+      "roleImagesDiffer": "Prefill and decode run different images. KV transfer needs the same engine version on both sides.",
+      "routerCacheWarning": "Router replicas do not share their cache trees, so cache hits drop with more than one replica.",
+      "transferBackendNeedsRDMA": "Mooncake over RDMA needs an RDMA network. Configure one below or choose Mooncake (TCP).",
+      "roleEnvHint": "One KEY=VALUE per line, added after the service environment variables. A variable set here replaces the service variable of the same name. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
+      "inheritService": "Same as the service",
       "nodesPerReplica": "Nodes per replica",
-      "extraArgsHintPD": "Appended to both the prefill and decode start commands; each role's own arguments come after them and can override them.",
+      "extraArgsHintPD": "Appended to both the prefill and decode start commands; each role's own arguments come after them and can override them. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "transferBackend": "KV transfer",
       "transferBackends": {
         "mooncake": "Mooncake (RDMA)",
@@ -2226,17 +2252,17 @@
       "rdmaModeHints": {
         "none": "Traffic between nodes and KV transfer go over the pod network.",
         "device-plugin": "An RDMA device plugin, such as the NVIDIA Network Operator or SR-IOV, assigns NICs to pods, which get the IPC_LOCK capability.",
-        "host": "Pods run privileged in the node network and use the node's RDMA NICs directly. The namespace must allow privileged pods, and a port on a node can be used by only one pod."
+        "host": "Pods run privileged in the node network and use the node's RDMA NICs directly. The namespace must allow privileged pods, and a port on a node can be used by only one pod, so each node runs at most one inference pod."
       },
       "rdmaResource": "RDMA resource",
       "rdmaResourceCount": "Per pod",
       "rdmaNetworks": "Networks (Multus)",
       "rdmaNetworksHint": "Use the resource name your device plugin serves. Networks are optional and go into the pod's k8s.v1.cni.cncf.io/networks annotation; setups with dedicated NICs such as SR-IOV need them.",
       "env": "Environment variables",
-      "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME.",
+      "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "scaleTitle": "Scale inference service",
       "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
-      "scaleDescriptionPD": "Set the prefill and decode replicas. The router is not scalable.",
+      "scaleDescriptionPD": "Set the prefill, decode and router replicas.",
       "published": "Published",
       "publish": "Publish to gateway",
       "unpublish": "Unpublish",
@@ -2377,6 +2403,15 @@
       "router": "Router",
       "prefill-worker": "Prefill worker",
       "decode-worker": "Decode worker"
+    },
+    "deployment": {
+      "title": "Deployment configuration",
+      "command": "Command",
+      "podSettings": "Pod settings",
+      "hostNetwork": "Host network",
+      "privileged": "Privileged",
+      "requestLimit": "{{request}} (limit {{limit}})",
+      "requestOnly": "{{request}} (request)"
     },
     "lws": {
       "title": "LeaderWorkerSet",

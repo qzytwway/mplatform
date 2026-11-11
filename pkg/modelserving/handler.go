@@ -5,8 +5,14 @@ import (
 	"github.com/qzytwway/mplatform/pkg/cluster"
 )
 
+// clusterProvider is what the handlers use of the cluster manager; tests
+// provide fake clusters through it.
+type clusterProvider interface {
+	GetClientSet(clusterName string) (*cluster.ClientSet, error)
+}
+
 type Handler struct {
-	cm *cluster.ClusterManager
+	cm clusterProvider
 }
 
 func NewHandler(cm *cluster.ClusterManager) *Handler {

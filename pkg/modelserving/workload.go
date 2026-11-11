@@ -23,6 +23,12 @@ const (
 	runtimeAnnotation    = "model-serving.mplatform.io/runtime"
 	sourceTypeAnnotation = "model-serving.mplatform.io/source-type"
 	modeAnnotation       = "model-serving.mplatform.io/mode"
+	// Settings pod templates only imply, recorded so the service detail need
+	// not infer them. Workloads created before them carry none.
+	rdmaAnnotation            = "model-serving.mplatform.io/rdma"
+	transferBackendAnnotation = "model-serving.mplatform.io/transfer-backend"
+	ibDevicesAnnotation       = "model-serving.mplatform.io/ib-devices"
+	routerPolicyAnnotation    = "model-serving.mplatform.io/router-policy"
 
 	runtimeVLLM   = "vllm"
 	runtimeSGLang = "sglang"
@@ -53,6 +59,7 @@ const (
 	transferMooncakeTCP = "mooncake-tcp"
 	transferNIXL        = "nixl"
 
+	rdmaModeNone         = "none"
 	rdmaModeDevicePlugin = "device-plugin"
 	rdmaModeHost         = "host"
 	multusAnnotation     = "k8s.v1.cni.cncf.io/networks"
@@ -88,17 +95,28 @@ func serviceLabels(name string) map[string]string {
 }
 
 func workloadMeta(req *serviceRequest, served *model.ServedModel) metav1.ObjectMeta {
+	annotations := map[string]string{
+		modelAnnotation:      served.Name,
+		modelTypeAnnotation:  served.Type,
+		runtimeAnnotation:    req.Runtime,
+		sourceTypeAnnotation: served.SourceType,
+		modeAnnotation:       req.Mode,
+		rdmaAnnotation:       rdmaModeNone,
+	}
+	if req.RDMA != nil {
+		annotations[rdmaAnnotation] = req.RDMA.Mode
+	}
+	// Empty values are kept: they tell an unset setting from an old workload.
+	if req.PD != nil {
+		annotations[transferBackendAnnotation] = req.PD.TransferBackend
+		annotations[ibDevicesAnnotation] = req.PD.IBDevices
+		annotations[routerPolicyAnnotation] = req.PD.RouterPolicy
+	}
 	return metav1.ObjectMeta{
-		Name:      req.Name,
-		Namespace: req.Namespace,
-		Labels:    serviceLabels(req.Name),
-		Annotations: map[string]string{
-			modelAnnotation:      served.Name,
-			modelTypeAnnotation:  served.Type,
-			runtimeAnnotation:    req.Runtime,
-			sourceTypeAnnotation: served.SourceType,
-			modeAnnotation:       req.Mode,
-		},
+		Name:        req.Name,
+		Namespace:   req.Namespace,
+		Labels:      serviceLabels(req.Name),
+		Annotations: annotations,
 	}
 }
 
@@ -170,6 +188,12 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 	}
 	// Workers of a multi-node group serve no HTTP; only their leader does.
 	if worker {
+		// In the node network a declared port also becomes a host port, so
+		// the scheduler puts at most one inference pod on each node and pods
+		// do not contend for the ports they open there.
+		if req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
+			container.Ports = []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
+		}
 		return container
 	}
 	healthProbe := corev1.ProbeHandler{
@@ -208,6 +232,12 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 		if req.Runtime == runtimeSGLang {
 			args = append(args, "--enable-metrics")
 		}
+	}
+	// SGLang nodes past the first serve a health check, on 127.0.0.1:30000
+	// unless told otherwise; in the node network it moves to the port the
+	// worker declares.
+	if worker && req.Runtime == runtimeSGLang && req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
+		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
 	}
 	// Parallelism defaults to using every GPU of the group, as the examples
 	// do; extraArgs come later on the command line and override it. Groups
@@ -269,7 +299,23 @@ func runtimeEnv(req *serviceRequest) []corev1.EnvVar {
 	for _, item := range req.Env {
 		env = append(env, corev1.EnvVar{Name: item.Name, Value: item.Value})
 	}
-	return env
+	return mergeEnv(env)
+}
+
+// mergeEnv keeps one variable per name, where the name first appears, with
+// its last definition, which is the one the container would get.
+func mergeEnv(env []corev1.EnvVar) []corev1.EnvVar {
+	var merged []corev1.EnvVar
+	positions := map[string]int{}
+	for _, item := range env {
+		if position, ok := positions[item.Name]; ok {
+			merged[position] = item
+			continue
+		}
+		positions[item.Name] = len(merged)
+		merged = append(merged, item)
+	}
+	return merged
 }
 
 // rdmaSecurityContext lets RDMA register pinned memory. Host mode also needs

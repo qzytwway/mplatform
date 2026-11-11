@@ -1,7 +1,9 @@
 package modelserving
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -11,7 +13,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-const maxServiceNameLength = 40
+const (
+	maxServiceNameLength = 40
+	// The DisaggregatedSet webhook of LWS v1.0.0 (validateGeneratedNames)
+	// rejects names whose child LeaderWorkerSets or pods would exceed 63
+	// characters. A 30-character name stays within that for the prefill role
+	// while replica indexes have at most two digits, so pd roles are capped
+	// at maxPDRoleReplicas: a 101st replica would be rejected on scale-up.
+	maxPDServiceNameLength = 30
+	maxPDRoleReplicas      = 100
+)
 
 type serviceRequest struct {
 	Name      string     `json:"name"`
@@ -63,23 +74,36 @@ type pdRequest struct {
 	RouterImage     string        `json:"routerImage"`
 	TransferBackend string        `json:"transferBackend"`
 	// IBDevices names the HCAs Mooncake transfers over; empty lets it detect them.
-	IBDevices string `json:"ibDevices"`
+	IBDevices      string `json:"ibDevices"`
+	RouterReplicas int32  `json:"routerReplicas"`
+	// RouterPolicy picks prefill and decode servers; empty keeps the router's default.
+	RouterPolicy string `json:"routerPolicy"`
 }
 
-// pdRoleRequest sizes one pd role. Its extraArgs follow the service's and
-// override them.
+// pdRoleRequest sizes one pd role. Its extraArgs and env follow the service's
+// and override them; an empty image, cpu or memory keeps the service's.
 type pdRoleRequest struct {
 	Replicas  int32    `json:"replicas"`
 	GroupSize int32    `json:"groupSize"`
 	GPUCount  int64    `json:"gpuCount"`
 	ExtraArgs []string `json:"extraArgs"`
+	Image     string   `json:"image"`
+	CPU       string   `json:"cpu"`
+	Memory    string   `json:"memory"`
+	Env       []envVar `json:"env"`
 }
 
+// scaleRequest leaves the router of a pd service as it is when RouterReplicas
+// is nil.
 type scaleRequest struct {
-	Replicas        int32 `json:"replicas"`
-	PrefillReplicas int32 `json:"prefillReplicas"`
-	DecodeReplicas  int32 `json:"decodeReplicas"`
+	Replicas        int32  `json:"replicas"`
+	PrefillReplicas int32  `json:"prefillReplicas"`
+	DecodeReplicas  int32  `json:"decodeReplicas"`
+	RouterReplicas  *int32 `json:"routerReplicas"`
 }
+
+// routerPolicies are the --policy values of sglang_router.launch_router.
+var routerPolicies = []string{"cache_aware", "power_of_two", "round_robin", "random"}
 
 func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	req := serviceRequest{
@@ -122,10 +146,8 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	if err := validateArgs("extraArgs", req.ExtraArgs); err != nil {
 		return req, err
 	}
-	for _, env := range req.Env {
-		if len(validation.IsEnvVarName(env.Name)) > 0 {
-			return req, fmt.Errorf("env name %q is not a valid environment variable name", env.Name)
-		}
+	if err := validateEnv("env", req.Env); err != nil {
+		return req, err
 	}
 	if err := validateServiceResources(&req); err != nil {
 		return req, err
@@ -180,23 +202,37 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	if req.PD == nil {
 		return req, fmt.Errorf("pd is required in %s mode", modePD)
 	}
+	if len(req.Name) > maxPDServiceNameLength {
+		return req, fmt.Errorf("name must be at most %d characters in %s mode", maxPDServiceNameLength, modePD)
+	}
+	prefill, err := parsePDRole(rolePrefill, req.PD.Prefill)
+	if err != nil {
+		return req, err
+	}
+	decode, err := parsePDRole(roleDecode, req.PD.Decode)
+	if err != nil {
+		return req, err
+	}
 	pd := pdRequest{
-		Prefill:         req.PD.Prefill,
-		Decode:          req.PD.Decode,
-		RouterImage:     strings.TrimSpace(req.PD.RouterImage),
+		Prefill:         prefill,
+		Decode:          decode,
+		RouterImage:     cmp.Or(strings.TrimSpace(req.PD.RouterImage), defaultRouterImage(&req)),
 		TransferBackend: req.PD.TransferBackend,
 		IBDevices:       strings.TrimSpace(req.PD.IBDevices),
-	}
-	for name, role := range map[string]pdRoleRequest{rolePrefill: pd.Prefill, roleDecode: pd.Decode} {
-		if role.Replicas < 1 || role.GroupSize < 1 || role.GPUCount < 1 {
-			return req, fmt.Errorf("pd.%s replicas, groupSize and gpuCount must be at least 1", name)
-		}
-		if err := validateArgs("pd."+name+".extraArgs", role.ExtraArgs); err != nil {
-			return req, err
-		}
+		RouterReplicas:  req.PD.RouterReplicas,
+		RouterPolicy:    req.PD.RouterPolicy,
 	}
 	if _, err := reference.ParseNormalizedNamed(pd.RouterImage); err != nil {
 		return req, fmt.Errorf("pd.routerImage must be a valid image reference")
+	}
+	switch {
+	case pd.RouterReplicas == 0:
+		pd.RouterReplicas = 1
+	case pd.RouterReplicas < 0:
+		return req, fmt.Errorf("pd.routerReplicas must be at least 1")
+	}
+	if pd.RouterPolicy != "" && !slices.Contains(routerPolicies, pd.RouterPolicy) {
+		return req, fmt.Errorf("pd.routerPolicy must be one of %s", strings.Join(routerPolicies, ", "))
 	}
 	switch pd.TransferBackend {
 	case "":
@@ -204,6 +240,10 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	case transferMooncake, transferMooncakeTCP, transferNIXL:
 	default:
 		return req, fmt.Errorf("pd.transferBackend must be %s, %s or %s", transferMooncake, transferMooncakeTCP, transferNIXL)
+	}
+	// parseServiceMode has parsed rdma already.
+	if pd.TransferBackend == transferMooncake && req.RDMA == nil {
+		return req, fmt.Errorf("pd.transferBackend %s transfers over RDMA; configure rdma or use %s", transferMooncake, transferMooncakeTCP)
 	}
 	if pd.TransferBackend != transferMooncake {
 		pd.IBDevices = ""
@@ -217,6 +257,48 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	req.GroupSize = 1
 	req.GPUCount = 0
 	return req, nil
+}
+
+// defaultRouterImage is the image a pd router runs unless one is given.
+// SGLang images ship sglang_router, and sharing the service image keeps the
+// router at the engine version it routes to.
+func defaultRouterImage(req *serviceRequest) string {
+	return req.Image
+}
+
+func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
+	field := "pd." + name
+	role := pdRoleRequest{
+		Replicas:  body.Replicas,
+		GroupSize: body.GroupSize,
+		GPUCount:  body.GPUCount,
+		ExtraArgs: body.ExtraArgs,
+		Image:     strings.TrimSpace(body.Image),
+		CPU:       strings.TrimSpace(body.CPU),
+		Memory:    strings.TrimSpace(body.Memory),
+		Env:       body.Env,
+	}
+	if role.Replicas < 1 || role.GroupSize < 1 || role.GPUCount < 1 {
+		return role, fmt.Errorf("%s replicas, groupSize and gpuCount must be at least 1", field)
+	}
+	if role.Replicas > maxPDRoleReplicas {
+		return role, fmt.Errorf("%s replicas must be at most %d", field, maxPDRoleReplicas)
+	}
+	if err := validateArgs(field+".extraArgs", role.ExtraArgs); err != nil {
+		return role, err
+	}
+	if role.Image != "" {
+		if _, err := reference.ParseNormalizedNamed(role.Image); err != nil {
+			return role, fmt.Errorf("%s.image must be a valid image reference", field)
+		}
+	}
+	if err := validateQuantity(field+".cpu", role.CPU); err != nil {
+		return role, err
+	}
+	if err := validateQuantity(field+".memory", role.Memory); err != nil {
+		return role, err
+	}
+	return role, validateEnv(field+".env", role.Env)
 }
 
 func parseRDMARequest(body *rdmaRequest) (*rdmaRequest, error) {
@@ -255,17 +337,35 @@ func validateArgs(field string, args []string) error {
 	return nil
 }
 
+func validateEnv(field string, env []envVar) error {
+	for _, item := range env {
+		if len(validation.IsEnvVarName(item.Name)) > 0 {
+			return fmt.Errorf("%s name %q is not a valid environment variable name", field, item.Name)
+		}
+	}
+	return nil
+}
+
+// validateQuantity accepts an empty value, which leaves the resource unset.
+func validateQuantity(field, value string) error {
+	if value == "" {
+		return nil
+	}
+	if quantity, err := resource.ParseQuantity(value); err != nil || quantity.Sign() <= 0 {
+		return fmt.Errorf("%s must be a positive quantity", field)
+	}
+	return nil
+}
+
 func validateServiceResources(req *serviceRequest) error {
 	if req.GPUCount < 0 {
 		return fmt.Errorf("gpuCount must not be negative")
 	}
-	for field, value := range map[string]string{"cpu": req.CPU, "memory": req.Memory} {
-		if value == "" {
-			continue
-		}
-		if quantity, err := resource.ParseQuantity(value); err != nil || quantity.Sign() <= 0 {
-			return fmt.Errorf("%s must be a positive quantity", field)
-		}
+	if err := validateQuantity("cpu", req.CPU); err != nil {
+		return err
+	}
+	if err := validateQuantity("memory", req.Memory); err != nil {
+		return err
 	}
 	return validateVGPU(req)
 }
