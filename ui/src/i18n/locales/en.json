@@ -834,7 +834,8 @@
       "oauth": "Authentication",
       "rbac": "RBAC",
       "users": "User",
-      "logging": "Logging"
+      "logging": "Logging",
+      "monitoring": "Monitoring"
     }
   },
   "generalManagement": {
@@ -1453,7 +1454,7 @@
     "unavailable": {
       "prometheus": {
         "title": "Prometheus is not configured",
-        "description": "Set a Prometheus URL for this cluster in Settings to see metrics and alerts."
+        "description": "Install kube-prometheus-stack from the monitoring settings, or set a Prometheus URL for this cluster in the cluster settings."
       },
       "alertmanager": {
         "title": "Alertmanager is not configured",
@@ -1466,31 +1467,18 @@
       "forbidden": "You do not have permission to view this",
       "failed": "Could not load data",
       "configure": "Open cluster settings",
-      "configureLogs": "Go to logging settings"
+      "configureLogs": "Go to logging settings",
+      "dashboards": {
+        "title": "No dashboards available",
+        "description": "The dashboards come from the kube-prometheus-stack chart in the app store's local repository. Upload the chart there, then install it from the monitoring settings."
+      },
+      "configureMonitoring": "Go to monitoring settings"
     },
     "metrics": {
       "title": "Prometheus Metrics",
       "dashboard": "Dashboards",
       "query": "PromQL query",
-      "scope": {
-        "label": "Scope",
-        "cluster": "Cluster",
-        "node": "Node",
-        "namespace": "Namespace",
-        "workload": "Workload"
-      },
-      "selectNode": "Select a node",
-      "selectWorkload": "Select a workload",
-      "chooseTarget": "Choose what to show using the selectors above.",
       "noData": "No data in this time range",
-      "panels": {
-        "cpu": "CPU usage (cores)",
-        "memory": "Memory working set",
-        "networkIn": "Network received",
-        "networkOut": "Network sent",
-        "throttling": "CPU throttling (highest)",
-        "restarts": "Container restarts (15 min)"
-      },
       "queryPlaceholder": "Enter a PromQL expression, then press ⌘/Ctrl + Enter",
       "examples": "Examples",
       "run": "Run query",
@@ -1579,6 +1567,14 @@
     },
     "logs": {
       "title": "Logs"
+    },
+    "dashboards": {
+      "select": "Select a dashboard",
+      "all": "All",
+      "noOptions": "No values",
+      "moreSeries": "{{count}} more series",
+      "unsupported": "Panel type {{type}} is not supported",
+      "renderFailed": "This panel could not be displayed"
     }
   },
   "logging": {
@@ -1632,6 +1628,35 @@
       "count": "Logs",
       "empty": "No logs match in this time range.",
       "latest": "Latest {{count}} logs"
+    }
+  },
+  "monitoringSettings": {
+    "title": "kube-prometheus-stack",
+    "description": "Install kube-prometheus-stack into a cluster: Prometheus, Alertmanager, node-exporter and kube-state-metrics. The cluster connects to them automatically, and the Metrics page shows the dashboards that come with the chart.",
+    "installed": "Installed",
+    "notInstalled": "Not installed",
+    "unavailable": "Unavailable",
+    "connectedTo": "Prometheus: {{url}}",
+    "chartMissing": "Not uploaded",
+    "chartHint": "The chart and the Metrics page dashboards are read from the app store's local repository. Each cluster pulls the images through its image registry setting. Uploading a newer chart does not upgrade installed releases.",
+    "actions": {
+      "install": "Install",
+      "installing": "Installing...",
+      "uninstall": "Uninstall"
+    },
+    "install": {
+      "title": "Install kube-prometheus-stack in {{cluster}}",
+      "description": "Installs into the monitoring namespace without Grafana; the platform shows the chart's dashboards itself.",
+      "retention": "Retention",
+      "storageSize": "Storage size",
+      "storageClass": "Storage class",
+      "defaultStorageClass": "Cluster default",
+      "hint": "Prometheus keeps metrics on a persistent volume for the retention period, which accepts h, d, w or y, such as 7d. Installing takes a few minutes while images are pulled."
+    },
+    "messages": {
+      "installed": "kube-prometheus-stack installed in {{cluster}}",
+      "uninstalled": "kube-prometheus-stack uninstalled from {{cluster}}",
+      "uninstallNote": "Prometheus, Alertmanager and the exporters are removed. The monitoring CRDs and the Prometheus data volume are kept."
     }
   },
   "modelServing": {

@@ -3,7 +3,11 @@ import { BarChart3, Code2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
-import { useResources } from '@/lib/api'
+import {
+  useDashboard,
+  useDashboards,
+  type DashboardSummary,
+} from '@/lib/api/dashboards'
 import { usePrometheusQuery } from '@/lib/api/prometheus'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,147 +19,66 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
-  MetricsDashboard,
-  MetricsScope,
-  MetricsScopeKind,
-  WorkloadKind,
-} from '@/components/observability/metrics-dashboard'
+  DashboardView,
+  VariableBar,
+} from '@/components/observability/dashboard/dashboard-view'
+import { useDashboardVariables } from '@/components/observability/dashboard/use-dashboard-data'
+import type { DashboardLink } from '@/components/observability/dashboard/variables'
 import { ObservabilityUnavailable } from '@/components/observability/observability-unavailable'
 import { PromQLExplorer } from '@/components/observability/promql-explorer'
 import { TimeWindowControls } from '@/components/observability/time-window-controls'
 import { useTimeWindow } from '@/components/observability/use-time-window'
-import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
-const SCOPE_KINDS: MetricsScopeKind[] = [
-  'cluster',
-  'node',
-  'namespace',
-  'workload',
-]
+// Kubernetes / Compute Resources / Cluster
+const DEFAULT_DASHBOARD_UID = 'efa86fd1d0c121a26444b636a3f509a8'
+const VARIABLE_PREFIX = 'var-'
 
-const WORKLOAD_KINDS = [
-  { kind: 'deployment', resource: 'deployments' },
-  { kind: 'statefulset', resource: 'statefulsets' },
-  { kind: 'daemonset', resource: 'daemonsets' },
-] as const
-
-function readScope(params: URLSearchParams): MetricsScope {
-  const kind = params.get('scope') as MetricsScopeKind | null
-  const [workloadKind, workloadName] = (params.get('workload') ?? '').split('/')
-  return {
-    kind: kind && SCOPE_KINDS.includes(kind) ? kind : 'cluster',
-    node: params.get('node') || undefined,
-    namespace: params.get('namespace') || undefined,
-    workloadKind: (workloadKind as WorkloadKind) || undefined,
-    workloadName: workloadName || undefined,
+// Groups dashboards by the first part of titles such as
+// "Kubernetes / Compute Resources / Pod".
+function groupDashboards(dashboards: DashboardSummary[]) {
+  const groups = new Map<string, DashboardSummary[]>()
+  for (const dashboard of dashboards) {
+    const [group, ...rest] = dashboard.title.split(' / ')
+    const name = rest.length ? group : ''
+    groups.set(name, [...(groups.get(name) ?? []), dashboard])
   }
+  return [...groups.entries()].sort(([a], [b]) =>
+    a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)
+  )
 }
 
-function ScopePicker({
-  scope,
+function DashboardPicker({
+  dashboards,
+  value,
   onChange,
 }: {
-  scope: MetricsScope
-  onChange: (updates: Record<string, string | null>) => void
+  dashboards: DashboardSummary[]
+  value: string
+  onChange: (uid: string) => void
 }) {
   const { t } = useTranslation()
-  const { data: nodes } = useResources('nodes', undefined, {
-    disable: scope.kind !== 'node',
-  })
-  const workloadNamespace =
-    scope.kind === 'workload' ? scope.namespace : undefined
-  const { data: deployments } = useResources('deployments', workloadNamespace, {
-    disable: !workloadNamespace,
-  })
-  const { data: statefulsets } = useResources(
-    'statefulsets',
-    workloadNamespace,
-    { disable: !workloadNamespace }
-  )
-  const { data: daemonsets } = useResources('daemonsets', workloadNamespace, {
-    disable: !workloadNamespace,
-  })
-  const workloads = { deployments, statefulsets, daemonsets }
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        value={scope.kind}
-        onValueChange={(value) => value && onChange({ scope: value })}
-        aria-label={t('observability.metrics.scope.label')}
-      >
-        {SCOPE_KINDS.map((kind) => (
-          <ToggleGroupItem key={kind} value={kind} className="px-3">
-            {t(`observability.metrics.scope.${kind}`)}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-      {scope.kind === 'node' && (
-        <Select
-          value={scope.node ?? ''}
-          onValueChange={(node) => onChange({ node })}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder={t('observability.metrics.selectNode')} />
-          </SelectTrigger>
-          <SelectContent>
-            {(nodes ?? []).map((node) => (
-              <SelectItem
-                key={node.metadata?.name}
-                value={node.metadata!.name!}
-              >
-                {node.metadata?.name}
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-80 max-w-full">
+        <SelectValue placeholder={t('observability.dashboards.select')} />
+      </SelectTrigger>
+      <SelectContent>
+        {groupDashboards(dashboards).map(([group, items]) => (
+          <SelectGroup key={group || 'other'}>
+            {group && <SelectLabel>{group}</SelectLabel>}
+            {items.map((dashboard) => (
+              <SelectItem key={dashboard.uid} value={dashboard.uid}>
+                {group
+                  ? dashboard.title.slice(group.length + 3)
+                  : dashboard.title}
               </SelectItem>
             ))}
-          </SelectContent>
-        </Select>
-      )}
-      {(scope.kind === 'namespace' || scope.kind === 'workload') && (
-        <NamespaceSelector
-          value={scope.namespace}
-          onChange={(namespace) => onChange({ namespace, workload: null })}
-          triggerClassName="w-48"
-        />
-      )}
-      {scope.kind === 'workload' && (
-        <Select
-          value={
-            scope.workloadKind && scope.workloadName
-              ? `${scope.workloadKind}/${scope.workloadName}`
-              : ''
-          }
-          onValueChange={(workload) => onChange({ workload })}
-          disabled={!scope.namespace}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue
-              placeholder={t('observability.metrics.selectWorkload')}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {WORKLOAD_KINDS.map(({ kind, resource }) =>
-              workloads[resource]?.length ? (
-                <SelectGroup key={kind}>
-                  <SelectLabel>{t(`nav.${resource}`)}</SelectLabel>
-                  {workloads[resource].map((item) => (
-                    <SelectItem
-                      key={item.metadata?.name}
-                      value={`${kind}/${item.metadata?.name}`}
-                    >
-                      {item.metadata?.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ) : null
-            )}
-          </SelectContent>
-        </Select>
-      )}
-    </div>
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -164,20 +87,80 @@ export function MetricsPage() {
   const [params, setParams] = useSearchParams()
   const timeWindow = useTimeWindow()
   const isQueryMode = params.get('mode') === 'query'
-  const scope = useMemo(() => readScope(params), [params])
   const probe = usePrometheusQuery('vector(1)', { staleTime: 60000 })
+  const dashboards = useDashboards()
+  const list = dashboards.data?.dashboards ?? []
+  const uid =
+    params.get('dashboard') ||
+    (list.some((dashboard) => dashboard.uid === DEFAULT_DASHBOARD_UID)
+      ? DEFAULT_DASHBOARD_UID
+      : list[0]?.uid)
+  const dashboard = useDashboard(isQueryMode ? undefined : uid)
+  const selected = useMemo(
+    () =>
+      Object.fromEntries(
+        [...params.entries()]
+          .filter(([key]) => key.startsWith(VARIABLE_PREFIX))
+          .map(([key, value]) => [key.slice(VARIABLE_PREFIX.length), value])
+      ),
+    [params]
+  )
+  const variables = useDashboardVariables(dashboard.data, selected)
 
-  const updateParams = (updates: Record<string, string | null>) => {
+  const updateParams = (
+    update: (next: URLSearchParams) => void,
+    clearVariables = false
+  ) => {
     setParams(
       (current) => {
         const next = new URLSearchParams(current)
-        for (const [key, value] of Object.entries(updates)) {
-          if (value) next.set(key, value)
-          else next.delete(key)
+        if (clearVariables) {
+          for (const key of [...next.keys()]) {
+            if (key.startsWith(VARIABLE_PREFIX)) next.delete(key)
+          }
         }
+        update(next)
         return next
       },
       { replace: true }
+    )
+  }
+
+  // Variables after the changed one depend on it, so they go back to their
+  // defaults.
+  const changeVariable = (name: string, value: string) => {
+    const names = (dashboard.data?.templating?.list ?? []).map((v) => v.name)
+    const later = names.slice(names.indexOf(name) + 1)
+    updateParams((next) => {
+      next.set(VARIABLE_PREFIX + name, value)
+      for (const other of later) next.delete(VARIABLE_PREFIX + other)
+    })
+  }
+
+  const navigate = (link: DashboardLink) => {
+    updateParams((next) => {
+      next.set('dashboard', link.uid)
+      for (const [name, value] of Object.entries(link.variables)) {
+        next.set(VARIABLE_PREFIX + name, value)
+      }
+    }, true)
+    window.scrollTo({ top: 0 })
+  }
+
+  const renderDashboard = () => {
+    const error = dashboards.error ?? dashboard.error ?? variables.error
+    if (error)
+      return <ObservabilityUnavailable kind="dashboards" error={error} />
+    if (!dashboard.data || !variables.data) {
+      return <Skeleton className="h-96 w-full" />
+    }
+    return (
+      <DashboardView
+        dashboard={dashboard.data}
+        variables={variables.data}
+        timeWindow={timeWindow}
+        onNavigate={navigate}
+      />
     )
   }
 
@@ -187,12 +170,24 @@ export function MetricsPage() {
         <h1 className="text-2xl font-bold">
           {t('observability.metrics.title')}
         </h1>
-        {!isQueryMode && <ScopePicker scope={scope} onChange={updateParams} />}
+        {!isQueryMode && list.length > 0 && uid && (
+          <DashboardPicker
+            dashboards={list}
+            value={uid}
+            onChange={(next) =>
+              updateParams((params) => params.set('dashboard', next), true)
+            }
+          />
+        )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <TimeWindowControls timeWindow={timeWindow} />
           <Button
             variant="outline"
-            onClick={() => updateParams({ mode: isQueryMode ? null : 'query' })}
+            onClick={() =>
+              updateParams((next) =>
+                isQueryMode ? next.delete('mode') : next.set('mode', 'query')
+              )
+            }
           >
             {isQueryMode ? <BarChart3 /> : <Code2 />}
             {isQueryMode
@@ -202,16 +197,20 @@ export function MetricsPage() {
         </div>
       </div>
 
+      {!isQueryMode && !probe.error && variables.data && (
+        <VariableBar variables={variables.data} onChange={changeVariable} />
+      )}
+
       {probe.error ? (
         <ObservabilityUnavailable kind="prometheus" error={probe.error} />
       ) : isQueryMode ? (
         <PromQLExplorer
           initialQuery={params.get('query') ?? ''}
           timeWindow={timeWindow}
-          onRun={(query) => updateParams({ query })}
+          onRun={(query) => updateParams((next) => next.set('query', query))}
         />
       ) : (
-        <MetricsDashboard scope={scope} timeWindow={timeWindow} />
+        renderDashboard()
       )}
     </div>
   )

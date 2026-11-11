@@ -17,6 +17,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/metrics"
 	"github.com/qzytwway/mplatform/pkg/middleware"
 	"github.com/qzytwway/mplatform/pkg/modelserving"
+	"github.com/qzytwway/mplatform/pkg/monitoring"
 	"github.com/qzytwway/mplatform/pkg/proxy"
 	"github.com/qzytwway/mplatform/pkg/rbac"
 	"github.com/qzytwway/mplatform/pkg/resources"
@@ -143,6 +144,7 @@ func registerAdminRoutes(r *gin.RouterGroup, authHandler *auth.AuthHandler, cm *
 
 	helmChartsHandler.RegisterAdminRoutes(adminAPI)
 	logging.NewHandler(cm).RegisterAdminRoutes(adminAPI)
+	monitoring.NewHandler(cm).RegisterAdminRoutes(adminAPI)
 	modelserving.NewHandler(cm).RegisterAdminRoutes(adminAPI)
 }
 
@@ -174,6 +176,7 @@ func registerClusterProtectedRoutes(api *gin.RouterGroup, helmChartsHandler *hel
 	api.GET("/alertmanager/silences", metricsHandler.ListSilences)
 	api.POST("/alertmanager/silences", metricsHandler.CreateSilence)
 	api.DELETE("/alertmanager/silences/:id", metricsHandler.ExpireSilence)
+	monitoring.RegisterRoutes(api)
 
 	logsHandler := resources.NewLogsHandler()
 	api.GET("/logs/:namespace/:podName/ws", logsHandler.HandleLogsWebSocket)

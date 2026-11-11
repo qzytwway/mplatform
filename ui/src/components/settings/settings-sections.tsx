@@ -7,6 +7,7 @@ import { AuthenticationManagement } from './authentication-management'
 import { ClusterManagement } from './cluster-management'
 import { GeneralManagement } from './general-management'
 import { LoggingManagement } from './logging-management'
+import { MonitoringManagement } from './monitoring-management'
 import { RBACManagement } from './rbac-management'
 import { TemplateManagement } from './template-management'
 import { UserManagement } from './user-management'
@@ -50,6 +51,12 @@ export const settingsSectionRegistry: SettingsSectionDefinition[] = [
     'settings.tabs.logging',
     'Logging',
     LoggingManagement
+  ),
+  createSettingsSectionDefinition(
+    'monitoring',
+    'settings.tabs.monitoring',
+    'Monitoring',
+    MonitoringManagement
   ),
   createSettingsSectionDefinition(
     'oauth',

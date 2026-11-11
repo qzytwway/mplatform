@@ -5,13 +5,32 @@ import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 
-type UnavailableKind = 'prometheus' | 'alertmanager' | 'logs'
+type UnavailableKind = 'prometheus' | 'alertmanager' | 'logs' | 'dashboards'
 
-// Messages the backend returns when a data source has no URL configured.
+// Messages the backend returns when a data source has no URL configured, or
+// the dashboards' chart is not in the local chart repository.
 const NOT_CONFIGURED_MESSAGES = [
   'Prometheus client not available',
   'Alertmanager is not configured',
+  'chart is not in the local chart directory',
 ]
+
+const SETTINGS_LINKS: Record<UnavailableKind, { tab: string; label: string }> =
+  {
+    prometheus: {
+      tab: 'monitoring',
+      label: 'observability.unavailable.configureMonitoring',
+    },
+    dashboards: {
+      tab: 'monitoring',
+      label: 'observability.unavailable.configureMonitoring',
+    },
+    alertmanager: {
+      tab: 'clusters',
+      label: 'observability.unavailable.configure',
+    },
+    logs: { tab: 'logging', label: 'observability.unavailable.configureLogs' },
+  }
 
 interface ObservabilityUnavailableProps {
   kind: UnavailableKind
@@ -47,17 +66,9 @@ export function ObservabilityUnavailable({
       </p>
       {notConfigured && isAdmin && (
         <Button asChild variant="outline" size="sm">
-          <Link
-            to={
-              kind === 'logs'
-                ? '/settings?tab=logging'
-                : '/settings?tab=clusters'
-            }
-          >
+          <Link to={`/settings?tab=${SETTINGS_LINKS[kind].tab}`}>
             <Settings />
-            {kind === 'logs'
-              ? t('observability.unavailable.configureLogs')
-              : t('observability.unavailable.configure')}
+            {t(SETTINGS_LINKS[kind].label)}
           </Link>
         </Button>
       )}

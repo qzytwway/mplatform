@@ -845,7 +845,8 @@
       "rbac": "RBAC",
       "users": "用户",
       "apikeys": "API 密钥",
-      "logging": "日志"
+      "logging": "日志",
+      "monitoring": "监控"
     }
   },
   "generalManagement": {
@@ -1540,7 +1541,7 @@
     "unavailable": {
       "prometheus": {
         "title": "此集群未配置 Prometheus",
-        "description": "在设置中为此集群填写 Prometheus 地址后，即可查看指标和告警。"
+        "description": "在监控设置中安装 kube-prometheus-stack，或在集群设置中为此集群填写 Prometheus 地址。"
       },
       "alertmanager": {
         "title": "此集群未配置 Alertmanager",
@@ -1553,31 +1554,18 @@
       "forbidden": "你没有查看此内容的权限",
       "failed": "数据加载失败",
       "configure": "前往集群设置",
-      "configureLogs": "前往日志设置"
+      "configureLogs": "前往日志设置",
+      "dashboards": {
+        "title": "没有可用的仪表盘",
+        "description": "仪表盘来自应用商店本地仓库中的 kube-prometheus-stack Chart。请先上传该 Chart，再到监控设置中安装。"
+      },
+      "configureMonitoring": "前往监控设置"
     },
     "metrics": {
       "title": "Prometheus 指标",
       "dashboard": "预置仪表盘",
       "query": "PromQL 查询",
-      "scope": {
-        "label": "范围",
-        "cluster": "集群",
-        "node": "节点",
-        "namespace": "命名空间",
-        "workload": "工作负载"
-      },
-      "selectNode": "选择节点",
-      "selectWorkload": "选择工作负载",
-      "chooseTarget": "请先在上方选择要查看的对象。",
       "noData": "此时间范围内没有数据",
-      "panels": {
-        "cpu": "CPU 使用（核）",
-        "memory": "内存使用",
-        "networkIn": "网络接收",
-        "networkOut": "网络发送",
-        "throttling": "CPU 节流比例（最高）",
-        "restarts": "容器重启（15 分钟）"
-      },
       "queryPlaceholder": "输入 PromQL 表达式，按 ⌘/Ctrl + Enter 执行",
       "examples": "常用查询",
       "run": "执行查询",
@@ -1666,6 +1654,14 @@
     },
     "logs": {
       "title": "日志"
+    },
+    "dashboards": {
+      "select": "选择仪表盘",
+      "all": "全部",
+      "noOptions": "无可选值",
+      "moreSeries": "还有 {{count}} 条序列",
+      "unsupported": "不支持 {{type}} 类型的面板",
+      "renderFailed": "此面板无法显示"
     }
   },
   "logging": {
@@ -1719,6 +1715,35 @@
       "count": "日志数",
       "empty": "该时间范围内没有匹配的日志。",
       "latest": "最新 {{count}} 条"
+    }
+  },
+  "monitoringSettings": {
+    "title": "kube-prometheus-stack",
+    "description": "在集群中安装 kube-prometheus-stack，包括 Prometheus、Alertmanager、node-exporter 和 kube-state-metrics。集群会自动连接它们，指标页会展示 Chart 自带的全部仪表盘。",
+    "installed": "已安装",
+    "notInstalled": "未安装",
+    "unavailable": "不可用",
+    "connectedTo": "Prometheus：{{url}}",
+    "chartMissing": "未上传",
+    "chartHint": "Chart 和指标页的仪表盘都从应用商店的本地仓库（local）读取。各集群按自己的镜像仓库地址拉取镜像。上传新版本 Chart 不会自动升级已安装的 release。",
+    "actions": {
+      "install": "安装",
+      "installing": "安装中...",
+      "uninstall": "卸载"
+    },
+    "install": {
+      "title": "在 {{cluster}} 中安装 kube-prometheus-stack",
+      "description": "安装到 monitoring 命名空间，不包含 Grafana，平台会直接展示 Chart 自带的仪表盘。",
+      "retention": "保留时长",
+      "storageSize": "存储大小",
+      "storageClass": "存储类",
+      "defaultStorageClass": "集群默认",
+      "hint": "Prometheus 会把指标保存在持久卷上，保留时长支持 h、d、w、y，如 7d。安装需要拉取镜像，通常要几分钟。"
+    },
+    "messages": {
+      "installed": "已在 {{cluster}} 中安装 kube-prometheus-stack",
+      "uninstalled": "已从 {{cluster}} 卸载 kube-prometheus-stack",
+      "uninstallNote": "会删除 Prometheus、Alertmanager 和各个 exporter，监控相关的 CRD 和 Prometheus 数据卷会保留。"
     }
   },
   "modelServing": {
