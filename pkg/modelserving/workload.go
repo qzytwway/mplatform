@@ -237,6 +237,10 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 	}
 	if !worker {
 		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
+		// vLLM always serves /metrics on its HTTP port; SGLang only when asked.
+		if req.Runtime == runtimeSGLang {
+			args = append(args, "--enable-metrics")
+		}
 	}
 	// SGLang nodes past the first serve a health check, on 127.0.0.1:30000
 	// unless told otherwise; in the node network it moves to the port the
