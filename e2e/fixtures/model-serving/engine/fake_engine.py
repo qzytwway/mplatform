@@ -1,12 +1,21 @@
 """A stand-in for vLLM and SGLang servers in model serving e2e tests.
 
 It accepts the command lines the platform renders, prints them with the
-environment so tests can assert on them, and serves the HTTP endpoints that
-probes, metrics scrapers and the SGLang router call. No GPU or model weights
-are needed.
+environment variables the platform sets so tests can assert on them, and
+serves the HTTP endpoints that probes, metrics scrapers and the routers call.
+No GPU or model weights are needed.
+
+Where it falls short of the real engines:
+  - It loads no model and serves canned replies.
+  - A multi-node vLLM worker only resolves its leader's address; SGLang
+    workers also connect to the leader's dist-init port, which the leader
+    waits for before reporting healthy.
+  - The SGLang bootstrap is one HTTP GET from decode to the prefill
+    bootstrap server, and vLLM's KV handoff is one TCP connection from
+    decode to the prefill NIXL side channel: no KV cache moves.
 
 Log lines start with a tag and carry one JSON object:
-  FAKE_ENGINE_START     argv, env and what was parsed from them
+  FAKE_ENGINE_START     argv, the platform's env and what was parsed
   FAKE_ENGINE_ERROR     why the engine refused to start
   FAKE_ENGINE_DIST      how this node reached the leader of its group
   FAKE_ENGINE_REQUEST   every HTTP request served
@@ -32,6 +41,9 @@ CONNECT_TIMEOUT_SECONDS = 5
 # vLLM's NixlConnector serves its handshake here unless told otherwise.
 NIXL_SIDE_CHANNEL_PORT = 5600
 LATENCY_BUCKETS = ("0.1", "0.5", "1.0", "5.0", "+Inf")
+# Variables the platform, LeaderWorkerSet or the tests set; the rest of the
+# environment is the image's and stays out of the log.
+LOGGED_ENV_PREFIXES = ("LWS_", "DISAGGREGATEDSET_", "MOONCAKE_", "MC_", "VLLM_", "NCCL_", "HF_", "E2E_")
 
 
 def log(tag, payload):
@@ -68,6 +80,8 @@ def parse(runtime, argv):
         "disaggregationMode": option(argv, "--disaggregation-mode"),
         "bootstrapPort": int(option(argv, "--disaggregation-bootstrap-port") or 0) or None,
         "transferBackend": option(argv, "--disaggregation-transfer-backend"),
+        # vLLM always serves /metrics; SGLang only when asked to.
+        "metrics": runtime == "vllm" or "--enable-metrics" in argv,
         "kvTransferConfig": json.loads(kv_config) if kv_config else None,
     }
 
@@ -257,7 +271,7 @@ def handler_for(engine, server_name):
             path = self.path.split("?", 1)[0]
             if server_name == "bootstrap":
                 self.reply(200, {"status": "ok"})
-            elif path in ("/health", "/health_generate", "/ping"):
+            elif path == "/health":
                 if engine.ready():
                     self.reply(200, {"status": "ok"})
                 else:
@@ -269,7 +283,7 @@ def handler_for(engine, server_name):
             elif path == "/v1/models":
                 name = engine.info["servedModelName"]
                 self.reply(200, {"object": "list", "data": [{"id": name, "object": "model", "owned_by": "fake"}]})
-            elif path == "/metrics":
+            elif path == "/metrics" and engine.info["metrics"]:
                 self.reply(200, engine.metrics(), "text/plain; version=0.0.4")
             elif path == "/get_load":
                 self.reply(200, {"load": 0})
@@ -351,7 +365,8 @@ def join_leader(engine):
 def main(runtime, argv):
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     engine = Engine(runtime, argv)
-    log("FAKE_ENGINE_START", {"argv": argv, "env": dict(os.environ), "parsed": engine.info})
+    env = {name: value for name, value in os.environ.items() if name.startswith(LOGGED_ENV_PREFIXES)}
+    log("FAKE_ENGINE_START", {"argv": argv, "env": env, "parsed": engine.info})
     # The kubelet expands $(VAR) only for variables in the container env; a
     # real engine would fail on the literal, so this one does too.
     unexpanded = [arg for arg in argv if "$(LWS_" in arg]

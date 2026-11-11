@@ -1,21 +1,32 @@
-import { execFileSync } from 'node:child_process'
-import { readdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   expect,
   type APIRequestContext,
   type APIResponse,
 } from '@playwright/test'
 
-// Set by `make e2e-model-serving-run`, which prepares the cluster these
-// helpers expect: fake GPUs and RDMA NICs, the model directory and the images.
+import {
+  crdInstalled,
+  getObject,
+  kubectl,
+  kubectlJSON,
+  minute,
+  podReady,
+  waitFor,
+  type Container,
+  type Pod,
+} from './kube'
+
+// Set by `make e2e-model-serving-run`, which builds these images and prepares
+// the cluster these helpers expect: fake GPUs and RDMA NICs and the model
+// directory.
+const routerVersion = process.env.E2E_MS_ROUTER_VERSION || '0.3.2'
 export const modelServing = {
   enabled: process.env.MPLATFORM_E2E_MODEL_SERVING === 'true',
   engineImage:
     process.env.E2E_MS_ENGINE_IMAGE || 'mplatform-e2e/fake-engine:0.1',
   routerImage:
-    process.env.E2E_MS_ROUTER_IMAGE || 'mplatform-e2e/sglang-router:0.3.2',
+    process.env.E2E_MS_ROUTER_IMAGE ||
+    `mplatform-e2e/sglang-router:${routerVersion}`,
   vllmRouterImage:
     process.env.E2E_MS_VLLM_ROUTER_IMAGE || 'vllm/vllm-router:v0.1.17',
   modelDir: process.env.E2E_MS_MODEL_DIR || '/data/models/e2e-chat',
@@ -27,117 +38,6 @@ export const roleLabel = 'model-serving.mplatform.io/role'
 export const workerIndexLabel = 'leaderworkerset.sigs.k8s.io/worker-index'
 export const bootstrapAnnotation = 'sglang.ai/bootstrap-port'
 export const multusAnnotation = 'k8s.v1.cni.cncf.io/networks'
-
-const minute = 60_000
-
-// ---------------------------------------------------------------- kubectl
-
-export function kubectl(args: string[], input?: string) {
-  try {
-    return execFileSync('kubectl', args, {
-      encoding: 'utf8',
-      input,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      maxBuffer: 64 * 1024 * 1024,
-    })
-  } catch (error) {
-    const stderr = (error as { stderr?: string }).stderr ?? ''
-    throw new Error(`kubectl ${args.join(' ')} failed: ${stderr || error}`)
-  }
-}
-
-export function kubectlJSON<T>(args: string[]) {
-  return JSON.parse(kubectl([...args, '-o', 'json'])) as T
-}
-
-/** Returns the object, or undefined when it does not exist. */
-export function getObject<T = KubeObject>(
-  kind: string,
-  namespace: string,
-  name: string
-) {
-  const output = kubectl([
-    'get',
-    kind,
-    name,
-    '-n',
-    namespace,
-    '--ignore-not-found',
-    '-o',
-    'json',
-  ])
-  return output.trim() ? (JSON.parse(output) as T) : undefined
-}
-
-export interface KubeObject {
-  metadata: {
-    name: string
-    namespace?: string
-    uid?: string
-    deletionTimestamp?: string
-    labels?: Record<string, string>
-    annotations?: Record<string, string>
-    ownerReferences?: { kind: string; name: string }[]
-  }
-  spec?: any
-  status?: any
-}
-
-export interface Container {
-  name: string
-  image: string
-  command?: string[]
-  args?: string[]
-  env?: { name: string; value?: string }[]
-  ports?: { containerPort: number }[]
-  readinessProbe?: unknown
-  startupProbe?: unknown
-  resources?: {
-    requests?: Record<string, string>
-    limits?: Record<string, string>
-  }
-  securityContext?: {
-    privileged?: boolean
-    capabilities?: { add?: string[] }
-  }
-}
-
-export interface PodTemplate {
-  metadata?: {
-    labels?: Record<string, string>
-    annotations?: Record<string, string>
-  }
-  spec: {
-    containers: Container[]
-    hostNetwork?: boolean
-    dnsPolicy?: string
-    serviceAccountName?: string
-    nodeSelector?: Record<string, string>
-  }
-}
-
-export interface Pod extends KubeObject {
-  metadata: KubeObject['metadata'] & {
-    labels: Record<string, string>
-    annotations?: Record<string, string>
-  }
-  spec: PodTemplate['spec'] & { nodeName?: string }
-  status: {
-    phase: string
-    podIP?: string
-    hostIP?: string
-    conditions?: { type: string; status: string }[]
-  }
-}
-
-export function podReady(pod: Pod) {
-  return (
-    pod.status.phase === 'Running' &&
-    !!pod.status.conditions?.some(
-      (condition) => condition.type === 'Ready' && condition.status === 'True'
-    )
-  )
-}
 
 /** Lists the pods of a service, leaders first, by group. */
 export function servicePods(namespace: string, name: string, extra = '') {
@@ -181,49 +81,6 @@ export function describeServicePods(namespace: string, name: string) {
     .slice(-15)
     .join('\n')
   return `${pods}\n${events}`
-}
-
-// ---------------------------------------------------------------- waiting
-
-/**
- * Polls check until it returns a value other than undefined. On timeout the
- * error carries the last failure and what diagnose reports.
- */
-export async function waitFor<T>(
-  description: string,
-  check: () => T | undefined | Promise<T | undefined>,
-  {
-    timeout = 3 * minute,
-    interval = 2_000,
-    diagnose,
-  }: { timeout?: number; interval?: number; diagnose?: () => string } = {}
-): Promise<T> {
-  const deadline = Date.now() + timeout
-  let lastError = ''
-  for (;;) {
-    try {
-      const value = await check()
-      if (value !== undefined) {
-        return value
-      }
-    } catch (error) {
-      lastError = String(error)
-    }
-    if (Date.now() > deadline) {
-      let details = ''
-      try {
-        details = diagnose?.() ?? ''
-      } catch (error) {
-        details = `diagnose failed: ${error}`
-      }
-      throw new Error(
-        `Timed out after ${timeout / 1000}s waiting for ${description}` +
-          (lastError ? `\nlast error: ${lastError}` : '') +
-          (details ? `\n${details}` : '')
-      )
-    }
-    await new Promise((resolve) => setTimeout(resolve, interval))
-  }
 }
 
 // ---------------------------------------------------------------- platform API
@@ -285,6 +142,7 @@ export interface InferenceService {
   groupSize: number
   roles: ServiceRole[]
   ready: boolean
+  sharedSubdomain?: boolean
   endpoint: string
   pods?: {
     name: string
@@ -501,25 +359,6 @@ export async function waitForServiceReady(
   return service
 }
 
-/**
- * Waits for a service's pods to be ready as a soft assertion, for checks that
- * can go on without them. Returns whether they became ready.
- */
-export async function softWaitForReadyPods(
-  namespace: string,
-  name: string,
-  pods: number,
-  timeout = 90_000
-) {
-  try {
-    await waitForPods(namespace, name, { pods, ready: true, timeout })
-    return true
-  } catch (error) {
-    expect.soft(false, String(error)).toBe(true)
-    return false
-  }
-}
-
 /** Creates a service and waits as waitForServiceReady does. */
 export async function createReadyService(
   api: ModelServingAPI,
@@ -541,8 +380,18 @@ export async function deleteServiceAndWaitGone(
   name: string
 ) {
   await expectJSON(await api.deleteService(namespace, name), 200)
-  await expectJSON(await api.getService(namespace, name), 404)
   await waitFor(
+    `${namespace}/${name} to be gone from the platform`,
+    async () =>
+      (await api.getService(namespace, name)).status() === 404
+        ? true
+        : undefined
+  )
+  await waitForNothingLeft(namespace, name)
+}
+
+function waitForNothingLeft(namespace: string, name: string) {
+  return waitFor(
     `everything of ${namespace}/${name} to be deleted`,
     () => {
       const left = leftoverObjects(namespace, name)
@@ -553,67 +402,6 @@ export async function deleteServiceAndWaitGone(
     },
     { timeout: 2 * minute }
   )
-}
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const prometheusCRDs = {
-  'podmonitors.monitoring.coreos.com': 'crd-podmonitors.yaml',
-  'prometheuses.monitoring.coreos.com': 'crd-prometheuses.yaml',
-}
-
-/**
- * Installs the PodMonitor and Prometheus CRDs, without Prometheus Operator,
- * from the kube-prometheus-stack chart in the local chart directory that
- * scripts/e2e-model-serving-up.sh provides.
- */
-export function installPrometheusCRDs() {
-  const charts = resolve(repoRoot, 'chart-packages')
-  const chart = readdirSync(charts).find((file) =>
-    /^kube-prometheus-stack-.*\.tgz$/.test(file)
-  )
-  if (!chart) {
-    throw new Error(`no kube-prometheus-stack chart in ${charts}`)
-  }
-  for (const file of Object.values(prometheusCRDs)) {
-    const crd = execFileSync(
-      'tar',
-      [
-        '-xzOf',
-        resolve(charts, chart),
-        `kube-prometheus-stack/charts/crds/crds/${file}`,
-      ],
-      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
-    )
-    // Server-side, since the Prometheus CRD is too large for the annotation
-    // a client-side apply keeps.
-    kubectl(['apply', '--server-side', '-f', '-'], crd)
-  }
-  kubectl([
-    'wait',
-    '--for=condition=Established',
-    ...Object.keys(prometheusCRDs).map((name) => `crd/${name}`),
-  ])
-}
-
-/** Removes the CRDs installPrometheusCRDs installs, with their objects. */
-export function removePrometheusCRDs() {
-  kubectl([
-    'delete',
-    'crd',
-    ...Object.keys(prometheusCRDs),
-    '--ignore-not-found',
-  ])
-}
-
-export function crdInstalled(name: string) {
-  return !!kubectl([
-    'get',
-    'crd',
-    name,
-    '--ignore-not-found',
-    '-o',
-    'name',
-  ]).trim()
 }
 
 export const podMonitorCRD = 'podmonitors.monitoring.coreos.com'
@@ -662,18 +450,27 @@ export function leftoverObjects(namespace: string, name: string) {
   ]
 }
 
-/** Deletes services left over by a failed test; errors are ignored. */
-export async function deleteServicesQuietly(
+/**
+ * Deletes every inference service of a namespace through the platform and
+ * waits until nothing of them is left, for cleaning up after a test.
+ */
+export async function deleteNamespaceServices(
   api: ModelServingAPI,
-  namespace: string,
-  names: string[]
+  namespace: string
 ) {
+  const names = (await api.listServices())
+    .filter((item) => item.namespace === namespace)
+    .map((item) => item.name)
   for (const name of names) {
-    try {
-      await api.deleteService(namespace, name)
-    } catch {
-      // The namespace is reset by the next run.
+    const response = await api.deleteService(namespace, name)
+    if (response.status() !== 200 && response.status() !== 404) {
+      throw new Error(
+        `deleting ${namespace}/${name} failed with ${response.status()}: ${await response.text()}`
+      )
     }
+  }
+  for (const name of names) {
+    await waitForNothingLeft(namespace, name)
   }
 }
 

@@ -1,5 +1,5 @@
 # Makefile for MPlatform project
-.PHONY: help dev build clean test docker-build docker-run frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed e2e-model-serving-up e2e-model-serving-run e2e-model-serving-down
+.PHONY: help dev build clean test docker-build docker-run frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed e2e-model-serving-install-browser e2e-model-serving-up e2e-model-serving-run e2e-model-serving-down
 
 # Variables
 BINARY_NAME=mplatform
@@ -17,7 +17,21 @@ E2E_DEX_CONTAINER ?= mplatform-e2e-dex
 E2E_OAUTH_PORT ?= 5556
 E2E_MS_KIND_NAME ?= mplatform-model-serving
 E2E_MS_PORT ?= 38090
-E2E_MS_KUBECONFIG ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}mplatform-model-serving.kubeconfig")
+# The model serving targets keep what they write under E2E_MS_TMPDIR, except
+# Docker's image store and Go modules or pnpm packages that are not cached yet.
+E2E_MS_TMPDIR ?= $(CURDIR)/e2e/.tmp
+E2E_MS_KUBECONFIG ?= $(E2E_MS_TMPDIR)/kubeconfig
+E2E_MS_BROWSERS ?= $(E2E_MS_TMPDIR)/ms-playwright
+E2E_MS_ENGINE_IMAGE ?= mplatform-e2e/fake-engine:0.1
+E2E_MS_ROUTER_VERSION ?= 0.3.2
+E2E_MS_ROUTER_IMAGE ?= mplatform-e2e/sglang-router:$(E2E_MS_ROUTER_VERSION)
+E2E_MS_VLLM_ROUTER_IMAGE ?= vllm/vllm-router:v0.1.17
+E2E_MS_ENV = TMPDIR="$(E2E_MS_TMPDIR)/tmp" KUBECACHEDIR="$(E2E_MS_TMPDIR)/kube-cache" GOCACHE="$(E2E_MS_TMPDIR)/go-build" \
+	HELM_CACHE_HOME="$(E2E_MS_TMPDIR)/helm/cache" HELM_CONFIG_HOME="$(E2E_MS_TMPDIR)/helm/config" HELM_DATA_HOME="$(E2E_MS_TMPDIR)/helm/data" \
+	PLAYWRIGHT_BROWSERS_PATH="$(E2E_MS_BROWSERS)" MPLATFORM_E2E_DB_PATH="$(E2E_MS_TMPDIR)/mplatform.db" MPLATFORM_E2E_HOME="$(E2E_MS_TMPDIR)/home" \
+	E2E_MS_TMPDIR="$(E2E_MS_TMPDIR)" E2E_MS_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_MS_KUBECONFIG="$(E2E_MS_KUBECONFIG)" \
+	E2E_MS_ENGINE_IMAGE="$(E2E_MS_ENGINE_IMAGE)" E2E_MS_ROUTER_VERSION="$(E2E_MS_ROUTER_VERSION)" \
+	E2E_MS_ROUTER_IMAGE="$(E2E_MS_ROUTER_IMAGE)" E2E_MS_VLLM_ROUTER_IMAGE="$(E2E_MS_VLLM_ROUTER_IMAGE)"
 SPEC ?=
 
 # Version information
@@ -234,15 +248,21 @@ e2e-run-headed: e2e-kind-up e2e-stop-app ## Run e2e tests in headed mode against
 	@echo "🧪 Running headed e2e tests..."
 	cd $(E2E_DIR) && KUBECONFIG="$(E2E_KUBECONFIG)" MPLATFORM_E2E_CLUSTER_NAME="$(E2E_KIND_NAME)" MPLATFORM_E2E_PORT="$(E2E_PORT)" pnpm exec playwright test --headed $(SPEC)
 
+e2e-model-serving-install-browser: ## Install the browser model serving e2e signs in with into E2E_MS_BROWSERS
+	@mkdir -p "$(E2E_MS_TMPDIR)/tmp"
+	cd $(E2E_DIR) && $(E2E_MS_ENV) pnpm exec playwright install chromium-headless-shell ffmpeg
+
 e2e-model-serving-up: ## Prepare the multi-node kind cluster, fake GPUs and images for model serving e2e
-	E2E_MS_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_MS_KUBECONFIG="$(E2E_MS_KUBECONFIG)" ./scripts/e2e-model-serving-up.sh
+	@mkdir -p "$(E2E_MS_TMPDIR)/tmp" "$(E2E_MS_TMPDIR)/home"
+	$(E2E_MS_ENV) ./scripts/e2e-model-serving-up.sh
 
 e2e-model-serving-run: e2e-model-serving-up ## Run the model serving e2e tests against their own kind cluster
-	$(MAKE) e2e-run E2E_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_KUBECONFIG="$(E2E_MS_KUBECONFIG)" E2E_PORT="$(E2E_MS_PORT)" \
+	$(E2E_MS_ENV) $(MAKE) e2e-run E2E_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_KUBECONFIG="$(E2E_MS_KUBECONFIG)" E2E_PORT="$(E2E_MS_PORT)" \
 		SPEC="$(or $(SPEC),specs/model-serving.spec.ts)" MPLATFORM_E2E_MODEL_SERVING=true
 
 e2e-model-serving-down: ## Delete the kind cluster used by model serving e2e
-	$(MAKE) e2e-kind-down E2E_KIND_NAME="$(E2E_MS_KIND_NAME)" E2E_KUBECONFIG="$(E2E_MS_KUBECONFIG)"
+	kind delete cluster --name "$(E2E_MS_KIND_NAME)" --kubeconfig "$(E2E_MS_KUBECONFIG)"
+	rm -f "$(E2E_MS_KUBECONFIG)"
 
 e2e-test: e2e-install e2e-install-browser e2e-run ## Run e2e tests against the local kind cluster
 
