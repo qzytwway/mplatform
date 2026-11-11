@@ -465,7 +465,7 @@ func TestBuildDisaggregatedSetVLLM(t *testing.T) {
 			kvConfigs := slices.DeleteFunc(slices.Clone(container.Args), func(arg string) bool { return arg != "--kv-transfer-config" })
 			assert.Len(t, kvConfigs, 1)
 			for _, flag := range append([]string{
-				"--model-path", "--tp", "--nnodes", "--headless",
+				"--model-path", "--tp", "--nnodes", "--headless", "--enable-metrics",
 				"--disaggregation-mode", "--disaggregation-bootstrap-port", "--disaggregation-transfer-backend", "--disaggregation-ib-device",
 			}, tt.absent...) {
 				assert.NotContains(t, container.Args, flag)
