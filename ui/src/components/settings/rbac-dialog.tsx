@@ -55,6 +55,7 @@ const RESOURCE_SUGGESTIONS = [
   '*',
   'prometheus',
   'alertmanager',
+  'alertrules',
   ...resourceCatalog
     .filter((resource) => resource.type !== 'crs')
     .map((resource) => resource.type),

@@ -45,6 +45,12 @@ var (
 func RegisterRoutes(api *gin.RouterGroup) {
 	api.GET("/prometheus/dashboards", ListDashboards)
 	api.GET("/prometheus/dashboards/:uid", GetDashboard)
+	api.POST("/prometheus/alert-rules", CreateAlertRule)
+	api.PUT("/prometheus/alert-rules/:namespace/:name", UpdateAlertRule)
+	api.DELETE("/prometheus/alert-rules/:namespace/:name", DeleteAlertRule)
+	api.GET("/prometheus/builtin-rules/disabled", ListDisabledBuiltinRules)
+	api.PUT("/prometheus/builtin-rules/:alert", SetBuiltinRuleEnabled)
+	api.POST("/prometheus/builtin-rules/:alert/override", OverrideBuiltinRule)
 }
 
 // loadDashboards renders the local chart the way it deploys dashboards for

@@ -14,12 +14,19 @@ import (
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/common"
 	"github.com/qzytwway/mplatform/pkg/model"
+	"github.com/qzytwway/mplatform/pkg/monitoring"
 	"github.com/qzytwway/mplatform/pkg/rbac"
+	"k8s.io/klog/v2"
 )
 
 const alertmanagerResource = "alertmanager"
 
-var silenceIDPattern = regexp.MustCompile(`^(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var (
+	silenceIDPattern = regexp.MustCompile(`^(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	// prometheus-operator names a rule file <namespace>-<name>-<uid>.yaml
+	// after the PrometheusRule it comes from.
+	ruleFileUIDPattern = regexp.MustCompile(`-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.yaml$`)
+)
 
 type alertInstance struct {
 	Labels      map[string]string `json:"labels"`
@@ -41,6 +48,13 @@ type alertRule struct {
 	Health      string            `json:"health"`
 	LastError   string            `json:"lastError,omitempty"`
 	Alerts      []alertInstance   `json:"alerts"`
+	// Where the rule is defined: its source and its position in a
+	// PrometheusRule, when it comes from one.
+	Source        string `json:"source"`
+	RuleNamespace string `json:"ruleNamespace,omitempty"`
+	RuleName      string `json:"ruleName,omitempty"`
+	RuleIndex     int    `json:"ruleIndex"`
+	Overrides     string `json:"overrides,omitempty"`
 }
 
 func labelSetToMap(labels prommodel.LabelSet) map[string]string {
@@ -73,9 +87,20 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 		return
 	}
 
+	sources, err := monitoring.RuleSources(ctx, cs)
+	if err != nil {
+		klog.V(2).Infof("Failed to look up the PrometheusRules of cluster %s: %v", cs.Name, err)
+	}
+
 	rules := []alertRule{}
 	for _, group := range result.Groups {
-		for _, r := range group.Rules {
+		source := monitoring.RuleSource{Source: monitoring.RuleSourceOther}
+		if match := ruleFileUIDPattern.FindStringSubmatch(group.File); match != nil {
+			if found, ok := sources[match[1]]; ok {
+				source = found
+			}
+		}
+		for index, r := range group.Rules {
 			rule, ok := r.(v1.AlertingRule)
 			if !ok {
 				continue
@@ -91,17 +116,22 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 				})
 			}
 			rules = append(rules, alertRule{
-				Group:       group.Name,
-				File:        group.File,
-				Name:        rule.Name,
-				Query:       rule.Query,
-				Duration:    rule.Duration,
-				Labels:      labelSetToMap(rule.Labels),
-				Annotations: labelSetToMap(rule.Annotations),
-				State:       rule.State,
-				Health:      string(rule.Health),
-				LastError:   rule.LastError,
-				Alerts:      alerts,
+				Group:         group.Name,
+				File:          group.File,
+				Name:          rule.Name,
+				Query:         rule.Query,
+				Duration:      rule.Duration,
+				Labels:        labelSetToMap(rule.Labels),
+				Annotations:   labelSetToMap(rule.Annotations),
+				State:         rule.State,
+				Health:        string(rule.Health),
+				LastError:     rule.LastError,
+				Alerts:        alerts,
+				Source:        source.Source,
+				RuleNamespace: source.Namespace,
+				RuleName:      source.Name,
+				RuleIndex:     index,
+				Overrides:     source.Overrides,
 			})
 		}
 	}

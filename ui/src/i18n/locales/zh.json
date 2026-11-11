@@ -1596,7 +1596,8 @@
       "state": {
         "firing": "触发中",
         "pending": "待定",
-        "inactive": "正常"
+        "inactive": "正常",
+        "unknown": "待评估"
       },
       "detail": {
         "openInMetrics": "在指标中打开",
@@ -1649,7 +1650,70 @@
         "filter": "按名称或分组过滤",
         "severity": "级别",
         "group": "分组",
-        "empty": "没有告警规则"
+        "empty": "没有告警规则",
+        "create": "新建规则",
+        "source": {
+          "builtin": "内置",
+          "custom": "自定义",
+          "modified": "已修改",
+          "other": "其他"
+        },
+        "actions": {
+          "edit": "编辑",
+          "delete": "删除",
+          "restore": "恢复内置规则",
+          "disable": "停用",
+          "enable": "启用"
+        },
+        "disabled": {
+          "title": "已停用的内置规则",
+          "description": "Prometheus 不再计算 kube-prometheus-stack 自带的这些规则。",
+          "restoreHint": "删除修改后的规则即可恢复"
+        },
+        "confirm": {
+          "working": "处理中...",
+          "delete": {
+            "title": "删除规则 {{name}}？",
+            "description": "Prometheus 会在一两分钟内停止计算这条规则。",
+            "done": "已删除规则 {{name}}"
+          },
+          "restore": {
+            "title": "恢复内置规则 {{name}}？",
+            "description": "会删除修改后的规则，并重新启用内置规则。需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+            "done": "已恢复内置规则 {{name}}"
+          },
+          "disable": {
+            "title": "停用内置规则 {{name}}？",
+            "description": "同名的所有内置规则都会停用，包括其他级别的。需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+            "done": "已停用内置规则 {{name}}"
+          },
+          "enable": {
+            "title": "启用内置规则 {{name}}？",
+            "description": "需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+            "done": "已启用内置规则 {{name}}"
+          }
+        }
+      },
+      "ruleEditor": {
+        "title": {
+          "create": "新建告警规则",
+          "edit": "编辑告警规则",
+          "override": "修改内置规则"
+        },
+        "overrideNote": "保存后会停用这条内置告警，并生成一份可编辑的副本；同名的其他内置规则（例如其他级别）会原样一并复制。需要升级 kube-prometheus-stack，可能要等待一分钟左右。",
+        "name": "告警名称",
+        "nameHint": "只能包含字母、数字和下划线，例如 HighPodRestarts。",
+        "expr": "PromQL 表达式",
+        "exprHint": "表达式返回的每条序列都会产生一条告警。",
+        "preview": "预览",
+        "previewResult": "当前有 {{count}} 条序列满足条件。",
+        "for": "持续时间",
+        "forHint": "条件持续满足这么久才会触发告警，例如 5m。",
+        "summary": "标题",
+        "description": "描述",
+        "save": "保存",
+        "saving": "保存中...",
+        "saved": "已保存，Prometheus 会在一两分钟内加载这条规则。"
       }
     },
     "logs": {

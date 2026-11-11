@@ -1509,7 +1509,8 @@
       "state": {
         "firing": "Firing",
         "pending": "Pending",
-        "inactive": "OK"
+        "inactive": "OK",
+        "unknown": "Not evaluated"
       },
       "detail": {
         "openInMetrics": "Open in metrics",
@@ -1562,7 +1563,70 @@
         "filter": "Filter by name or group",
         "severity": "Severity",
         "group": "Group",
-        "empty": "No alerting rules"
+        "empty": "No alerting rules",
+        "create": "New rule",
+        "source": {
+          "builtin": "Built-in",
+          "custom": "Custom",
+          "modified": "Modified",
+          "other": "Other"
+        },
+        "actions": {
+          "edit": "Edit",
+          "delete": "Delete",
+          "restore": "Restore built-in",
+          "disable": "Disable",
+          "enable": "Enable"
+        },
+        "disabled": {
+          "title": "Disabled built-in rules",
+          "description": "Prometheus no longer evaluates these rules of kube-prometheus-stack.",
+          "restoreHint": "Delete the modified rule to restore it"
+        },
+        "confirm": {
+          "working": "Working...",
+          "delete": {
+            "title": "Delete rule {{name}}?",
+            "description": "Prometheus stops evaluating it within a couple of minutes.",
+            "done": "Rule {{name}} deleted"
+          },
+          "restore": {
+            "title": "Restore built-in rule {{name}}?",
+            "description": "Deletes the modified rule and turns the built-in rule back on. This upgrades kube-prometheus-stack and can take a minute.",
+            "done": "Built-in rule {{name}} restored"
+          },
+          "disable": {
+            "title": "Disable built-in rule {{name}}?",
+            "description": "Every built-in rule with this name stops firing, including other severities. This upgrades kube-prometheus-stack and can take a minute.",
+            "done": "Built-in rule {{name}} disabled"
+          },
+          "enable": {
+            "title": "Enable built-in rule {{name}}?",
+            "description": "This upgrades kube-prometheus-stack and can take a minute.",
+            "done": "Built-in rule {{name}} enabled"
+          }
+        }
+      },
+      "ruleEditor": {
+        "title": {
+          "create": "New alert rule",
+          "edit": "Edit alert rule",
+          "override": "Modify built-in rule"
+        },
+        "overrideNote": "Saving disables this built-in alert and creates an editable copy of it. Other built-in rules with the same name, such as other severities, are copied unchanged. This upgrades kube-prometheus-stack and can take a minute.",
+        "name": "Alert name",
+        "nameHint": "Letters, digits and underscores, such as HighPodRestarts.",
+        "expr": "PromQL expression",
+        "exprHint": "Every series the expression returns raises an alert.",
+        "preview": "Preview",
+        "previewResult": "{{count}} series match right now.",
+        "for": "For",
+        "forHint": "How long the condition must hold before the alert fires, such as 5m.",
+        "summary": "Summary",
+        "description": "Description",
+        "save": "Save",
+        "saving": "Saving...",
+        "saved": "Saved. Prometheus picks up the rule within a couple of minutes."
       }
     },
     "logs": {

@@ -5,7 +5,8 @@ import { useCluster } from '@/hooks/use-cluster'
 import { apiClient } from '../api-client'
 import { withCurrentClusterPath } from '../current-cluster'
 
-export type AlertState = 'inactive' | 'pending' | 'firing'
+// Prometheus reports unknown for a rule it has loaded but not evaluated yet.
+export type AlertState = 'inactive' | 'pending' | 'firing' | 'unknown'
 
 export interface AlertInstance {
   labels: Record<string, string>
@@ -14,6 +15,10 @@ export interface AlertInstance {
   activeAt: string
   value: string
 }
+
+// builtin: shipped with the cluster's kube-prometheus-stack; custom: created
+// in MPlatform; other: from any other PrometheusRule.
+export type RuleSource = 'builtin' | 'custom' | 'other'
 
 export interface AlertRule {
   group: string
@@ -27,6 +32,26 @@ export interface AlertRule {
   health: string
   lastError?: string
   alerts: AlertInstance[]
+  source: RuleSource
+  ruleNamespace?: string
+  ruleName?: string
+  ruleIndex: number
+  // The built-in alert a custom rule replaces.
+  overrides?: string
+}
+
+export interface AlertRuleRequest {
+  name: string
+  expr: string
+  for: string
+  severity: string
+  summary: string
+  description: string
+}
+
+export interface DisabledBuiltinRule {
+  alert: string
+  overridden: boolean
 }
 
 export interface SilenceMatcher {
@@ -71,6 +96,83 @@ export function useAlertRules(options: { refetchInterval?: number } = {}) {
         ? false
         : (options.refetchInterval ?? ALERTS_REFRESH_MS),
   })
+}
+
+export function useDisabledBuiltinRules() {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['disabled-builtin-rules', currentCluster],
+    queryFn: () =>
+      apiClient.get<DisabledBuiltinRule[]>(
+        withCurrentClusterPath(
+          '/prometheus/builtin-rules/disabled',
+          currentCluster
+        )
+      ),
+    enabled: !!currentCluster,
+    retry: false,
+  })
+}
+
+export function createAlertRule(request: AlertRuleRequest) {
+  return apiClient.post<{ namespace: string; name: string }>(
+    withCurrentClusterPath('/prometheus/alert-rules'),
+    request
+  )
+}
+
+export function updateAlertRule(
+  rule: AlertRule,
+  request: AlertRuleRequest
+): Promise<{ message: string }> {
+  return apiClient.put(
+    withCurrentClusterPath(
+      `/prometheus/alert-rules/${encodeURIComponent(rule.ruleNamespace!)}/${encodeURIComponent(rule.ruleName!)}`
+    ),
+    { ...request, group: rule.group, index: rule.ruleIndex }
+  )
+}
+
+export function deleteAlertRule(rule: AlertRule) {
+  return apiClient.delete<{ message: string }>(
+    withCurrentClusterPath(
+      `/prometheus/alert-rules/${encodeURIComponent(rule.ruleNamespace!)}/${encodeURIComponent(rule.ruleName!)}`
+    )
+  )
+}
+
+// Replaces a built-in rule with an editable copy of every built-in rule of
+// that name, the given one changed, and turns the built-in alert off.
+export function overrideBuiltinRule(
+  rule: AlertRule,
+  request: AlertRuleRequest
+) {
+  return apiClient.post<{ namespace: string; name: string }>(
+    withCurrentClusterPath(
+      `/prometheus/builtin-rules/${encodeURIComponent(rule.name)}/override`
+    ),
+    {
+      ...request,
+      source: {
+        namespace: rule.ruleNamespace,
+        name: rule.ruleName,
+        group: rule.group,
+        index: rule.ruleIndex,
+      },
+    }
+  )
+}
+
+export function setBuiltinRuleEnabled(
+  alert: string,
+  enabled: boolean
+): Promise<{ message: string }> {
+  return apiClient.put(
+    withCurrentClusterPath(
+      `/prometheus/builtin-rules/${encodeURIComponent(alert)}`
+    ),
+    { enabled }
+  )
 }
 
 export function useSilences() {

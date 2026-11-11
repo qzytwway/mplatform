@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
+import { Pencil, Plus, Power, RotateCcw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AlertRule, AlertState } from '@/lib/api/alerts'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -17,15 +20,93 @@ const STATE_ORDER: Record<AlertState, number> = {
   firing: 0,
   pending: 1,
   inactive: 2,
+  unknown: 3,
 }
 
 const STATE_STYLES: Record<AlertState, string> = {
   firing: 'bg-destructive/15 text-destructive',
   pending: 'bg-info/15 text-info',
   inactive: 'bg-success/15 text-success',
+  unknown: 'bg-muted text-muted-foreground',
 }
 
-export function AlertRulesTable({ rules }: { rules: AlertRule[] }) {
+export interface RuleActions {
+  onCreate: () => void
+  onEdit: (rule: AlertRule) => void
+  onDelete: (rule: AlertRule) => void
+  onDisable: (rule: AlertRule) => void
+}
+
+function SourceBadge({ rule }: { rule: AlertRule }) {
+  const { t } = useTranslation()
+  const source = rule.overrides ? 'modified' : rule.source
+  return (
+    <Badge variant={source === 'builtin' ? 'secondary' : 'outline'}>
+      {t(`observability.alerts.rules.source.${source}`)}
+    </Badge>
+  )
+}
+
+function RowActions({
+  rule,
+  actions,
+}: {
+  rule: AlertRule
+  actions: RuleActions
+}) {
+  const { t } = useTranslation()
+  if (rule.source === 'other') return null
+  const action = (
+    label: string,
+    Icon: typeof Pencil,
+    onClick: (rule: AlertRule) => void
+  ) => (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-7"
+      title={label}
+      aria-label={label}
+      onClick={() => onClick(rule)}
+    >
+      <Icon className="size-3.5" />
+    </Button>
+  )
+  return (
+    <div className="flex justify-end gap-1">
+      {action(
+        t('observability.alerts.rules.actions.edit'),
+        Pencil,
+        actions.onEdit
+      )}
+      {rule.source === 'builtin'
+        ? action(
+            t('observability.alerts.rules.actions.disable'),
+            Power,
+            actions.onDisable
+          )
+        : rule.overrides
+          ? action(
+              t('observability.alerts.rules.actions.restore'),
+              RotateCcw,
+              actions.onDelete
+            )
+          : action(
+              t('observability.alerts.rules.actions.delete'),
+              Trash2,
+              actions.onDelete
+            )}
+    </div>
+  )
+}
+
+export function AlertRulesTable({
+  rules,
+  actions,
+}: {
+  rules: AlertRule[]
+  actions: RuleActions
+}) {
   const { t } = useTranslation()
   const [filter, setFilter] = useState('')
   const visible = useMemo(() => {
@@ -48,12 +129,18 @@ export function AlertRulesTable({ rules }: { rules: AlertRule[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <Input
-        value={filter}
-        onChange={(event) => setFilter(event.target.value)}
-        placeholder={t('observability.alerts.rules.filter')}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder={t('observability.alerts.rules.filter')}
+          className="max-w-sm"
+        />
+        <Button className="ml-auto" onClick={actions.onCreate}>
+          <Plus />
+          {t('observability.alerts.rules.create')}
+        </Button>
+      </div>
       <div className="overflow-hidden rounded-xl border bg-card">
         <Table>
           <TableHeader>
@@ -61,17 +148,20 @@ export function AlertRulesTable({ rules }: { rules: AlertRule[] }) {
               <TableHead>{t('common.fields.status')}</TableHead>
               <TableHead>{t('common.fields.name')}</TableHead>
               <TableHead>{t('observability.alerts.rules.severity')}</TableHead>
-              <TableHead>{t('observability.alerts.rules.group')}</TableHead>
-              <TableHead>
+              <TableHead className="hidden @3xl/main:table-cell">
+                {t('observability.alerts.rules.group')}
+              </TableHead>
+              <TableHead className="hidden @5xl/main:table-cell">
                 {t('observability.alerts.detail.expression')}
               </TableHead>
+              <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="py-10 text-center text-muted-foreground"
                 >
                   {t('observability.alerts.rules.empty')}
@@ -92,7 +182,10 @@ export function AlertRulesTable({ rules }: { rules: AlertRule[] }) {
                     </span>
                   </TableCell>
                   <TableCell className="font-medium">
-                    {rule.name}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {rule.name}
+                      <SourceBadge rule={rule} />
+                    </div>
                     {rule.health !== 'ok' && rule.health !== 'unknown' && (
                       <p
                         className="text-xs font-normal text-destructive"
@@ -103,11 +196,14 @@ export function AlertRulesTable({ rules }: { rules: AlertRule[] }) {
                     )}
                   </TableCell>
                   <TableCell>{rule.labels.severity ?? '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="hidden text-muted-foreground @3xl/main:table-cell">
                     {rule.group}
                   </TableCell>
-                  <TableCell className="max-w-md whitespace-normal break-all font-mono text-xs text-muted-foreground">
+                  <TableCell className="hidden max-w-md whitespace-normal break-all font-mono text-xs text-muted-foreground @5xl/main:table-cell">
                     {rule.query}
+                  </TableCell>
+                  <TableCell>
+                    <RowActions rule={rule} actions={actions} />
                   </TableCell>
                 </TableRow>
               ))

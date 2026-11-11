@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { AlertDetail } from '@/components/observability/alert-detail'
 import { AlertList } from '@/components/observability/alert-list'
-import { AlertRulesTable } from '@/components/observability/alert-rules-table'
+import { AlertRulesPanel } from '@/components/observability/alert-rules-panel'
 import { flattenAlerts } from '@/components/observability/alert-utils'
 import { ObservabilityUnavailable } from '@/components/observability/observability-unavailable'
 import { SilencesTable } from '@/components/observability/silences-table'
@@ -110,7 +110,7 @@ export function AlertsPage() {
         ) : rulesQuery.isLoading ? (
           <Skeleton className="h-96 w-full" />
         ) : (
-          <AlertRulesTable rules={rules} />
+          <AlertRulesPanel rules={rules} />
         ))}
       {tab === 'silences' &&
         (silencesQuery.error ? (
