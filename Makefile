@@ -36,6 +36,7 @@ LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOLANGCI_LINT_VERSION = v2.15.0
 
 # Help target
 help: ## Show this help message
@@ -131,7 +132,7 @@ lint: golangci-lint ## Run linters
 	cd $(UI_DIR) && pnpm run lint
 
 golangci-lint: ## Download golangci-lint locally if necessary.
-	test -f $(GOLANGCI_LINT) || curl -sSfL https://golangci-lint.run/install.sh | sh -s v2.12.1
+	$(GOLANGCI_LINT) version 2>/dev/null | grep -q "version $(GOLANGCI_LINT_VERSION:v%=%) " || curl -sSfL https://golangci-lint.run/install.sh | sh -s $(GOLANGCI_LINT_VERSION)
 
 format: ## Format code
 	@echo "✨ Formatting code..."
