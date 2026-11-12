@@ -1,11 +1,15 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
+import { Send } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
-import type {
-  ChannelSettings,
-  NotificationChannel,
-  NotificationChannelType,
+import {
+  testNotificationChannel,
+  type ChannelSettings,
+  type NotificationChannel,
+  type NotificationChannelType,
 } from '@/lib/api/alerts'
+import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -38,6 +42,8 @@ interface FieldSpec {
   required?: boolean
   // Sensitive settings are never sent back; empty keeps the stored value.
   secret?: boolean
+  // URLs are shown as typed, even a secret one, and checked by the browser.
+  url?: boolean
   placeholder?: string
   hint?: boolean
 }
@@ -68,7 +74,9 @@ const FIELDS: Record<NotificationChannelType, FieldSpec[]> = {
       key: 'url',
       required: true,
       secret: true,
+      url: true,
       placeholder: 'https://example.com/alerts',
+      hint: true,
     },
   ],
   feishu: [
@@ -76,12 +84,13 @@ const FIELDS: Record<NotificationChannelType, FieldSpec[]> = {
       key: 'url',
       required: true,
       secret: true,
+      url: true,
       placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
     },
     { key: 'secret', secret: true, hint: true },
   ],
   bark: [
-    { key: 'server', placeholder: 'https://api.day.app' },
+    { key: 'server', url: true, placeholder: 'https://api.day.app' },
     { key: 'key', required: true, secret: true },
   ],
 }
@@ -124,6 +133,8 @@ export function NotificationChannelDialog({
     channel?.sendResolved ?? SEND_RESOLVED_DEFAULT[type]
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
   const configured = channel?.configuredSecrets ?? []
   const prefix = 'observability.alerts.notifications.channelEditor'
 
@@ -136,16 +147,31 @@ export function NotificationChannelDialog({
   const setSetting = (key: string, value: string | boolean) =>
     setSettings((current) => ({ ...current, [key]: value }))
 
+  const currentChannel = (): NotificationChannel => ({
+    id: channel?.id ?? '',
+    name,
+    type,
+    sendResolved,
+    [type]: settings,
+  })
+
+  const runTest = async () => {
+    if (!formRef.current?.reportValidity()) return
+    setIsTesting(true)
+    try {
+      await testNotificationChannel(currentChannel())
+      toast.success(t(`${prefix}.testSent`, { name }))
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsSaving(true)
-    const saved = await onSave({
-      id: channel?.id ?? '',
-      name,
-      type,
-      sendResolved,
-      [type]: settings,
-    }).then(
+    const saved = await onSave(currentChannel()).then(
       () => true,
       () => false
     )
@@ -157,7 +183,7 @@ export function NotificationChannelDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
       <DialogContent className="sm:max-w-xl">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>
               {t(`${prefix}.title.${channel ? 'edit' : 'create'}`)}
@@ -198,6 +224,7 @@ export function NotificationChannelDialog({
             {FIELDS[type].map((field) => {
               const id = `channel-${type}-${field.key}`
               const kept = field.secret && configured.includes(field.key)
+              const masked = field.secret && !field.url
               return (
                 <div key={id} className="space-y-2 sm:col-span-2">
                   <Label htmlFor={id}>
@@ -205,8 +232,8 @@ export function NotificationChannelDialog({
                   </Label>
                   <Input
                     id={id}
-                    type={field.secret ? 'password' : 'text'}
-                    autoComplete={field.secret ? 'new-password' : 'off'}
+                    type={field.url ? 'url' : masked ? 'password' : 'text'}
+                    autoComplete={masked ? 'new-password' : 'off'}
                     value={String(settings[field.key] ?? '')}
                     onChange={(event) =>
                       setSetting(field.key, event.target.value)
@@ -255,6 +282,16 @@ export function NotificationChannelDialog({
             </div>
           </div>
           <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="sm:mr-auto"
+              onClick={() => void runTest()}
+              disabled={isSaving || isTesting}
+            >
+              <Send className="size-4" />
+              {isTesting ? t(`${prefix}.testing`) : t(`${prefix}.test`)}
+            </Button>
             <Button
               type="button"
               variant="outline"

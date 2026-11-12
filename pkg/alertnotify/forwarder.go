@@ -32,6 +32,8 @@ const (
 
 // webhookMessage is what Alertmanager posts to a webhook receiver.
 type webhookMessage struct {
+	Version           string            `json:"version,omitempty"`
+	Receiver          string            `json:"receiver,omitempty"`
 	Status            string            `json:"status"`
 	GroupLabels       map[string]string `json:"groupLabels"`
 	CommonLabels      map[string]string `json:"commonLabels"`
@@ -259,18 +261,25 @@ func (f *forwarder) sendBark(ctx context.Context, settings *BarkSettings, msg we
 	return nil
 }
 
-// post sends JSON and decodes a JSON reply when there is one. Errors leave out
-// the target URL, which holds the bot token or device key.
+// post sends JSON and decodes a JSON reply when there is one.
 func (f *forwarder) post(ctx context.Context, target string, body, out any) error {
 	data, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(data))
+	return f.do(ctx, http.MethodPost, target, bytes.NewReader(data), out)
+}
+
+// do sends a request and decodes a JSON reply when there is one. Errors leave
+// out the target URL, which holds the bot token, device key or API secret.
+func (f *forwarder) do(ctx context.Context, method, target string, body io.Reader, out any) error {
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return errors.New("invalid target URL")
 	}
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
 	resp, err := f.client.Do(req)
 	if err != nil {
 		var urlErr *url.Error

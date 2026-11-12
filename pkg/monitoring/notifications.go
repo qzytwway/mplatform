@@ -372,7 +372,6 @@ func SendTestNotification(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	user := c.MustGet("user").(model.User)
 	err = cs.AlertmanagerClient.PostAlerts(ctx, []alertmanager.PostableAlert{{
 		Labels: map[string]string{
 			"alertname":                  testAlertName,
@@ -381,18 +380,66 @@ func SendTestNotification(c *gin.Context) {
 			// another one.
 			"test_id": strconv.FormatInt(now.UnixNano(), 36),
 		},
-		Annotations: map[string]string{
-			"summary":     "Test notification from MPlatform",
-			"description": fmt.Sprintf("%s sent this to check the channel %s of cluster %s.", user.Key(), ch.Name, cs.Name),
-		},
-		StartsAt: now,
-		EndsAt:   now.Add(testAlertDuration),
+		Annotations: testAnnotations(c, cs, ch),
+		StartsAt:    now,
+		EndsAt:      now.Add(testAlertDuration),
 	}})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "test notification sent"})
+}
+
+// TestNotificationChannel sends a test notification straight to the channel
+// in the request, so the channel editor can check settings before they are
+// saved. It is sent from the platform, not from the cluster's Alertmanager.
+func TestNotificationChannel(c *gin.Context) {
+	if !canManageNotifications(c, common.VerbUpdate) {
+		return
+	}
+	cs := c.MustGet("cluster").(*cluster.ClientSet)
+	var req alertnotify.Channel
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ctx := c.Request.Context()
+	stored := alertnotify.DefaultConfig()
+	// An edited channel is tested with the secrets the browser never received.
+	if req.ID != "" {
+		target, err := findNotificationTarget(ctx, cs)
+		if err == nil && target.alertmanager == nil {
+			err = errAlertmanagerDisabled
+		}
+		if err == nil {
+			stored, err = loadNotifications(ctx, cs, target.namespace())
+		}
+		if err != nil {
+			writeNotificationError(c, err)
+			return
+		}
+	}
+	cfg, err := alertnotify.Config{Channels: []alertnotify.Channel{req}}.WithStoredSecrets(stored).Normalize()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ch := cfg.Channels[0]
+	labels := map[string]string{"alertname": testAlertName}
+	if err := alertnotify.SendTest(ctx, ch, cs.Name, labels, testAnnotations(c, cs, ch)); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "test notification sent"})
+}
+
+func testAnnotations(c *gin.Context, cs *cluster.ClientSet, ch alertnotify.Channel) map[string]string {
+	user := c.MustGet("user").(model.User)
+	return map[string]string{
+		"summary":     "Test notification from MPlatform",
+		"description": fmt.Sprintf("%s sent this to check the channel %s of cluster %s.", user.Key(), ch.Name, cs.Name),
+	}
 }
 
 // checkReceiverLoaded fails while Alertmanager runs a configuration without

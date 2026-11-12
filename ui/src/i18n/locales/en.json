@@ -1957,6 +1957,9 @@
           "sendResolved": "Also notify when alerts resolve",
           "secretKept": "Set. Leave empty to keep it.",
           "saved": "Channel saved. Alertmanager applies it in a minute or so.",
+          "test": "Send test",
+          "testing": "Sending...",
+          "testSent": "MPlatform sent a test notification to {{name}} with the settings above. Check that it arrived.",
           "fields": {
             "email": {
               "to": "Recipients",
@@ -1978,7 +1981,8 @@
               "toTag": "Tags"
             },
             "webhook": {
-              "url": "URL"
+              "url": "URL",
+              "urlHint": "Receives Alertmanager's webhook JSON. For ntfy, add ?template=alertmanager, e.g. https://ntfy.sh/mytopic?template=alertmanager."
             },
             "feishu": {
               "url": "Webhook URL",

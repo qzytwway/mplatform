@@ -1957,6 +1957,9 @@
           "sendResolved": "告警恢复时也发送通知",
           "secretKept": "已设置，留空则保持不变",
           "saved": "渠道已保存，Alertmanager 大约一分钟后生效。",
+          "test": "发送测试",
+          "testing": "发送中...",
+          "testSent": "已由 MPlatform 按当前填写的设置向 {{name}} 发送测试通知，请查收。",
           "fields": {
             "email": {
               "to": "收件人",
@@ -1978,7 +1981,8 @@
               "toTag": "标签"
             },
             "webhook": {
-              "url": "URL"
+              "url": "URL",
+              "urlHint": "发送的是 Alertmanager webhook 格式的 JSON。使用 ntfy 时请在地址后加 ?template=alertmanager，例如 https://ntfy.sh/mytopic?template=alertmanager。"
             },
             "feishu": {
               "url": "Webhook 地址",
