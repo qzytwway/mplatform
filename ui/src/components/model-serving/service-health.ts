@@ -102,6 +102,18 @@ export function healthIssues(health: ServiceHealth | undefined) {
   }
 }
 
+export type ServiceStatus = 'notReady' | 'attention' | 'ok'
+
+// Where a service stands on the workbench: not ready is worse than running
+// with a health issue.
+export function serviceStatus(
+  ready: boolean,
+  health: ServiceHealth | undefined
+): ServiceStatus {
+  if (!ready) return 'notReady'
+  return Object.values(healthIssues(health)).some(Boolean) ? 'attention' : 'ok'
+}
+
 export function formatMs(ms: number) {
   return `${Math.round(ms).toLocaleString()} ms`
 }

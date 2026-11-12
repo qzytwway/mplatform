@@ -2582,6 +2582,21 @@
       "firstToken": "P95 first token",
       "runningQueued": "Running / queued",
       "kvCache": "KV cache",
+      "layout": "Layout",
+      "layouts": {
+        "issues": "Issues first",
+        "overview": "Overview"
+      },
+      "status": {
+        "notReady": "Not ready",
+        "attention": "Needs attention",
+        "ok": "OK"
+      },
+      "servicesSummary": "Total {{total}} · not ready {{notReady}} · needs attention {{attention}}, listed first",
+      "gpuNodes": "GPU nodes",
+      "usageSection": "Usage and callers",
+      "usageSectionHint": "Token trend · tokens by model · caller rate limits",
+      "callersNearLimit": "Callers near limit: {{count}}",
       "attention": {
         "title": "Needs attention",
         "allGood": "Nothing needs attention",
@@ -2597,7 +2612,12 @@
         "callerNearLimit": "Caller {{name}} is near its tokens per minute limit",
         "firingAlerts": "Firing alerts: {{count}}",
         "metrics": "Inference metrics",
-        "checkFailed": "{{name}} could not be loaded, so the related checks did not run"
+        "checkFailed": "{{name}} could not be loaded, so the related checks did not run",
+        "critical": "Critical",
+        "warning": "Warning",
+        "viewService": "View service",
+        "editLimit": "Edit limit",
+        "viewAlerts": "View alerts"
       }
     }
   }

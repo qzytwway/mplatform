@@ -2582,6 +2582,21 @@
       "firstToken": "P95 首 Token",
       "runningQueued": "运行 / 排队",
       "kvCache": "KV Cache",
+      "layout": "布局",
+      "layouts": {
+        "issues": "问题优先",
+        "overview": "概览"
+      },
+      "status": {
+        "notReady": "未就绪",
+        "attention": "需关注",
+        "ok": "正常"
+      },
+      "servicesSummary": "共 {{total}} 个 · {{notReady}} 个未就绪 · {{attention}} 个需关注，有问题的排在前面",
+      "gpuNodes": "GPU 节点",
+      "usageSection": "用量与调用方",
+      "usageSectionHint": "Token 趋势 · 模型排行 · 调用方限流",
+      "callersNearLimit": "{{count}} 个调用方接近上限",
       "attention": {
         "title": "需要关注",
         "allGood": "没有需要关注的问题",
@@ -2597,7 +2612,12 @@
         "callerNearLimit": "调用方 {{name}} 接近每分钟 Token 上限",
         "firingAlerts": "{{count}} 条告警正在触发",
         "metrics": "推理指标",
-        "checkFailed": "{{name}} 加载失败，相关检查未执行"
+        "checkFailed": "{{name}} 加载失败，相关检查未执行",
+        "critical": "严重",
+        "warning": "警告",
+        "viewService": "查看服务",
+        "editLimit": "调整限流",
+        "viewAlerts": "查看告警"
       }
     }
   }
