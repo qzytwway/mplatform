@@ -464,7 +464,7 @@
     "gateway": "Gateway",
     "modelRegistry": "Model Registry",
     "gpuResources": "GPU Resources",
-    "metrics": "Prometheus Metrics",
+    "metrics": "Metrics",
     "logs": "Logs",
     "alerts": "Alerts",
     "alerting": "Alerting",
@@ -1767,7 +1767,7 @@
       "configureMonitoring": "Go to monitoring settings"
     },
     "metrics": {
-      "title": "Prometheus Metrics",
+      "title": "Metrics",
       "dashboard": "Dashboards",
       "query": "PromQL query",
       "noData": "No data in this time range",
