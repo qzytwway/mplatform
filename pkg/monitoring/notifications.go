@@ -39,6 +39,7 @@ const (
 	alertmanagerConfigKey  = "alertmanager.yaml"
 
 	testAlertName     = "MPlatformTestNotification"
+	testAlertSummary  = "这是一条测试消息"
 	testAlertDuration = time.Minute
 )
 
@@ -380,7 +381,7 @@ func SendTestNotification(c *gin.Context) {
 			// another one.
 			"test_id": strconv.FormatInt(now.UnixNano(), 36),
 		},
-		Annotations: testAnnotations(c, cs, ch),
+		Annotations: map[string]string{"summary": testAlertSummary},
 		StartsAt:    now,
 		EndsAt:      now.Add(testAlertDuration),
 	}})
@@ -427,19 +428,12 @@ func TestNotificationChannel(c *gin.Context) {
 	}
 	ch := cfg.Channels[0]
 	labels := map[string]string{"alertname": testAlertName}
-	if err := alertnotify.SendTest(ctx, ch, cs.Name, labels, testAnnotations(c, cs, ch)); err != nil {
+	annotations := map[string]string{"summary": testAlertSummary}
+	if err := alertnotify.SendTest(ctx, ch, cs.Name, labels, annotations); err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "test notification sent"})
-}
-
-func testAnnotations(c *gin.Context, cs *cluster.ClientSet, ch alertnotify.Channel) map[string]string {
-	user := c.MustGet("user").(model.User)
-	return map[string]string{
-		"summary":     "Test notification from MPlatform",
-		"description": fmt.Sprintf("%s sent this to check the channel %s of cluster %s.", user.Key(), ch.Name, cs.Name),
-	}
 }
 
 // checkReceiverLoaded fails while Alertmanager runs a configuration without
