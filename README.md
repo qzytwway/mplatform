@@ -65,7 +65,7 @@ MPlatform 是一个轻量的 Kubernetes 管理平台，后端用 Go，前端用 
 
 ## 部署
 
-MPlatform 默认监听 `8080` 端口，默认使用 SQLite 存数据，也支持 MySQL 和 PostgreSQL。下面两种方式任选其一。
+MPlatform 默认监听 `8080` 端口，默认使用 SQLite 存数据，也支持 MySQL 和 PostgreSQL。下面三种方式任选其一。
 
 > [!IMPORTANT]
 > 生产环境务必设置自己的 `MPLATFORM_ENCRYPT_KEY`（加密集群凭证等敏感数据）和 `JWT_SECRET`（签发登录令牌），并且部署后不要再更换加密密钥，否则已保存的凭证将无法解密。可以用 `openssl rand -hex 32` 生成。
@@ -108,7 +108,40 @@ MPlatform 默认监听 `8080` 端口，默认使用 SQLite 存数据，也支持
 
 数据库、上传的 chart 包都保存在 `data/` 目录里，升级时拉取新镜像、删除旧容器后用同样的命令重新启动即可。
 
-### 方式二：Kubernetes（Helm）
+### 方式二：Docker Compose
+
+适用场景与方式一相同，用一个文件管理容器配置，启动和升级更省事。
+
+1. 按方式一第 1 步准备 `data/` 目录和 `mplatform.env`，然后在同一目录（`mplatform/`）下创建 `docker-compose.yaml`：
+
+   ```yaml
+   services:
+     mplatform:
+       image: ghcr.io/qzytwway/mplatform:latest
+       container_name: mplatform
+       restart: unless-stopped
+       ports:
+         - "8080:8080"
+       env_file: mplatform.env
+       volumes:
+         - ./data:/data
+   ```
+
+2. 启动容器：
+
+   ```bash
+   docker compose up -d
+   ```
+
+3. 打开 `http://<服务器地址>:8080`，后续步骤与方式一第 3 步相同。
+
+升级时拉取新镜像并重建容器，数据仍保存在 `data/` 目录：
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+### 方式三：Kubernetes（Helm）
 
 适合正式使用。平台部署在它要管理的集群内时，可以直接用 In-Cluster 方式接入这个集群。
 
@@ -171,8 +204,6 @@ helm upgrade mplatform ./mplatform/charts/mplatform \
 
 > [!NOTE]
 > chart 默认给平台的 ServiceAccount 授予集群内全部权限，以便管理集群和安装组件。如有需要，可通过 values 中的 `rbac.rules` 收紧。
->
-> 只想快速试用时，也可以直接 `kubectl apply -f deploy/install.yaml`：它部署在 `kube-system` 命名空间、授予 `cluster-admin`，并且不做持久化，Pod 重建后数据会丢失，不要用于正式环境。
 
 ### 常用环境变量
 
