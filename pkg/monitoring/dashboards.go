@@ -64,6 +64,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	api.GET("/alertmanager/notifications", GetAlertNotifications)
 	api.PUT("/alertmanager/notifications", UpdateAlertNotifications)
 	api.POST("/alertmanager/notifications/channels/:id/test", SendTestNotification)
+	api.POST("/alertmanager/notifications/test", TestNotificationChannel)
 }
 
 // loadDashboards renders the local chart the way it deploys dashboards for

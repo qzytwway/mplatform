@@ -296,6 +296,16 @@ export function sendTestNotification(
   )
 }
 
+// Sends straight to the channel being edited, before it is saved.
+export function testNotificationChannel(
+  channel: NotificationChannel
+): Promise<{ message: string }> {
+  return apiClient.post(
+    withCurrentClusterPath('/alertmanager/notifications/test'),
+    channel
+  )
+}
+
 // Mirrors Alertmanager matching: regex matchers are fully anchored and a
 // missing label matches as the empty string.
 export function silenceMatches(
