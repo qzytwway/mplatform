@@ -1,4 +1,4 @@
-FROM node:24-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-builder
 
 WORKDIR /app/ui
 
@@ -10,7 +10,7 @@ RUN npm install -g pnpm && \
 COPY ui/ ./
 RUN pnpm run build
 
-FROM golang:1.26-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -22,7 +22,8 @@ RUN go mod download
 COPY . .
 
 COPY --from=frontend-builder /app/static ./static
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o mplatform .
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o mplatform .
 
 FROM gcr.io/distroless/static
 
