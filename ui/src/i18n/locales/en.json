@@ -2577,7 +2577,28 @@
       "callerLimitsHint": "Tokens in the last minute against the limit",
       "nearLimit": "Near limit",
       "disabled": "Disabled",
-      "viewGateway": "Gateway"
+      "viewGateway": "Gateway",
+      "tokensPerSecond": "Tokens/s",
+      "firstToken": "P95 first token",
+      "runningQueued": "Running / queued",
+      "kvCache": "KV cache",
+      "attention": {
+        "title": "Needs attention",
+        "allGood": "Nothing needs attention",
+        "serviceNotReady": "Service {{name}} is not ready ({{ready}}/{{replicas}} replicas)",
+        "kvCache": "Service {{name}} KV cache is at {{value}}",
+        "queued": "Service {{name}} queued requests: {{count}}",
+        "slowFirstToken": "Service {{name}} P95 time to first token is {{value}}",
+        "gpuNodeNotReady": "GPU node {{name}} is not ready",
+        "lwsMissing": "LeaderWorkerSet is not installed, so services cannot be created",
+        "gatewayMissing": "The model gateway is not installed",
+        "gatewayUpgrade": "The gateway needs an upgrade for rate limits, quotas and usage statistics",
+        "callerQuotaExhausted": "Caller {{name}} has used up its quota",
+        "callerNearLimit": "Caller {{name}} is near its tokens per minute limit",
+        "firingAlerts": "Firing alerts: {{count}}",
+        "metrics": "Inference metrics",
+        "checkFailed": "{{name}} could not be loaded, so the related checks did not run"
+      }
     }
   }
 }

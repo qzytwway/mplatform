@@ -26,7 +26,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { SidebarCustomResourceItem, SidebarItem } from '@/types/sidebar'
 import { useResources, useVersionInfo } from '@/lib/api'
-import { useAlertRules } from '@/lib/api/alerts'
+import { countFiringAlerts, useAlertRules } from '@/lib/api/alerts'
 import {
   Sidebar,
   SidebarContent,
@@ -101,15 +101,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: alertRules } = useAlertRules({
     refetchInterval: SIDEBAR_ALERTS_REFRESH_MS,
   })
-  const firingAlerts =
-    alertRules?.reduce(
-      (count, rule) =>
-        rule.disabled
-          ? count
-          : count +
-            rule.alerts.filter((alert) => alert.state === 'firing').length,
-      0
-    ) ?? 0
+  const firingAlerts = countFiringAlerts(alertRules)
   const [openAPIGroupItems, setOpenAPIGroupItems] = useState<
     Record<string, boolean>
   >({})

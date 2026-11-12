@@ -78,6 +78,23 @@ export interface CreateSilenceRequest {
 
 const ALERTS_REFRESH_MS = 30000
 
+// Counts the firing alerts of the rules that are not muted.
+export function countFiringAlerts(
+  rules: AlertRule[] | undefined,
+  isCounted: (alert: AlertInstance) => boolean = () => true
+) {
+  return (rules ?? []).reduce(
+    (count, rule) =>
+      rule.disabled
+        ? count
+        : count +
+          rule.alerts.filter(
+            (alert) => alert.state === 'firing' && isCounted(alert)
+          ).length,
+    0
+  )
+}
+
 export function useAlertRules(options: { refetchInterval?: number } = {}) {
   const { currentCluster } = useCluster()
   return useQuery({

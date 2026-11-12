@@ -2577,7 +2577,28 @@
       "callerLimitsHint": "最近一分钟 Token 与每分钟上限",
       "nearLimit": "接近上限",
       "disabled": "已停用",
-      "viewGateway": "网关"
+      "viewGateway": "网关",
+      "tokensPerSecond": "吞吐 (tok/s)",
+      "firstToken": "P95 首 Token",
+      "runningQueued": "运行 / 排队",
+      "kvCache": "KV Cache",
+      "attention": {
+        "title": "需要关注",
+        "allGood": "没有需要关注的问题",
+        "serviceNotReady": "推理服务 {{name}} 未就绪（{{ready}}/{{replicas}} 副本）",
+        "kvCache": "推理服务 {{name}} 的 KV Cache 已用 {{value}}",
+        "queued": "推理服务 {{name}} 有 {{count}} 个请求在排队",
+        "slowFirstToken": "推理服务 {{name}} 的 P95 首 Token 延迟为 {{value}}",
+        "gpuNodeNotReady": "GPU 节点 {{name}} 未就绪",
+        "lwsMissing": "LeaderWorkerSet 未安装，无法创建推理服务",
+        "gatewayMissing": "模型网关未安装",
+        "gatewayUpgrade": "网关需要升级，才能使用限流、额度和用量统计",
+        "callerQuotaExhausted": "调用方 {{name}} 的额度已用完",
+        "callerNearLimit": "调用方 {{name}} 接近每分钟 Token 上限",
+        "firingAlerts": "{{count}} 条告警正在触发",
+        "metrics": "推理指标",
+        "checkFailed": "{{name}} 加载失败，相关检查未执行"
+      }
     }
   }
 }

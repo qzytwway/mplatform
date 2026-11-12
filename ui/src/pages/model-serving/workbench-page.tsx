@@ -22,15 +22,12 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
-import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
+  formatMs,
+  useServiceHealth,
+  type ServiceHealth,
+} from '@/components/model-serving/service-health'
+import { WorkbenchAttention } from '@/components/model-serving/workbench-attention'
+import { WorkbenchServicesTable } from '@/components/model-serving/workbench-services-table'
 import { ObservabilityUnavailable } from '@/components/observability/observability-unavailable'
 import { formatValue, TimeSeries } from '@/components/observability/time-series'
 import { TimeSeriesChart } from '@/components/observability/time-series-chart'
@@ -126,6 +123,11 @@ export function WorkbenchPage() {
   const ttft = usePrometheusQuery(
     ttftQuery(timeWindow.end - timeWindow.start),
     { time: timeWindow.end, enabled: prometheusConfigured }
+  )
+  const healthQuery = useServiceHealth(timeWindow.end)
+  const health = useMemo(
+    () => healthQuery.data ?? new Map<string, ServiceHealth>(),
+    [healthQuery.data]
   )
 
   const compact = useMemo(
@@ -232,7 +234,19 @@ export function WorkbenchPage() {
       : undefined
   const ttftSeconds = ttftSample === undefined ? NaN : Number(ttftSample)
 
-  const formatMs = (ms: number) => `${Math.round(ms).toLocaleString()} ms`
+  const callerUsage = (callers.data?.items ?? []).map((caller) => {
+    const rate = currentRate.get(caller.name) ?? 0
+    const ratio = caller.tokensPerMinute
+      ? Math.min(rate / caller.tokensPerMinute, 1)
+      : 0
+    return {
+      caller,
+      rate,
+      ratio,
+      nearLimit: caller.enabled && ratio >= NEAR_LIMIT_RATIO,
+    }
+  })
+
   const unavailable = usage.data && !prometheusConfigured
 
   const renderUsage = (content: React.ReactNode) => {
@@ -266,73 +280,7 @@ export function WorkbenchPage() {
           </p>
         </div>
       )
-    return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('common.fields.name')}</TableHead>
-            <TableHead>{t('modelServing.services.model')}</TableHead>
-            <TableHead>{t('modelServing.services.runtime')}</TableHead>
-            <TableHead>{t('modelServing.services.mode')}</TableHead>
-            <TableHead>{t('common.fields.ready')}</TableHead>
-            <TableHead>{t('modelServing.services.gpuCount')}</TableHead>
-            <TableHead>{t('modelServing.services.published')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {serviceItems.map((service) => (
-            <TableRow key={`${service.namespace}/${service.name}`}>
-              <TableCell>
-                <Link
-                  to={`/model-serving/services/${service.namespace}/${service.name}`}
-                  className="font-medium app-link"
-                >
-                  {service.name}
-                </Link>
-              </TableCell>
-              <TableCell>{service.model}</TableCell>
-              <TableCell>
-                {RUNTIME_LABELS[service.runtime] ?? service.runtime}
-              </TableCell>
-              <TableCell>
-                {t(`modelServing.services.modes.${service.mode}`, {
-                  defaultValue: service.mode,
-                })}
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {service.roles.map((role) => (
-                    <Badge
-                      key={role.name}
-                      variant={
-                        role.replicas > 0 && role.readyReplicas >= role.replicas
-                          ? 'outline'
-                          : 'secondary'
-                      }
-                      className="tabular-nums"
-                    >
-                      {service.mode === 'pd' &&
-                        `${t(`modelServing.roles.${role.name}`, { defaultValue: role.name })} `}
-                      {role.readyReplicas}/{role.replicas}
-                    </Badge>
-                  ))}
-                </div>
-              </TableCell>
-              <TableCell className="tabular-nums">
-                {formatGPUSpec(service, t)}
-              </TableCell>
-              <TableCell>
-                {service.published ? (
-                  <Badge variant="outline">{t('common.values.yes')}</Badge>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    )
+    return <WorkbenchServicesTable services={serviceItems} health={health} />
   }
 
   const renderCallers = () => {
@@ -343,8 +291,7 @@ export function WorkbenchPage() {
           {translateError(callers.error, t)}
         </p>
       )
-    const items = callers.data?.items ?? []
-    if (items.length === 0)
+    if (callerUsage.length === 0)
       return (
         <p className="py-10 text-center text-sm text-muted-foreground">
           {t('modelServing.callers.empty')}
@@ -352,11 +299,8 @@ export function WorkbenchPage() {
       )
     return (
       <ul className="flex flex-col gap-4">
-        {items.map((caller) => {
-          const rate = currentRate.get(caller.name) ?? 0
+        {callerUsage.map(({ caller, rate, ratio, nearLimit }) => {
           const limit = caller.tokensPerMinute
-          const ratio = limit ? Math.min(rate / limit, 1) : 0
-          const nearLimit = caller.enabled && ratio >= NEAR_LIMIT_RATIO
           return (
             <li key={caller.id}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -426,6 +370,44 @@ export function WorkbenchPage() {
           </Button>
         </div>
       </div>
+
+      <WorkbenchAttention
+        services={serviceItems}
+        health={health}
+        gpuNodes={gpus.data?.items ?? []}
+        callers={callers.data?.items ?? []}
+        nearLimitCallers={callerUsage
+          .filter((usage) => usage.nearLimit)
+          .map((usage) => usage.caller)}
+        loading={
+          services.isLoading ||
+          gpus.isLoading ||
+          callers.isLoading ||
+          healthQuery.isLoading
+        }
+        failedSources={[
+          {
+            failed: !!services.error,
+            name: t('nav.inferenceServices'),
+            to: '/model-serving/services',
+          },
+          {
+            failed: !!healthQuery.error,
+            name: t('modelServing.workbench.attention.metrics'),
+            to: '/observability/metrics',
+          },
+          {
+            failed: !!gpus.error,
+            name: t('nav.gpuResources'),
+            to: '/model-serving/gpus',
+          },
+          {
+            failed: !!callers.error,
+            name: t('nav.gateway'),
+            to: '/model-serving/gateway',
+          },
+        ].filter((source) => source.failed)}
+      />
 
       <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-5">
         <StatCard
@@ -500,7 +482,17 @@ export function WorkbenchPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+      <Section
+        title={t('nav.inferenceServices')}
+        link={{
+          to: '/model-serving/services',
+          label: t('modelServing.workbench.viewServices'),
+        }}
+      >
+        {renderServices()}
+      </Section>
+
+      <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Section
           title={t('modelServing.usage.trend')}
           hint={t('modelServing.usage.trendHint', {
@@ -538,39 +530,26 @@ export function WorkbenchPage() {
             ) : (
               <ul className="flex flex-col gap-4">
                 {modelRanking.map(({ model, total }) => (
-                  <li
-                    key={model}
-                    className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_4rem] items-center gap-3 text-sm"
-                  >
-                    <span className="truncate" title={model}>
-                      {model}
-                    </span>
-                    <div className="h-2.5 rounded-r bg-muted">
+                  <li key={model} className="text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="truncate" title={model}>
+                        {model}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {compact.format(total)}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full rounded-r bg-chart-4"
+                        className="h-full rounded-full bg-chart-4"
                         style={{ width: `${(total / topModelTokens) * 100}%` }}
                       />
                     </div>
-                    <span className="text-right tabular-nums">
-                      {compact.format(total)}
-                    </span>
                   </li>
                 ))}
               </ul>
             )
           )}
-        </Section>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
-        <Section
-          title={t('nav.inferenceServices')}
-          link={{
-            to: '/model-serving/services',
-            label: t('modelServing.workbench.viewServices'),
-          }}
-        >
-          {renderServices()}
         </Section>
         <Section
           title={t('modelServing.workbench.callerLimits')}
