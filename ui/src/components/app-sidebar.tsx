@@ -427,6 +427,44 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
+            {user?.isAdmin() && (
+              <Collapsible defaultOpen asChild className="group/model-serving">
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      tooltip={t('nav.modelServing')}
+                      className="h-8 font-medium"
+                    >
+                      <IconSparkles className="opacity-70" />
+                      <span className="truncate">{t('nav.modelServing')}</span>
+                      <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/model-serving:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub className="mr-0 pr-0">
+                      {MODEL_SERVING_ITEMS.map(({ url, titleKey, Icon }) => (
+                        <SidebarMenuItem key={url}>
+                          <SidebarMenuButton
+                            tooltip={t(titleKey)}
+                            asChild
+                            isActive={
+                              location.pathname === url ||
+                              location.pathname.startsWith(`${url}/`)
+                            }
+                            className={leafItemClass}
+                          >
+                            <Link to={url} onClick={handleMenuItemClick}>
+                              <Icon className="opacity-70" />
+                              <span className="truncate">{t(titleKey)}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            )}
             <Collapsible
               defaultOpen
               asChild
@@ -545,44 +583,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </CollapsibleContent>
               </SidebarMenuItem>
             </Collapsible>
-            {user?.isAdmin() && (
-              <Collapsible defaultOpen asChild className="group/model-serving">
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      tooltip={t('nav.modelServing')}
-                      className="h-8 font-medium"
-                    >
-                      <IconSparkles className="opacity-70" />
-                      <span className="truncate">{t('nav.modelServing')}</span>
-                      <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/model-serving:rotate-180" />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub className="mr-0 pr-0">
-                      {MODEL_SERVING_ITEMS.map(({ url, titleKey, Icon }) => (
-                        <SidebarMenuItem key={url}>
-                          <SidebarMenuButton
-                            tooltip={t(titleKey)}
-                            asChild
-                            isActive={
-                              location.pathname === url ||
-                              location.pathname.startsWith(`${url}/`)
-                            }
-                            className={leafItemClass}
-                          >
-                            <Link to={url} onClick={handleMenuItemClick}>
-                              <Icon className="opacity-70" />
-                              <span className="truncate">{t(titleKey)}</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
-            )}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
