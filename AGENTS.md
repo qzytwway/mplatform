@@ -45,6 +45,8 @@ diff and referenced paths or commands; skip application tests and builds.
 ## UI
 
 - Keep UI simple and consistent with existing visual and interaction patterns.
+- The console is desktop only. Do not design for mobile or add mobile-specific
+  layouts, and check UI at desktop sizes (e.g. 1440×900), not phone widths.
 - Reuse existing components; place reusable feature components under
   `ui/src/components`.
 - Treat `ui/src/components/ui` as shadcn-managed primitives; edit them only when
