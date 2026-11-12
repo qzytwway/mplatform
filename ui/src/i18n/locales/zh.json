@@ -957,20 +957,6 @@
       "updated": "认证设置已更新"
     }
   },
-  "settingsHint": {
-    "title": "完善配置",
-    "description": "完成以下配置以获得最佳体验",
-    "p8s": {
-      "description": "配置 Prometheus"
-    },
-    "oauth": {
-      "description": "配置 LDAP 或 OAuth 认证"
-    },
-    "rbac": {
-      "description": "配置角色和权限"
-    },
-    "viewAll": "查看所有设置"
-  },
   "clusterManagement": {
     "title": "集群管理",
     "actions": {

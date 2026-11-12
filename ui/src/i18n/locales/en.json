@@ -957,20 +957,6 @@
       "updated": "Authentication settings updated"
     }
   },
-  "settingsHint": {
-    "title": "Complete Your Setup",
-    "description": "Configure essential settings to get the most out of MPlatform",
-    "p8s": {
-      "description": "Configure Prometheus"
-    },
-    "oauth": {
-      "description": "Set up LDAP or OAuth authentication"
-    },
-    "rbac": {
-      "description": "Configure roles and permissions"
-    },
-    "viewAll": "View All Settings"
-  },
   "clusterManagement": {
     "title": "Cluster Management",
     "actions": {
