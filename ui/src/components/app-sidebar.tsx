@@ -590,21 +590,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <SidebarMenuSub className="mr-0 pr-0">
-                    {OBSERVABILITY_ITEMS.map(({ url, titleKey, Icon }) => (
-                      <SidebarMenuItem key={url}>
-                        <SidebarMenuButton
-                          tooltip={t(titleKey)}
-                          asChild
-                          isActive={location.pathname === url}
-                          className={leafItemClass}
-                        >
-                          <Link to={url} onClick={handleMenuItemClick}>
-                            <Icon className="opacity-70" />
-                            <span className="truncate">{t(titleKey)}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
                     <Collapsible defaultOpen asChild className="group/alerting">
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
@@ -648,6 +633,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         </CollapsibleContent>
                       </SidebarMenuItem>
                     </Collapsible>
+                    {OBSERVABILITY_ITEMS.map(({ url, titleKey, Icon }) => (
+                      <SidebarMenuItem key={url}>
+                        <SidebarMenuButton
+                          tooltip={t(titleKey)}
+                          asChild
+                          isActive={location.pathname === url}
+                          className={leafItemClass}
+                        >
+                          <Link to={url} onClick={handleMenuItemClick}>
+                            <Icon className="opacity-70" />
+                            <span className="truncate">{t(titleKey)}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </SidebarMenuItem>
