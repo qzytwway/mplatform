@@ -239,7 +239,7 @@ export function CallerForm({ caller, onSaved }: CallerFormProps) {
       </Section>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="ghost" asChild>
+        <Button variant="ghost" asChild>
           <Link to={GATEWAY_PATH}>{t('common.actions.cancel')}</Link>
         </Button>
         <Button type="submit" disabled={isSaving}>

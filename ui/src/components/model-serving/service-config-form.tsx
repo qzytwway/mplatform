@@ -496,7 +496,7 @@ export function ServiceConfigForm({
         />
       </Section>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="ghost" asChild>
+        <Button variant="ghost" asChild>
           <Link to={editing ? detailPath : servicesPath}>
             {t('common.actions.cancel')}
           </Link>

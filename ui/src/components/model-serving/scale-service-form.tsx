@@ -162,7 +162,7 @@ export function ScaleServiceForm({
         )}
       </Section>
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="ghost" asChild>
+        <Button variant="ghost" asChild>
           <Link to={detailPath}>{t('common.actions.cancel')}</Link>
         </Button>
         <Button type="submit" disabled={isScaling}>
