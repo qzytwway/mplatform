@@ -2337,6 +2337,10 @@
       "localPathHint": "Absolute directory of the model on the node.",
       "s3PathHint": "Key prefix of the model inside the bucket.",
       "storageRequired": "Object storage is not configured. Services cannot be created for object storage models until it is.",
+      "sections": {
+        "basic": "Basic Information",
+        "source": "Model Source"
+      },
       "messages": {
         "created": "Model added",
         "updated": "Model updated",
@@ -2356,6 +2360,10 @@
       "secretKeyKeep": "Leave blank to keep the current key",
       "downloaderImage": "Downloader image",
       "downloaderImageHint": "Init container image that runs aws s3 sync.",
+      "sections": {
+        "connection": "Connection",
+        "downloader": "Model Download"
+      },
       "messages": {
         "saved": "Object storage saved",
         "deleted": "Object storage configuration deleted",

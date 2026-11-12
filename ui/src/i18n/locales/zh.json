@@ -2337,6 +2337,10 @@
       "localPathHint": "模型在节点上的绝对目录。",
       "s3PathHint": "模型在存储桶内的 key 前缀。",
       "storageRequired": "尚未配置对象存储，配置后才能为对象存储中的模型创建服务。",
+      "sections": {
+        "basic": "基本信息",
+        "source": "模型来源"
+      },
       "messages": {
         "created": "模型已添加",
         "updated": "模型已更新",
@@ -2356,6 +2360,10 @@
       "secretKeyKeep": "留空则保留当前密钥",
       "downloaderImage": "下载器镜像",
       "downloaderImageHint": "执行 aws s3 sync 的 init 容器镜像。",
+      "sections": {
+        "connection": "连接信息",
+        "downloader": "模型下载"
+      },
       "messages": {
         "saved": "对象存储已保存",
         "deleted": "对象存储配置已删除",

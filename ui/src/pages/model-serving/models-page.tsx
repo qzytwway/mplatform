@@ -3,6 +3,7 @@ import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
@@ -18,16 +19,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
-import { ModelDialog } from '@/components/model-serving/model-dialog'
+import { MODELS_PATH } from '@/components/model-serving/model-form'
 import { StorageCard } from '@/components/model-serving/storage-card'
 
 export function ModelsPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useServedModels()
   const { data: storageData } = useModelStorage()
-  const [showDialog, setShowDialog] = useState(false)
-  const [editingModel, setEditingModel] = useState<ServedModel | null>(null)
   const [deletingModel, setDeletingModel] = useState<ServedModel | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   // Unknown while loading counts as configured so the hint does not flash.
@@ -86,10 +86,7 @@ export function ModelsPage() {
             {t('common.actions.edit')}
           </>
         ),
-        onClick: (model) => {
-          setEditingModel(model)
-          setShowDialog(true)
-        },
+        onClick: (model) => navigate(`${MODELS_PATH}/${model.id}/edit`),
       },
       {
         label: (
@@ -101,7 +98,7 @@ export function ModelsPage() {
         onClick: (model) => setDeletingModel(model),
       },
     ],
-    [t]
+    [t, navigate]
   )
 
   const handleDelete = async () => {
@@ -149,14 +146,11 @@ export function ModelsPage() {
                 {t('modelServing.models.description')}
               </p>
             </div>
-            <Button
-              onClick={() => {
-                setEditingModel(null)
-                setShowDialog(true)
-              }}
-            >
-              <IconPlus className="mr-2 h-4 w-4" />
-              {t('modelServing.models.create')}
+            <Button asChild>
+              <Link to={`${MODELS_PATH}/create`}>
+                <IconPlus className="mr-2 h-4 w-4" />
+                {t('modelServing.models.create')}
+              </Link>
             </Button>
           </div>
         </CardHeader>
@@ -170,13 +164,6 @@ export function ModelsPage() {
           {renderModels()}
         </CardContent>
       </Card>
-
-      <ModelDialog
-        open={showDialog}
-        onOpenChange={setShowDialog}
-        model={editingModel}
-        storageConfigured={storageConfigured}
-      />
 
       <DeleteConfirmationDialog
         open={!!deletingModel}
