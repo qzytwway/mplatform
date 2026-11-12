@@ -895,7 +895,7 @@
     },
     "logo": {
       "title": "Logo",
-      "description": "显示在侧边栏、登录页和初始化页。支持 PNG、JPEG、GIF、WebP、SVG，最大 512 KB。",
+      "description": "显示在侧边栏、登录页、初始化页和浏览器标签页。支持 PNG、JPEG、GIF、WebP、SVG，最大 512 KB。",
       "upload": "上传图片",
       "remove": "移除",
       "errors": {

@@ -91,6 +91,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     refetch: refetchBootstrap,
   } = useBootstrap()
 
+  // The browser tab shows the uploaded logo in place of the bundled icon,
+  // which comes back once the logo is removed.
+  const logo = bootstrap?.logo
+  useEffect(() => {
+    const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+    if (!logo || !icon) return
+    const bundled = { href: icon.getAttribute('href'), type: icon.type }
+    icon.href = logo
+    // Browsers skip an icon whose declared SVG type a PNG logo contradicts.
+    icon.removeAttribute('type')
+    return () => {
+      if (bundled.href) icon.setAttribute('href', bundled.href)
+      icon.type = bundled.type
+    }
+  }, [logo])
+
   const checkAuth = useCallback(async () => {
     await refetchBootstrap()
   }, [refetchBootstrap])

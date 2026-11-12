@@ -884,7 +884,7 @@
     },
     "logo": {
       "title": "Logo",
-      "description": "Shown in the sidebar, login page and setup page. PNG, JPEG, GIF, WebP or SVG, up to 512 KB.",
+      "description": "Shown in the sidebar, login page, setup page and browser tab. PNG, JPEG, GIF, WebP or SVG, up to 512 KB.",
       "upload": "Upload image",
       "remove": "Remove",
       "errors": {

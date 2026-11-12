@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
+import animatedIcon from '@/assets/icon-animated.svg'
 import { useAuth } from '@/contexts/auth-context'
 import { IconEye, IconEyeOff, IconLock, IconUser } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
@@ -256,9 +257,11 @@ export function LoginPage() {
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              {logo && (
-                <img src={logo} alt="" className="h-10 w-10 object-contain" />
-              )}
+              <img
+                src={logo || animatedIcon}
+                alt=""
+                className="h-10 w-10 object-contain"
+              />
               <h1 className="text-2xl font-bold">MPlatform</h1>
             </div>
             <p className="text-muted-foreground">

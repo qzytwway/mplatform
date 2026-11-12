@@ -538,7 +538,7 @@ export function GeneralManagement() {
             <p className="text-xs text-muted-foreground">
               {t(
                 'generalManagement.logo.description',
-                'Shown in the sidebar, login page and setup page. PNG, JPEG, GIF, WebP or SVG, up to 512 KB.'
+                'Shown in the sidebar, login page, setup page and browser tab. PNG, JPEG, GIF, WebP or SVG, up to 512 KB.'
               )}
             </p>
           </div>

@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import icon from '@/assets/icon.svg'
 import { useAuth } from '@/contexts/auth-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
 import { CollapsibleContent } from '@radix-ui/react-collapsible'
@@ -330,13 +331,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
                 <Link to="/" onClick={handleMenuItemClick}>
-                  {logo && (
-                    <img
-                      src={logo}
-                      alt="MPlatform Logo"
-                      className="ml-1 h-8 w-8 object-contain"
-                    />
-                  )}
+                  <img
+                    src={logo || icon}
+                    alt="MPlatform Logo"
+                    className="ml-1 h-8 w-8 object-contain"
+                  />
                   <span className="text-base font-semibold">MPlatform</span>
                 </Link>
               </SidebarMenuButton>
@@ -364,13 +363,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <Link to="/" onClick={handleMenuItemClick}>
                 <div className="relative flex items-center justify-between w-full">
                   <div className="flex items-center gap-2">
-                    {logo && (
-                      <img
-                        src={logo}
-                        alt="MPlatform Logo"
-                        className="h-8 w-8 object-contain"
-                      />
-                    )}
+                    <img
+                      src={logo || icon}
+                      alt="MPlatform Logo"
+                      className="h-8 w-8 object-contain"
+                    />
                     <div className="flex flex-col">
                       <span className="text-base font-semibold">MPlatform</span>
                       <VersionInfo />

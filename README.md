@@ -1,133 +1,214 @@
 <div align="center">
 
-<img src="./ui/src/assets/icon.svg" alt="MPlatform logo" width="128" height="128">
+<img src="./ui/src/assets/icon-animated.svg" alt="MPlatform logo" width="128" height="128">
 
 # MPlatform
 
-**All your clusters. One workspace.**
+**一个控制台，管好多套 Kubernetes 集群，也管好跑在上面的大模型。**
 
-MPlatform is a lightweight, open-source Kubernetes workspace for multi-cluster operations, observability, access control, and AI-assisted troubleshooting.
-
-Use **MPlatform Desktop (Beta)** on macOS and Windows, or deploy MPlatform as a shared web console.
-
-[![Release](https://img.shields.io/github/v/release/qzytwway/mplatform?style=flat-square&logo=github&label=Release)](https://github.com/qzytwway/mplatform/releases)
-[![Stars](https://img.shields.io/github/stars/qzytwway/mplatform?style=flat-square&logo=github&label=Stars)](https://github.com/qzytwway/mplatform/stargazers)
-[![Downloads](https://img.shields.io/github/downloads/qzytwway/mplatform/total?style=flat-square&logo=github&label=Downloads)](https://github.com/qzytwway/mplatform/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg?style=flat-square)](LICENSE)
-
-[**Releases**](https://github.com/qzytwway/mplatform/releases)
-
-**English** · [中文](./README_zh.md)
 
 </div>
 
-<img width="1586" height="1167" alt="image" src="https://github.com/user-attachments/assets/5710204d-5d34-44af-85dc-3b436e205c12" />
+MPlatform 是一个轻量的 Kubernetes 管理平台，后端用 Go，前端用 React，打包成单个二进制或镜像即可运行。它把多集群运维、可观测性、权限管理和大模型推理部署放进同一个 Web 控制台：工程师可以在界面上完成从接入集群、准备 GPU，到部署 vLLM / SGLang 推理服务、对外发布接口的全过程，不需要手写 YAML。
 
-## Why MPlatform
+## 功能
 
-### Observe
+### 集群管理
 
-- Monitor CPU, memory, and network usage with per-cluster Prometheus integrations.
-- Stream and filter pod logs, then inspect events, conditions, and related resources in context.
+- 在主机上通过 SSH 直接创建新集群（kubeadm），或纳管已有集群：上传 kubeconfig、In-Cluster、Cluster Agent 三种接入方式。
+- 浏览和管理各类 Kubernetes 资源与 CRD，在线编辑 YAML，伸缩、重启工作负载。
+- 浏览器内的 Pod 终端、节点终端和 kubectl 终端；全局搜索；通过内置代理访问集群内的 Pod 和 Service。
+- 应用商店：安装和管理 Helm chart，内置一个本地 chart 仓库，可在界面上传 chart 包。
 
-### Operate
+### 模型服务
 
-- Manage core Kubernetes resources, CRDs, and Helm releases across multiple clusters.
-- Edit live YAML, scale or restart workloads, and use browser-based pod, node, and kubectl terminals.
-- Find resources with global search and access pods or services through the built-in Kube Proxy.
+- **模型仓库**：登记模型，来源可以是节点上的本地目录，也可以是 S3 兼容的对象存储（启动时自动下载）。
+- **推理服务**：支持 vLLM 和 SGLang，三种部署模式：
+  - **单机**：一个 Pod 跑一个副本，可指定节点。
+  - **多机**：基于 LeaderWorkerSet，一个副本跨多台机器，自动设置张量并行 / 流水线并行参数。
+  - **PD 分离**：基于 DisaggregatedSet，Prefill 和 Decode 分别设置副本数、节点数、GPU、镜像、资源、参数、环境变量和调度；单个 P 或 D 也可以跨多台机器。KV 传输支持 Mooncake（RDMA / TCP）和 NIXL，路由使用 SGLang Router 或 vLLM Router，可多副本、可选路由策略。
+- **网络**：多机和 PD 服务可通过 RDMA 设备插件（可选 Multus 网络）或主机网络使用 RDMA。
+- **调度**：节点标签、容忍、优先级类，PD 的 P / D 可以分别设置。
+- **运维**：创建后可在界面修改配置并滚动更新；按副本或按 P / D / 路由分别伸缩；推理引擎卡死时由存活探针自动重启。
+- **GPU**：整卡由 GPU Operator 提供，vGPU（按显存 / 算力切分）由 HAMi 提供，可查看各节点的 GPU 分配情况。
+- **网关**：基于 Higress 把推理服务发布为 OpenAI 兼容接口，按调用方发放 API Key、设置配额，并统计用量。
+- **推理指标**：每个服务自动创建 PodMonitor，内置推理服务监控面板：首 token 延迟、每 token 延迟、吞吐、排队数、KV Cache 使用率。
 
-### Govern
+### 可观测性
 
-- Support OAuth, LDAP, local accounts, MFA, and passkey login.
-- Control access with RBAC and per-cluster permissions, backed by audit logs for resource changes.
+- 按集群接入 Prometheus（kube-prometheus-stack），查看 CPU、内存、网络和 GPU 指标，内置监控面板。
+- 日志采集与检索（Vector + VictoriaLogs），支持 Pod 日志实时查看与过滤。
+- 告警规则与通知。
 
-### Work with AI
+### 权限与安全
 
-- Inspect resources, logs, and Prometheus metrics with the built-in AI assistant.
-- Review and confirm write operations before execution; the assistant respects the current user's RBAC permissions.
+- 本地账号、OAuth、LDAP 登录，支持 MFA 和 Passkey。
+- 基于 RBAC 的权限控制，可按集群授权；资源变更有审计记录；支持 API 密钥。
 
-## Quick Start
+### AI 助手
 
-### MPlatform Desktop (Beta)
+- 内置 AI 助手，可以查看资源、日志和 Prometheus 指标来协助排障；写操作需要人工确认，并遵守当前用户的 RBAC 权限。
 
-Manage your clusters with local kubeconfig files on macOS and Windows, without deploying a MPlatform server.
+## 部署
 
-Download: [macOS DMG](https://github.com/qzytwway/mplatform/releases/latest/download/mplatform-darwin-arm64.dmg) · [Windows x64 installer](https://github.com/qzytwway/mplatform/releases/latest/download/mplatform-windows-amd64.exe).
-
-On macOS (Apple Silicon, macOS 13+), you can also install with Homebrew:
-
-```bash
-brew install --cask qzytwway/tap/mplatform
-```
-
-The macOS beta is not yet signed or notarized. If the first launch is blocked, run:
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/MPlatform.app"
-```
-
-### Self-hosted with Helm
-
-For a quick evaluation, install MPlatform from the OCI registry into a dedicated namespace:
-
-```bash
-helm install mplatform oci://ghcr.io/qzytwway/charts/mplatform \
-  --namespace mplatform-system \
-  --create-namespace
-```
-
-Forward the service to your local machine:
-
-```bash
-kubectl port-forward --namespace mplatform-system svc/mplatform 8080:8080
-```
-
-Open [http://localhost:8080](http://localhost:8080), create the first administrator, and follow the setup flow to connect a cluster. When MPlatform runs inside the cluster it manages, choose the `in-cluster` connection type for the simplest setup.
+MPlatform 默认监听 `8080` 端口，默认使用 SQLite 存数据，也支持 MySQL 和 PostgreSQL。下面两种方式任选其一。
 
 > [!IMPORTANT]
-> The default chart values are intended for evaluation. Before using MPlatform in production, enable persistent storage or configure an external database, replace the default encryption key, and review the chart's cluster-wide RBAC permissions.
+> 生产环境务必设置自己的 `MPLATFORM_ENCRYPT_KEY`（加密集群凭证等敏感数据）和 `JWT_SECRET`（签发登录令牌），并且部署后不要再更换加密密钥，否则已保存的凭证将无法解密。可以用 `openssl rand -hex 32` 生成。
 
-## Other Installation Options
+### 方式一：Docker
 
-### Docker
+适合单机试用，或把平台部署在集群外的一台服务器上。
+
+1. 准备数据目录和配置文件。密钥只生成这一次，之后重建容器时继续使用同一个文件：
+
+   ```bash
+   mkdir -p mplatform/data/charts && cd mplatform
+   cat > mplatform.env <<EOF
+   DB_DSN=/data/mplatform.db
+   CHART_DIR=/data/charts
+   MPLATFORM_ENCRYPT_KEY=$(openssl rand -hex 32)
+   JWT_SECRET=$(openssl rand -hex 32)
+   EOF
+   ```
+
+2. 启动容器：
+
+   ```bash
+   docker run -d --name mplatform --restart unless-stopped \
+     -p 8080:8080 \
+     -v "$(pwd)/data:/data" \
+     --env-file mplatform.env \
+     ghcr.io/qzytwway/mplatform:latest
+   ```
+
+   也可以从源码自己构建镜像，把上面命令里的镜像换成 `mplatform:local`：
+
+   ```bash
+   git clone https://github.com/qzytwway/mplatform.git
+   cd mplatform
+   docker build -t mplatform:local .
+   ```
+
+3. 打开 `http://<服务器地址>:8080`，创建第一个管理员账号，然后按引导接入集群。平台在集群外运行时，用“上传 kubeconfig”或“Cluster Agent”方式接入；kubeconfig 里的 API Server 地址必须能从容器内访问（`127.0.0.1` 这类本机地址不行）。
+
+数据库、上传的 chart 包都保存在 `data/` 目录里，升级时拉取新镜像、删除旧容器后用同样的命令重新启动即可。
+
+### 方式二：Kubernetes（Helm）
+
+适合正式使用。平台部署在它要管理的集群内时，可以直接用 In-Cluster 方式接入这个集群。
+
+1. 准备一个 values 文件，开启持久化并设置密钥：
+
+   ```bash
+   cat > mplatform-values.yaml <<EOF
+   encryptKey: "$(openssl rand -hex 32)"
+   jwtSecret: "$(openssl rand -hex 32)"
+   # SQLite 使用 ReadWriteOnce 的 PVC 时必须用 Recreate，避免新旧 Pod 抢同一个卷
+   deploymentStrategy:
+     type: Recreate
+   db:
+     sqlite:
+       persistence:
+         pvc:
+           enabled: true
+   chartStore:
+     persistence:
+       pvc:
+         enabled: true
+   EOF
+   ```
+
+   请妥善保存这个文件，以后执行 `helm upgrade` 时也要带上它，否则密钥会被改回默认值。使用外部数据库时，把 `db.type` 设为 `mysql` 或 `postgres`，并在 `db.dsn` 中填写连接串，例如 `mysql://user:password@tcp(host:3306)/mplatform`。
+
+2. 安装。使用仓库中的 chart：
+
+   ```bash
+   git clone https://github.com/qzytwway/mplatform.git
+   helm install mplatform ./mplatform/charts/mplatform \
+     --namespace mplatform-system --create-namespace \
+     -f mplatform-values.yaml
+   ```
+
+   或者使用已发布的 OCI chart：
+
+   ```bash
+   helm install mplatform oci://ghcr.io/qzytwway/charts/mplatform \
+     --namespace mplatform-system --create-namespace \
+     -f mplatform-values.yaml
+   ```
+
+3. 访问。临时访问可以用端口转发，然后打开 `http://localhost:8080`：
+
+   ```bash
+   kubectl port-forward --namespace mplatform-system svc/mplatform 8080:8080
+   ```
+
+   长期使用可在 values 里开启 `ingress`（或 Gateway API 的 `gateway`）配置域名。首次打开时创建管理员账号，接入集群时选择 In-Cluster。
+
+升级：
 
 ```bash
-mkdir -p data
-docker run -d --name mplatform \
-  -p 8080:8080 \
-  -v "$(pwd)/data:/data" \
-  -e DB_DSN=/data/db.sqlite \
-  ghcr.io/qzytwway/mplatform:latest
+helm upgrade mplatform ./mplatform/charts/mplatform \
+  --namespace mplatform-system -f mplatform-values.yaml
 ```
 
-### Kubernetes Manifest
+更多可配置项（镜像、资源、Ingress、配置文件托管、RBAC 等）见 [charts/mplatform/values.yaml](./charts/mplatform/values.yaml)。
 
-The standalone manifest is intended for evaluation and stores application data inside the container unless you add persistent storage.
+> [!NOTE]
+> chart 默认给平台的 ServiceAccount 授予集群内全部权限，以便管理集群和安装组件。如有需要，可通过 values 中的 `rbac.rules` 收紧。
+>
+> 只想快速试用时，也可以直接 `kubectl apply -f deploy/install.yaml`：它部署在 `kube-system` 命名空间、授予 `cluster-admin`，并且不做持久化，Pod 重建后数据会丢失，不要用于正式环境。
+
+### 常用环境变量
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `PORT` | 监听端口 | `8080` |
+| `DB_TYPE` | 数据库类型：`sqlite`、`mysql`、`postgres` | `sqlite` |
+| `DB_DSN` | SQLite 文件路径，或 MySQL / PostgreSQL 连接串 | `dev.db` |
+| `MPLATFORM_ENCRYPT_KEY` | 敏感数据的加密密钥 | 内置默认值（不安全） |
+| `JWT_SECRET` | 登录令牌的签名密钥 | 内置默认值（不安全） |
+| `CHART_DIR` | 应用商店本地仓库的 chart 目录 | `chart-packages` |
+| `HOST` | 平台对外地址，用于生成 OAuth 回调地址 | 从请求头获取 |
+| `MPLATFORM_BASE` | 部署在子路径下时的路径前缀，例如 `/mplatform` | 空 |
+| `MPLATFORM_CONFIG_FILE` | 配置文件路径，用文件托管集群、OAuth、LDAP、RBAC 等配置（界面上对应部分变为只读） | 空 |
+
+使用 Helm 时这些变量由 chart 根据 values 设置，额外的变量可以通过 `extraEnvs` 传入。
+
+## 部署后：准备模型服务所需组件
+
+模型服务依赖的组件都在平台界面上一键安装，它们的 chart 从应用商店的本地仓库读取。安装前，先在“应用商店”上传对应的 chart 包（`.tgz`），或者把包复制到 `CHART_DIR` 目录：
+
+| 组件 | 用途 | chart |
+| --- | --- | --- |
+| LeaderWorkerSet | 多机、PD 分离推理服务 | `lws`（1.0.0） |
+| GPU Operator | 整卡 GPU 的驱动和设备插件 | `gpu-operator`，用 `make gpu-operator-chart` 构建 |
+| HAMi | vGPU 切分 | `hami` |
+| Higress | 推理服务网关 | `higress-core` |
+| kube-prometheus-stack | 指标与监控面板 | `kube-prometheus-stack` |
+| VictoriaLogs + Vector | 日志采集与检索 | `victoria-logs-single`、`vector` |
+
+然后进入“模型服务”，按顺序安装 GPU 组件和 LeaderWorkerSet、登记模型、创建推理服务；需要对外提供接口时再安装网关并发布服务。
+
+## 从源码构建
+
+需要 Go 1.26、Node.js（`^20.19.0` 或 `>=22.12.0`）、pnpm 和 Make：
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/qzytwway/mplatform/main/deploy/install.yaml
-kubectl port-forward --namespace kube-system svc/mplatform 8080:8080
-```
-
-The manifest grants its service account `cluster-admin`. Review and restrict these permissions before using it outside a test environment.
-
-### Build from Source
-
-Building MPlatform requires Go 1.26, Node.js `^20.19.0` or `>=22.12.0`, pnpm, and Make.
-
-```bash
-git clone https://github.com/qzytwway/mplatform.git
-cd mplatform
 make deps
 make build
 ./mplatform
 ```
 
-## Community
+开发时运行 `make dev`，前端开发服务器在 `5173` 端口，后端在 `8080` 端口。
 
-- Read the [contributing guidelines](./CONTRIBUTING.md) before opening a pull request.
-- Report vulnerabilities according to the [security policy](./SECURITY.md).
+## 参与贡献
 
-## License
+- 提交 PR 前请先阅读[贡献指南](./CONTRIBUTING.md)。
+- 安全问题请按[安全策略](./SECURITY.md)报告。
 
-MPlatform is licensed under the [Apache License 2.0](LICENSE).
+## 许可证
+
+MPlatform 基于 [Apache License 2.0](LICENSE) 开源。
