@@ -9,11 +9,20 @@ import { HelmChartDetailPage } from './pages/helm-chart-detail-page'
 import { HelmChartListPage } from './pages/helm-chart-list-page'
 import { InitializationPage } from './pages/initialization'
 import { LoginPage } from './pages/login'
+import { CallerCreatePage } from './pages/model-serving/caller-create-page'
+import { CallerEditPage } from './pages/model-serving/caller-edit-page'
+import { CallerQuotaPage } from './pages/model-serving/caller-quota-page'
 import { GatewayPage } from './pages/model-serving/gateway-page'
 import { GPUsPage } from './pages/model-serving/gpus-page'
+import { ModelCreatePage } from './pages/model-serving/model-create-page'
+import { ModelEditPage } from './pages/model-serving/model-edit-page'
 import { ModelsPage } from './pages/model-serving/models-page'
+import { ServiceCreatePage } from './pages/model-serving/service-create-page'
 import { ServiceDetailPage } from './pages/model-serving/service-detail-page'
+import { ServiceEditPage } from './pages/model-serving/service-edit-page'
+import { ServiceScalePage } from './pages/model-serving/service-scale-page'
 import { ServicesPage } from './pages/model-serving/services-page'
+import { StorageConfigPage } from './pages/model-serving/storage-config-page'
 import { UsagePage } from './pages/model-serving/usage-page'
 import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
@@ -108,12 +117,36 @@ export const router = createBrowserRouter(
           element: <ServicesPage />,
         },
         {
+          path: 'model-serving/services/create',
+          element: <ServiceCreatePage />,
+        },
+        {
           path: 'model-serving/services/:namespace/:name',
           element: <ServiceDetailPage />,
         },
         {
+          path: 'model-serving/services/:namespace/:name/edit',
+          element: <ServiceEditPage />,
+        },
+        {
+          path: 'model-serving/services/:namespace/:name/scale',
+          element: <ServiceScalePage />,
+        },
+        {
           path: 'model-serving/gateway',
           element: <GatewayPage />,
+        },
+        {
+          path: 'model-serving/gateway/callers/create',
+          element: <CallerCreatePage />,
+        },
+        {
+          path: 'model-serving/gateway/callers/:id/edit',
+          element: <CallerEditPage />,
+        },
+        {
+          path: 'model-serving/gateway/callers/:id/quota',
+          element: <CallerQuotaPage />,
         },
         {
           path: 'model-serving/usage',
@@ -122,6 +155,18 @@ export const router = createBrowserRouter(
         {
           path: 'model-serving/models',
           element: <ModelsPage />,
+        },
+        {
+          path: 'model-serving/models/create',
+          element: <ModelCreatePage />,
+        },
+        {
+          path: 'model-serving/models/:id/edit',
+          element: <ModelEditPage />,
+        },
+        {
+          path: 'model-serving/models/storage',
+          element: <StorageConfigPage />,
         },
         {
           path: 'model-serving/gpus',
