@@ -52,15 +52,15 @@ import { Collapsible, CollapsibleTrigger } from './ui/collapsible'
 import { VersionInfo } from './version-info'
 
 const OBSERVABILITY_ITEMS = [
+  { url: '/observability/logs', titleKey: 'nav.logs', Icon: IconFileText },
+]
+
+const ALERTING_ITEMS = [
   {
     url: '/observability/metrics',
     titleKey: 'nav.metrics',
     Icon: IconChartLine,
   },
-  { url: '/observability/logs', titleKey: 'nav.logs', Icon: IconFileText },
-]
-
-const ALERTING_ITEMS = [
   {
     url: '/observability/alerts',
     titleKey: 'nav.activeAlerts',

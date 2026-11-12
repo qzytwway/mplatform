@@ -464,7 +464,7 @@
     "gateway": "网关",
     "modelRegistry": "模型仓库",
     "gpuResources": "GPU 资源",
-    "metrics": "Prometheus 指标",
+    "metrics": "指标",
     "logs": "日志",
     "alerts": "告警",
     "alerting": "监控告警",
@@ -1767,7 +1767,7 @@
       "configureMonitoring": "前往监控设置"
     },
     "metrics": {
-      "title": "Prometheus 指标",
+      "title": "指标",
       "dashboard": "预置仪表盘",
       "query": "PromQL 查询",
       "noData": "此时间范围内没有数据",

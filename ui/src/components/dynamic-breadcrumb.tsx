@@ -37,8 +37,19 @@ export function DynamicBreadcrumb() {
       ]
     }
 
-    if (pathSegments[0] === 'observability' && pathSegments[1] === 'alerts') {
-      return [{ label: t('nav.observability') }, { label: t('nav.alerting') }]
+    if (
+      pathSegments[0] === 'observability' &&
+      (pathSegments[1] === 'alerts' || pathSegments[1] === 'metrics')
+    ) {
+      const crumbs: BreadcrumbSegment[] = [
+        { label: t('nav.observability') },
+        { label: t('nav.alerting') },
+      ]
+      // A dashboard is shown under the metrics list it belongs to.
+      if (pathSegments[1] === 'metrics' && pathSegments.length > 2) {
+        crumbs.push({ label: t('nav.metrics') })
+      }
+      return crumbs
     }
 
     // Helper function to create breadcrumb item
