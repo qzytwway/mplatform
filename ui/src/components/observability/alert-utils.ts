@@ -53,7 +53,11 @@ export function flattenAlerts(rules: AlertRule[]): ActiveAlert[] {
     .sort((a, b) => b.alert.activeAt.localeCompare(a.alert.activeAt))
 }
 
-export function severityGroup({ alert }: ActiveAlert): SeverityGroup {
+export function severityGroup({
+  alert,
+}: {
+  alert: Pick<AlertInstance, 'state' | 'labels'>
+}): SeverityGroup {
   if (alert.state === 'pending') return 'pending'
   const severity = (alert.labels.severity ?? '').toLowerCase()
   if (['critical', 'error', 'page'].includes(severity)) return 'critical'

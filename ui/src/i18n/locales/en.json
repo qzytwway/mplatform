@@ -467,6 +467,12 @@
     "metrics": "Prometheus Metrics",
     "logs": "Logs",
     "alerts": "Alerts",
+    "alerting": "Alerting",
+    "activeAlerts": "Active Alerts",
+    "alertHistory": "Alert History",
+    "alertRules": "Alert Rules",
+    "alertSilences": "Silences",
+    "alertNotifications": "Notifications",
     "modelUsage": "Usage",
     "platform": "Platform"
   },
@@ -1778,12 +1784,6 @@
     "alerts": {
       "title": "Alerts",
       "counts": "{{firing}} firing · {{pending}} pending",
-      "tabs": {
-        "active": "Active",
-        "rules": "Rules",
-        "silences": "Silences",
-        "notifications": "Notifications"
-      },
       "empty": "No alerts are firing",
       "emptyDescription": "All {{count}} alerting rules are inactive.",
       "silenced": "Silenced",
@@ -1829,6 +1829,85 @@
         "submit": "Create silence",
         "created": "Silence created",
         "failed": "Could not create the silence"
+      },
+      "templates": {
+        "open": "From template",
+        "title": "Create a rule from a template",
+        "description": "Pick a template to open it in the rule editor, where you can adjust the threshold and duration before saving. Use Preview there to check the cluster has the metrics it needs.",
+        "added": "Added",
+        "categories": {
+          "gpu": "GPU",
+          "inference": "Inference services",
+          "workload": "Workloads",
+          "node": "Nodes"
+        },
+        "items": {
+          "GPUTemperatureHigh": {
+            "title": "GPU temperature high",
+            "description": "A GPU stays above 85°C for 5 minutes."
+          },
+          "GPUMemoryAlmostFull": {
+            "title": "GPU memory almost full",
+            "description": "More than 95% of a GPU's memory is used for 10 minutes."
+          },
+          "GPUXidError": {
+            "title": "GPU XID error",
+            "description": "A GPU reports an XID error, which usually points to a driver or hardware fault."
+          },
+          "InferenceFirstTokenSlow": {
+            "title": "Inference first token slow",
+            "description": "An inference service's P95 time to first token stays above 2 seconds for 10 minutes."
+          },
+          "InferenceRequestsQueued": {
+            "title": "Inference requests queued",
+            "description": "More than 10 requests wait in an inference service's queue for 5 minutes."
+          },
+          "InferenceKVCacheFull": {
+            "title": "Inference KV cache full",
+            "description": "An inference pod's KV cache stays above 95% for 10 minutes, so new requests wait or get preempted."
+          },
+          "PodFrequentRestarts": {
+            "title": "Pod restarting often",
+            "description": "A container restarts more than 3 times in 15 minutes."
+          },
+          "ContainerOOMKilled": {
+            "title": "Container OOM killed",
+            "description": "A container restarted after running out of memory in the last 10 minutes."
+          },
+          "ContainerMemoryNearLimit": {
+            "title": "Container memory near limit",
+            "description": "A container uses more than 90% of its memory limit for 5 minutes."
+          },
+          "NodeCPUUsageHigh": {
+            "title": "Node CPU usage high",
+            "description": "A node's CPU usage stays above 90% for 15 minutes."
+          },
+          "NodeMemoryUsageHigh": {
+            "title": "Node memory usage high",
+            "description": "A node's memory usage stays above 90% for 15 minutes."
+          },
+          "NodeDiskUsageHigh": {
+            "title": "Node disk usage high",
+            "description": "A node filesystem is more than 85% full for 10 minutes."
+          }
+        }
+      },
+      "history": {
+        "description": "Firing alerts as Prometheus recorded them in its ALERTS series, as far back as Prometheus keeps data.",
+        "filter": "Filter by name, target or label",
+        "allSeverities": "All severities",
+        "allStatuses": "All statuses",
+        "status": {
+          "ongoing": "Firing",
+          "resolved": "Resolved"
+        },
+        "counts": "{{total}} alerts · {{ongoing}} still firing",
+        "start": "Started",
+        "duration": "Duration",
+        "startedBefore": "Already firing when the time range starts",
+        "resolvedAt": "Resolved at {{time}}",
+        "empty": "No alerts fired in this time range",
+        "truncated": "Showing the latest {{count}} alerts. Narrow the filter or time range to see others."
       },
       "silences": {
         "showExpired": "Show expired",
@@ -1892,7 +1971,7 @@
             "done": "Built-in rule {{name}} enabled"
           }
         },
-        "mutingUnavailable": "Built-in rules are disabled through the Alertmanager configuration MPlatform manages. The cluster needs an Alertmanager, and the notification settings must be saved once in the Notifications tab first."
+        "mutingUnavailable": "Built-in rules are disabled through the Alertmanager configuration MPlatform manages. The cluster needs an Alertmanager, and the notification settings must be saved once on the Notifications page first."
       },
       "ruleEditor": {
         "title": {

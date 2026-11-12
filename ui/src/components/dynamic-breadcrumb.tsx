@@ -37,6 +37,10 @@ export function DynamicBreadcrumb() {
       ]
     }
 
+    if (pathSegments[0] === 'observability' && pathSegments[1] === 'alerts') {
+      return [{ label: t('nav.observability') }, { label: t('nav.alerting') }]
+    }
+
     // Helper function to create breadcrumb item
     const createResourceBreadcrumb = (
       label: string,

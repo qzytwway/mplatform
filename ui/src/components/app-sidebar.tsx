@@ -7,15 +7,20 @@ import { CollapsibleContent } from '@radix-ui/react-collapsible'
 import {
   IconActivity,
   IconBell,
+  IconBellOff,
+  IconBellRinging,
   IconBox,
   IconChartBar,
   IconChartLine,
   IconCpu,
   IconDatabase,
   IconFileText,
+  IconHistory,
   IconLayoutDashboard,
+  IconListCheck,
   IconRocket,
   IconRouteAltLeft,
+  IconSend,
   IconServer2,
   IconSparkles,
 } from '@tabler/icons-react'
@@ -53,7 +58,34 @@ const OBSERVABILITY_ITEMS = [
     Icon: IconChartLine,
   },
   { url: '/observability/logs', titleKey: 'nav.logs', Icon: IconFileText },
-  { url: '/observability/alerts', titleKey: 'nav.alerts', Icon: IconBell },
+]
+
+const ALERTING_ITEMS = [
+  {
+    url: '/observability/alerts',
+    titleKey: 'nav.activeAlerts',
+    Icon: IconBell,
+  },
+  {
+    url: '/observability/alerts/history',
+    titleKey: 'nav.alertHistory',
+    Icon: IconHistory,
+  },
+  {
+    url: '/observability/alerts/rules',
+    titleKey: 'nav.alertRules',
+    Icon: IconListCheck,
+  },
+  {
+    url: '/observability/alerts/silences',
+    titleKey: 'nav.alertSilences',
+    Icon: IconBellOff,
+  },
+  {
+    url: '/observability/alerts/notifications',
+    titleKey: 'nav.alertNotifications',
+    Icon: IconSend,
+  },
 ]
 
 const MODEL_SERVING_ITEMS = [
@@ -569,16 +601,53 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           <Link to={url} onClick={handleMenuItemClick}>
                             <Icon className="opacity-70" />
                             <span className="truncate">{t(titleKey)}</span>
-                            {url === '/observability/alerts' &&
-                              firingAlerts > 0 && (
-                                <span className="ml-auto rounded-full bg-destructive/15 px-1.5 text-[11px] font-medium tabular-nums text-destructive">
-                                  {firingAlerts}
-                                </span>
-                              )}
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}
+                    <Collapsible defaultOpen asChild className="group/alerting">
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={t('nav.alerting')}
+                            className="h-7"
+                          >
+                            <IconBellRinging className="opacity-70" />
+                            <span className="truncate">
+                              {t('nav.alerting')}
+                            </span>
+                            <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/alerting:rotate-180" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub className="mr-0 pr-0">
+                            {ALERTING_ITEMS.map(({ url, titleKey, Icon }) => (
+                              <SidebarMenuItem key={url}>
+                                <SidebarMenuButton
+                                  tooltip={t(titleKey)}
+                                  asChild
+                                  isActive={location.pathname === url}
+                                  className={leafItemClass}
+                                >
+                                  <Link to={url} onClick={handleMenuItemClick}>
+                                    <Icon className="opacity-70" />
+                                    <span className="truncate">
+                                      {t(titleKey)}
+                                    </span>
+                                    {url === '/observability/alerts' &&
+                                      firingAlerts > 0 && (
+                                        <span className="ml-auto rounded-full bg-destructive/15 px-1.5 text-[11px] font-medium tabular-nums text-destructive">
+                                          {firingAlerts}
+                                        </span>
+                                      )}
+                                  </Link>
+                                </SidebarMenuButton>
+                              </SidebarMenuItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </SidebarMenuItem>

@@ -26,6 +26,7 @@ import { ServicesPage } from './pages/model-serving/services-page'
 import { StorageConfigPage } from './pages/model-serving/storage-config-page'
 import { UsagePage } from './pages/model-serving/usage-page'
 import { WorkbenchPage } from './pages/model-serving/workbench-page'
+import { AlertHistoryPage } from './pages/observability/alert-history-page'
 import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
 import { MetricsDashboardPage } from './pages/observability/metrics-dashboard-page'
@@ -112,7 +113,23 @@ export const router = createBrowserRouter(
         },
         {
           path: 'observability/alerts',
-          element: <AlertsPage />,
+          element: <AlertsPage view="active" />,
+        },
+        {
+          path: 'observability/alerts/history',
+          element: <AlertHistoryPage />,
+        },
+        {
+          path: 'observability/alerts/rules',
+          element: <AlertsPage view="rules" />,
+        },
+        {
+          path: 'observability/alerts/silences',
+          element: <AlertsPage view="silences" />,
+        },
+        {
+          path: 'observability/alerts/notifications',
+          element: <AlertsPage view="notifications" />,
         },
         {
           path: 'model-serving/overview',
