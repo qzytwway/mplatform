@@ -113,15 +113,19 @@ function AppContent() {
         <AppSidebar variant="inset" />
         <SidebarInset
           ref={insetRef}
-          className="h-dvh overflow-y-auto overscroll-none scrollbar-hide"
+          className="h-dvh overflow-y-auto overscroll-none scrollbar-hide md:h-[calc(100dvh-1rem)]"
         >
           <SiteHeader />
           <div className="@container/main flex min-h-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-1 flex-col gap-4 py-4 md:gap-6">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 pt-4 md:gap-6">
               <div className="flex min-h-0 flex-1 flex-col px-4 lg:px-6">
                 <ErrorBoundary>
                   {needsCluster ? <NoCluster /> : <Outlet />}
                 </ErrorBoundary>
+                {/* A page taller than the screen overflows these min-h-0
+                    wrappers and leaves their bottom padding behind, so the gap
+                    below it comes from this spacer instead. */}
+                <div className="h-4 shrink-0" />
               </div>
             </div>
           </div>
