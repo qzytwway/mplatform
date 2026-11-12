@@ -1,0 +1,34 @@
+name: Helm chart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - charts/mplatform/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to ghcr
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | helm registry login ghcr.io --username "$GHCR_USER" --password-stdin
+
+      # Pushing an unchanged Chart.yaml version overwrites that version.
+      - name: Package and push
+        run: |
+          helm package charts/mplatform --destination dist
+          helm push dist/mplatform-*.tgz oci://ghcr.io/qzytwway/charts
