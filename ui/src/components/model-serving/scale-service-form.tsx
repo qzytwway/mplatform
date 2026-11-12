@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
@@ -10,52 +11,22 @@ import {
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Section } from '@/components/form-layout'
 
 import { MAX_PD_ROLE_REPLICAS } from './service-modes'
 
-interface ScaleServiceDialogProps {
-  service: InferenceServiceDetail
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
-
-export function ScaleServiceDialog({
+export function ScaleServiceForm({
   service,
-  open,
-  onOpenChange,
-}: ScaleServiceDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {open ? (
-        <ScaleServiceDialogContent
-          service={service}
-          onClose={() => onOpenChange(false)}
-        />
-      ) : null}
-    </Dialog>
-  )
-}
-
-function ScaleServiceDialogContent({
-  service,
-  onClose,
 }: {
   service: InferenceServiceDetail
-  onClose: () => void
 }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
+  const detailPath = `/model-serving/services/${service.namespace}/${service.name}`
   const isPD = service.mode === 'pd'
   const roleReplicas = (name: string) =>
     String(service.roles.find((role) => role.name === name)?.replicas ?? 1)
@@ -102,7 +73,7 @@ function ScaleServiceDialogContent({
           : { replicas: Number(replicas) }
       )
       toast.success(t('modelServing.services.messages.scaled'))
-      onClose()
+      navigate(detailPath)
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
@@ -115,16 +86,8 @@ function ScaleServiceDialogContent({
   }
 
   return (
-    <DialogContent className="sm:max-w-md">
-      <DialogHeader>
-        <DialogTitle>{t('modelServing.services.scaleTitle')}</DialogTitle>
-        <DialogDescription>
-          {isPD
-            ? t('modelServing.services.scaleDescriptionPD')
-            : t('modelServing.services.scaleDescription')}
-        </DialogDescription>
-      </DialogHeader>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="flex max-w-4xl flex-col gap-4">
+      <Section title={t('common.fields.replicas')}>
         {isPD ? (
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
@@ -197,15 +160,15 @@ function ScaleServiceDialogContent({
             />
           </div>
         )}
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t('common.actions.cancel')}
-          </Button>
-          <Button type="submit" disabled={isScaling}>
-            {isScaling ? t('common.actions.saving') : t('common.actions.scale')}
-          </Button>
-        </DialogFooter>
-      </form>
-    </DialogContent>
+      </Section>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" asChild>
+          <Link to={detailPath}>{t('common.actions.cancel')}</Link>
+        </Button>
+        <Button type="submit" disabled={isScaling}>
+          {isScaling ? t('common.actions.saving') : t('common.actions.scale')}
+        </Button>
+      </div>
+    </form>
   )
 }

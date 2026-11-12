@@ -2272,6 +2272,11 @@
       "rdmaNetworksHint": "资源名以设备插件的配置为准。附加网络可选，会写入 Pod 的 k8s.v1.cni.cncf.io/networks 注解，SR-IOV 等需要独立网卡的方案需要填写。",
       "env": "环境变量",
       "envHint": "每行一个 KEY=VALUE，加到所有推理容器，例如 NCCL_IB_GID_INDEX、NCCL_SOCKET_IFNAME。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
+      "sections": {
+        "mode": "部署模式",
+        "network": "网络",
+        "advanced": "高级配置"
+      },
       "scaleTitle": "伸缩推理服务",
       "scaleDescription": "设置副本数。每个副本都需要独占 GPU。",
       "scaleDescriptionPD": "设置 Prefill、Decode 和路由的副本数。",

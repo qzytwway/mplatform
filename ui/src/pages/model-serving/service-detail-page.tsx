@@ -26,10 +26,8 @@ import {
 } from '@/components/ui/table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { ErrorMessage } from '@/components/error-message'
-import { EditServiceDialog } from '@/components/model-serving/create-service-dialog'
 import { DetailItem } from '@/components/model-serving/detail-item'
 import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
-import { ScaleServiceDialog } from '@/components/model-serving/scale-service-dialog'
 import { ServiceDeploymentCard } from '@/components/model-serving/service-deployment-card'
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
@@ -50,8 +48,6 @@ export function ServiceDetailPage() {
     error,
     refetch,
   } = useInferenceService(namespace, name)
-  const [scaling, setScaling] = useState(false)
-  const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -129,7 +125,9 @@ export function ServiceDetailPage() {
           >
             <Button
               variant="outline"
-              onClick={() => setEditing(true)}
+              onClick={() =>
+                navigate(`${SERVICES_PATH}/${namespace}/${name}/edit`)
+              }
               disabled={!service.editable}
             >
               {t('common.actions.edit')}
@@ -219,7 +217,12 @@ export function ServiceDetailPage() {
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
             <CardTitle>{t('common.fields.replicas')}</CardTitle>
-            <Button variant="outline" onClick={() => setScaling(true)}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                navigate(`${SERVICES_PATH}/${namespace}/${name}/scale`)
+              }
+            >
               {t('common.actions.scale')}
             </Button>
           </div>
@@ -278,19 +281,6 @@ export function ServiceDetailPage() {
           />
         </CardContent>
       </Card>
-
-      <ScaleServiceDialog
-        service={service}
-        open={scaling}
-        onOpenChange={setScaling}
-      />
-
-      <EditServiceDialog
-        namespace={service.namespace}
-        name={service.name}
-        open={editing}
-        onOpenChange={setEditing}
-      />
 
       <DeleteConfirmationDialog
         open={confirmingDelete}

@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
   createInferenceService,
-  getInferenceServiceRequest,
   updateInferenceService,
   useGPUComponents,
   useGPUNodes,
@@ -20,14 +20,6 @@ import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -37,16 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { Section } from '@/components/form-layout'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
 import {
   ANY_NODE,
   DEFAULT_TRANSFER_BACKENDS,
-  defaultFormValues,
   defaultImage,
-  formValuesFromRequest,
   requestFromFormValues,
   type ServiceFormValues,
   type VGPUMemoryUnit,
@@ -62,117 +52,19 @@ import { ServiceSchedulingFields } from './service-scheduling-fields'
 
 const MAX_NAME_LENGTH = 40
 
-interface CreateServiceDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
-
-export function CreateServiceDialog({
-  open,
-  onOpenChange,
-}: CreateServiceDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {open ? (
-        <ServiceFormContent
-          initial={defaultFormValues()}
-          onClose={() => onOpenChange(false)}
-        />
-      ) : null}
-    </Dialog>
-  )
-}
-
-interface EditServiceDialogProps extends CreateServiceDialogProps {
-  namespace: string
-  name: string
-}
-
-export function EditServiceDialog({
-  open,
-  onOpenChange,
-  namespace,
-  name,
-}: EditServiceDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {open ? (
-        <EditServiceDialogContent
-          namespace={namespace}
-          name={name}
-          onClose={() => onOpenChange(false)}
-        />
-      ) : null}
-    </Dialog>
-  )
-}
-
-function EditServiceDialogContent({
-  namespace,
-  name,
-  onClose,
-}: {
-  namespace: string
-  name: string
-  onClose: () => void
-}) {
-  const { t } = useTranslation()
-  const { currentCluster } = useCluster()
-  // Read afresh each time the dialog opens, since scaling changes replicas.
-  const { data, error } = useQuery({
-    queryKey: [
-      'model-serving-service-request',
-      currentCluster,
-      namespace,
-      name,
-    ],
-    queryFn: () =>
-      getInferenceServiceRequest(currentCluster ?? '', namespace, name),
-    enabled: !!currentCluster,
-    gcTime: 0,
-    retry: false,
-  })
-
-  if (data) {
-    return (
-      <ServiceFormContent
-        initial={formValuesFromRequest(data)}
-        editing
-        onClose={onClose}
-      />
-    )
-  }
-  return (
-    <DialogContent className="sm:max-w-2xl">
-      <DialogHeader>
-        <DialogTitle>{t('modelServing.services.editTitle')}</DialogTitle>
-        <DialogDescription>
-          {t('modelServing.services.editDescription')}
-        </DialogDescription>
-      </DialogHeader>
-      {error ? (
-        <p className="text-sm text-destructive">{translateError(error, t)}</p>
-      ) : (
-        <Skeleton className="h-64 w-full" />
-      )}
-    </DialogContent>
-  )
-}
-
-interface ServiceFormContentProps {
+interface ServiceConfigFormProps {
   initial: ServiceFormValues
-  onClose: () => void
   // Editing keeps the name, namespace, model, runtime and mode, and leaves
   // replicas to scaling.
   editing?: boolean
 }
 
-function ServiceFormContent({
+export function ServiceConfigForm({
   initial,
-  onClose,
   editing = false,
-}: ServiceFormContentProps) {
+}: ServiceConfigFormProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
   const { data: models } = useServedModels()
@@ -242,6 +134,9 @@ function ServiceFormContent({
       }),
     })
 
+  const servicesPath = '/model-serving/services'
+  const detailPath = `${servicesPath}/${values.namespace}/${values.name}`
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentCluster) return
@@ -263,7 +158,7 @@ function ServiceFormContent({
       await queryClient.invalidateQueries({
         queryKey: ['model-serving-services'],
       })
-      onClose()
+      navigate(detailPath)
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
@@ -272,30 +167,16 @@ function ServiceFormContent({
   }
 
   return (
-    <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
-      <DialogHeader>
-        <DialogTitle>
-          {editing
-            ? t('modelServing.services.editTitle')
-            : t('modelServing.services.createTitle')}
-        </DialogTitle>
-        <DialogDescription>
-          {editing
-            ? t('modelServing.services.editDescription')
-            : t('modelServing.services.createDescription')}
-        </DialogDescription>
-      </DialogHeader>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {editing && (
-          <Alert>
-            <AlertDescription className="space-y-1">
-              <p>{t('modelServing.services.editWarning')}</p>
-              {mode === 'pd' && (
-                <p>{t('modelServing.services.editPDWarning')}</p>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
+    <form onSubmit={handleSubmit} className="flex max-w-4xl flex-col gap-4">
+      {editing && (
+        <Alert>
+          <AlertDescription className="space-y-1">
+            <p>{t('modelServing.services.editWarning')}</p>
+            {mode === 'pd' && <p>{t('modelServing.services.editPDWarning')}</p>}
+          </AlertDescription>
+        </Alert>
+      )}
+      <Section title={t('common.fields.basicInformation')}>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="inference-name">{t('common.fields.name')}</Label>
@@ -333,7 +214,6 @@ function ServiceFormContent({
               onChange={(namespace) => set({ namespace })}
               triggerClassName="sm:w-full sm:max-w-none"
               disabled={editing}
-              modal
             />
           </div>
           <div className="space-y-2">
@@ -392,6 +272,8 @@ function ServiceFormContent({
             required
           />
         </div>
+      </Section>
+      <Section title={t('modelServing.services.sections.mode')}>
         <ServiceModeFields
           mode={mode}
           onModeChange={handleModeChange}
@@ -413,6 +295,8 @@ function ServiceFormContent({
             {t('modelServing.services.editReplicasHint')}
           </p>
         )}
+      </Section>
+      <Section title={t('common.fields.resources')}>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="inference-gpu-type">
@@ -563,12 +447,16 @@ function ServiceFormContent({
             </p>
           </div>
         )}
-        {mode !== 'single' && (
+      </Section>
+      {mode !== 'single' && (
+        <Section title={t('modelServing.services.sections.network')}>
           <ServiceNetworkFields
             values={values.networkValues}
             onValuesChange={(networkValues) => set({ networkValues })}
           />
-        )}
+        </Section>
+      )}
+      <Section title={t('modelServing.services.sections.advanced')}>
         <div className="space-y-2">
           <Label htmlFor="inference-extra-args">
             {t('modelServing.services.extraArgs')}
@@ -606,29 +494,31 @@ function ServiceFormContent({
           values={values.scheduling}
           onValuesChange={(scheduling) => set({ scheduling })}
         />
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
+      </Section>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" asChild>
+          <Link to={editing ? detailPath : servicesPath}>
             {t('common.actions.cancel')}
-          </Button>
-          <Button
-            type="submit"
-            disabled={
-              isSubmitting ||
-              !values.modelId ||
-              !values.namespace ||
-              vllmImagesDiffer
-            }
-          >
-            {editing
-              ? isSubmitting
-                ? t('common.actions.saving')
-                : t('common.actions.save')
-              : isSubmitting
-                ? t('common.messages.creating')
-                : t('common.actions.create')}
-          </Button>
-        </DialogFooter>
-      </form>
-    </DialogContent>
+          </Link>
+        </Button>
+        <Button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            !values.modelId ||
+            !values.namespace ||
+            vllmImagesDiffer
+          }
+        >
+          {editing
+            ? isSubmitting
+              ? t('common.actions.saving')
+              : t('common.actions.save')
+            : isSubmitting
+              ? t('common.messages.creating')
+              : t('common.actions.create')}
+        </Button>
+      </div>
+    </form>
   )
 }

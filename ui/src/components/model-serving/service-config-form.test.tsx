@@ -1,19 +1,17 @@
 /// <reference types="@testing-library/jest-dom" />
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CreateInferenceServiceRequest } from '@/lib/api/model-serving'
 
-import { CreateServiceDialog, EditServiceDialog } from './create-service-dialog'
+import { ServiceConfigForm } from './service-config-form'
+import { defaultFormValues, formValuesFromRequest } from './service-form'
 
-const { createInferenceService, updateInferenceService, recorded } = vi.hoisted(
-  () => ({
-    createInferenceService: vi.fn(),
-    updateInferenceService: vi.fn(),
-    // The request the edit dialog loads.
-    recorded: { request: undefined as unknown },
-  })
-)
+const { createInferenceService, updateInferenceService } = vi.hoisted(() => ({
+  createInferenceService: vi.fn(),
+  updateInferenceService: vi.fn(),
+}))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -22,12 +20,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   // No PriorityClasses for the scheduling fields to list.
-  useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
-    data:
-      queryKey[0] === 'model-serving-service-request'
-        ? recorded.request
-        : undefined,
-  }),
+  useQuery: () => ({ data: undefined }),
 }))
 vi.mock('@/hooks/use-cluster', () => ({
   useCluster: () => ({ currentCluster: 'dev' }),
@@ -38,7 +31,6 @@ vi.mock('@/components/selector/namespace-selector', () => ({
 vi.mock('@/lib/api/model-serving', () => ({
   createInferenceService,
   updateInferenceService,
-  getInferenceServiceRequest: vi.fn(),
   useServedModels: () => ({
     data: { items: [{ id: 1, name: 'qwen', type: 'chat' }] },
   }),
@@ -69,13 +61,17 @@ const chooseMode = (mode: string) =>
 const chooseRuntime = (runtime: string) =>
   choose('modelServing.services.runtime', runtime)
 
-describe('CreateServiceDialog', () => {
+describe('ServiceConfigForm when creating', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
     Element.prototype.hasPointerCapture = vi.fn(() => false)
     Element.prototype.releasePointerCapture = vi.fn()
     createInferenceService.mockResolvedValue({})
-    render(<CreateServiceDialog open onOpenChange={() => {}} />)
+    render(
+      <MemoryRouter>
+        <ServiceConfigForm initial={defaultFormValues()} />
+      </MemoryRouter>
+    )
   })
 
   it('pins the vLLM image in PD mode until the image is edited', () => {
@@ -236,20 +232,19 @@ const recordedPD: CreateInferenceServiceRequest = {
   },
 }
 
-describe('EditServiceDialog', () => {
+describe('ServiceConfigForm when editing', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
     Element.prototype.hasPointerCapture = vi.fn(() => false)
     Element.prototype.releasePointerCapture = vi.fn()
     updateInferenceService.mockResolvedValue({})
-    recorded.request = recordedPD
     render(
-      <EditServiceDialog
-        namespace="ai"
-        name="qwen-pd"
-        open
-        onOpenChange={() => {}}
-      />
+      <MemoryRouter>
+        <ServiceConfigForm
+          initial={formValuesFromRequest(recordedPD)}
+          editing
+        />
+      </MemoryRouter>
     )
   })
 

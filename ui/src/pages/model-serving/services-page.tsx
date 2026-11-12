@@ -3,7 +3,7 @@ import { IconCopy, IconPlus, IconTrash } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
@@ -19,19 +19,18 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
-import { CreateServiceDialog } from '@/components/model-serving/create-service-dialog'
 import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { LWSCard } from '@/components/model-serving/lws-card'
 import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
 
 export function ServicesPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
   const { data, isLoading, error } = useInferenceServices()
   const { data: status } = useModelServingStatus()
   const lwsMissing = status?.lws === false
-  const [showDialog, setShowDialog] = useState(false)
   const [deletingService, setDeletingService] =
     useState<InferenceService | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -222,15 +221,16 @@ export function ServicesPage() {
         <h1 className="text-2xl font-bold">
           {t('modelServing.services.title')}
         </h1>
-        <Button onClick={() => setShowDialog(true)} disabled={lwsMissing}>
+        <Button
+          onClick={() => navigate('/model-serving/services/create')}
+          disabled={lwsMissing}
+        >
           <IconPlus className="mr-2 h-4 w-4" />
           {t('modelServing.services.create')}
         </Button>
       </div>
       <LWSCard />
       {renderContent()}
-
-      <CreateServiceDialog open={showDialog} onOpenChange={setShowDialog} />
 
       <DeleteConfirmationDialog
         open={!!deletingService}

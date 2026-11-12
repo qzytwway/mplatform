@@ -1,6 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -8,7 +9,7 @@ import {
   type InferenceServiceDetail,
 } from '@/lib/api/model-serving'
 
-import { ScaleServiceDialog } from './scale-service-dialog'
+import { ScaleServiceForm } from './scale-service-form'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -52,12 +53,14 @@ function pdService(routerReplicas: number): InferenceServiceDetail {
   }
 }
 
-function renderDialog(service: InferenceServiceDetail) {
+function renderForm(service: InferenceServiceDetail) {
   const queryClient = new QueryClient()
   const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
   render(
     <QueryClientProvider client={queryClient}>
-      <ScaleServiceDialog service={service} open onOpenChange={() => {}} />
+      <MemoryRouter>
+        <ScaleServiceForm service={service} />
+      </MemoryRouter>
     </QueryClientProvider>
   )
   return { invalidate }
@@ -74,14 +77,14 @@ const submit = () =>
     screen.getByText('common.actions.scale').closest('form') as HTMLFormElement
   )
 
-describe('ScaleServiceDialog for PD services', () => {
+describe('ScaleServiceForm for PD services', () => {
   beforeEach(() => {
     scale.mockReset()
     scale.mockResolvedValue(pdService(1))
   })
 
   it('leaves the router out when it is unchanged', async () => {
-    renderDialog(pdService(2))
+    renderForm(pdService(2))
 
     fireEvent.change(field('scale-decode-replicas'), {
       target: { value: '3' },
@@ -96,7 +99,7 @@ describe('ScaleServiceDialog for PD services', () => {
   })
 
   it('sends the router replicas when they change', async () => {
-    renderDialog(pdService(2))
+    renderForm(pdService(2))
 
     fireEvent.change(field('scale-router-replicas'), {
       target: { value: '3' },
@@ -112,7 +115,7 @@ describe('ScaleServiceDialog for PD services', () => {
   })
 
   it('cannot scale a missing router', async () => {
-    renderDialog(pdService(0))
+    renderForm(pdService(0))
 
     expect(field('scale-router-replicas')).toBeDisabled()
     expect(
@@ -129,7 +132,7 @@ describe('ScaleServiceDialog for PD services', () => {
 
   it('refreshes the service when scaling fails', async () => {
     scale.mockRejectedValue(new Error('router failed'))
-    const { invalidate } = renderDialog(pdService(1))
+    const { invalidate } = renderForm(pdService(1))
 
     submit()
 
