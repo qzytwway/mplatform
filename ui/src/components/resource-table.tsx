@@ -235,9 +235,7 @@ function ResourceTableContent<T>({
             return metadata?.namespace || '-'
           },
           cell: ({ getValue }: { getValue: () => string }) => (
-            <Badge variant="outline" className="ml-2 ">
-              {getValue()}
-            </Badge>
+            <Badge variant="outline">{getValue()}</Badge>
           ),
         }
 
