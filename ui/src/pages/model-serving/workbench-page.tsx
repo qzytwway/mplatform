@@ -1,5 +1,11 @@
-import { useMemo } from 'react'
-import { IconPlus } from '@tabler/icons-react'
+import { useMemo, useState } from 'react'
+import {
+  IconAlertTriangle,
+  IconChevronRight,
+  IconLayoutDashboard,
+  IconListDetails,
+  IconPlus,
+} from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -11,7 +17,7 @@ import {
 } from '@/lib/api/model-serving'
 import { useModelUsage, useModelUsageSeries } from '@/lib/api/model-usage'
 import { usePrometheusQuery } from '@/lib/api/prometheus'
-import { translateError } from '@/lib/utils'
+import { cn, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,13 +26,23 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   formatMs,
+  serviceKey,
+  serviceStatus,
   useServiceHealth,
   type ServiceHealth,
+  type ServiceStatus,
 } from '@/components/model-serving/service-health'
 import { WorkbenchAttention } from '@/components/model-serving/workbench-attention'
+import { WorkbenchGPUNodes } from '@/components/model-serving/workbench-gpu-nodes'
 import { WorkbenchServicesTable } from '@/components/model-serving/workbench-services-table'
 import { ObservabilityUnavailable } from '@/components/observability/observability-unavailable'
 import { formatValue, TimeSeries } from '@/components/observability/time-series'
@@ -40,6 +56,11 @@ const SECONDS_PER_MINUTE = 60
 const CURRENT_RATE_WINDOW_SECONDS = 5 * SECONDS_PER_MINUTE
 const TOP_MODELS = 5
 const NEAR_LIMIT_RATIO = 0.9
+const LAYOUT_STORAGE_KEY = 'model-serving-workbench-layout'
+
+// The overview leads with the stats; issues first leads with what needs
+// attention and folds the usage away.
+type WorkbenchLayout = 'overview' | 'issues'
 
 // The 95th percentile time to first token across the platform's services.
 // Prefill pods of PD services never return the first token to the client.
@@ -52,6 +73,8 @@ interface StatCardProps {
   value: string
   detail: string
   to?: string
+  // Whether the detail reports a problem; only the strip shows it.
+  alert?: boolean
 }
 
 function StatCard({ label, value, detail, to }: StatCardProps) {
@@ -73,6 +96,47 @@ function StatCard({ label, value, detail, to }: StatCardProps) {
         </div>
       </CardHeader>
     </Card>
+  )
+}
+
+// The stats as one strip of cells, each a link where the stat has a page.
+function StatStrip({ stats }: { stats: StatCardProps[] }) {
+  return (
+    <section className="grid grid-cols-5 divide-x rounded-xl border bg-card">
+      {stats.map(({ label, value, detail, to, alert }) => {
+        const content = (
+          <>
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            <span
+              className={cn(
+                'text-sm tabular-nums',
+                alert ? 'text-destructive' : 'text-muted-foreground'
+              )}
+            >
+              {detail}
+            </span>
+          </>
+        )
+        const className = 'flex min-w-0 flex-col gap-1 px-5 py-4'
+        return to ? (
+          <Link
+            key={label}
+            to={to}
+            className={cn(
+              className,
+              'hover:bg-muted/50 first:rounded-l-xl last:rounded-r-xl'
+            )}
+          >
+            {content}
+          </Link>
+        ) : (
+          <div key={label} className={className}>
+            {content}
+          </div>
+        )
+      })}
+    </section>
   )
 }
 
@@ -103,6 +167,12 @@ function Section({ title, hint, link, children }: SectionProps) {
 export function WorkbenchPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const [layout, setLayout] = useState<WorkbenchLayout>(() =>
+    localStorage.getItem(LAYOUT_STORAGE_KEY) === 'overview'
+      ? 'overview'
+      : 'issues'
+  )
+  const [usageOpen, setUsageOpen] = useState(false)
   const timeWindow = useTimeWindow('24h')
   const services = useInferenceServices()
   const { data: status } = useModelServingStatus()
@@ -139,8 +209,25 @@ export function WorkbenchPage() {
     [i18n.language]
   )
 
+  const changeLayout = (value: string) => {
+    // The toggle group reports an empty value when its item is clicked again.
+    if (value !== 'overview' && value !== 'issues') return
+    setLayout(value)
+    localStorage.setItem(LAYOUT_STORAGE_KEY, value)
+  }
+
   const serviceItems = services.data?.items ?? []
   const readyServices = serviceItems.filter((service) => service.ready).length
+  const statusCounts = serviceItems.reduce<Record<ServiceStatus, number>>(
+    (counts, service) => {
+      const status = serviceStatus(
+        service.ready,
+        health.get(serviceKey(service.namespace, service.name))
+      )
+      return { ...counts, [status]: counts[status] + 1 }
+    },
+    { notReady: 0, attention: 0, ok: 0 }
+  )
 
   const gpuTotals = (gpus.data?.items ?? []).reduce(
     (totals, node) => {
@@ -246,6 +333,9 @@ export function WorkbenchPage() {
       nearLimit: caller.enabled && ratio >= NEAR_LIMIT_RATIO,
     }
   })
+  const nearLimitCallers = callerUsage
+    .filter((usage) => usage.nearLimit)
+    .map((usage) => usage.caller)
 
   const unavailable = usage.data && !prometheusConfigured
 
@@ -261,7 +351,7 @@ export function WorkbenchPage() {
     return content
   }
 
-  const renderServices = () => {
+  const renderServices = (statusColumn: boolean) => {
     if (services.isLoading) return <Skeleton className="h-48 w-full" />
     if (services.error)
       return (
@@ -280,7 +370,13 @@ export function WorkbenchPage() {
           </p>
         </div>
       )
-    return <WorkbenchServicesTable services={serviceItems} health={health} />
+    return (
+      <WorkbenchServicesTable
+        services={serviceItems}
+        health={health}
+        statusColumn={statusColumn}
+      />
+    )
   }
 
   const renderCallers = () => {
@@ -341,12 +437,218 @@ export function WorkbenchPage() {
 
   const noData = t('modelServing.workbench.noData')
 
+  const stats: StatCardProps[] = [
+    {
+      label: t('modelServing.workbench.servicesReady'),
+      value: services.data ? `${readyServices} / ${serviceItems.length}` : '-',
+      detail:
+        serviceItems.length === 0
+          ? t('modelServing.services.empty')
+          : readyServices === serviceItems.length
+            ? t('modelServing.workbench.allReady')
+            : t('modelServing.workbench.notReady', {
+                count: serviceItems.length - readyServices,
+              }),
+      to: '/model-serving/services',
+      alert: readyServices < serviceItems.length,
+    },
+    {
+      label: t('modelServing.workbench.gpuAllocated'),
+      value:
+        gpus.data && gpuShown.capacity
+          ? `${gpuShown.allocated} / ${gpuShown.capacity}`
+          : '-',
+      detail: gpus.data ? gpuDetail() : '',
+      to: '/model-serving/gpus',
+    },
+    {
+      label: t('modelServing.workbench.tokens'),
+      value: prometheusConfigured
+        ? compact.format(usageTotals.input + usageTotals.output)
+        : '-',
+      detail: prometheusConfigured
+        ? t('modelServing.workbench.tokensDetail', {
+            input: compact.format(usageTotals.input),
+            output: compact.format(usageTotals.output),
+          })
+        : noData,
+      to: '/model-serving/usage',
+    },
+    {
+      label: t('modelServing.workbench.requests'),
+      value: prometheusConfigured
+        ? Math.round(usageTotals.requests).toLocaleString()
+        : '-',
+      detail: usageTotals.requests
+        ? t('modelServing.workbench.avgDuration', {
+            value: formatMs(avgDurationMs),
+          })
+        : noData,
+      to: '/model-serving/usage',
+    },
+    {
+      label: t('modelServing.workbench.ttft'),
+      value: Number.isFinite(ttftSeconds) ? formatMs(ttftSeconds * 1000) : '-',
+      detail: Number.isFinite(ttftSeconds)
+        ? t('modelServing.workbench.ttftHint')
+        : noData,
+    },
+  ]
+
+  const renderAttention = (grouped: boolean) => (
+    <WorkbenchAttention
+      services={serviceItems}
+      health={health}
+      gpuNodes={gpus.data?.items ?? []}
+      callers={callers.data?.items ?? []}
+      nearLimitCallers={nearLimitCallers}
+      loading={
+        services.isLoading ||
+        gpus.isLoading ||
+        callers.isLoading ||
+        healthQuery.isLoading
+      }
+      failedSources={[
+        {
+          failed: !!services.error,
+          name: t('nav.inferenceServices'),
+          to: '/model-serving/services',
+        },
+        {
+          failed: !!healthQuery.error,
+          name: t('modelServing.workbench.attention.metrics'),
+          to: '/observability/metrics',
+        },
+        {
+          failed: !!gpus.error,
+          name: t('nav.gpuResources'),
+          to: '/model-serving/gpus',
+        },
+        {
+          failed: !!callers.error,
+          name: t('nav.gateway'),
+          to: '/model-serving/gateway',
+        },
+      ].filter((source) => source.failed)}
+      grouped={grouped}
+    />
+  )
+
+  const renderServicesSection = (issuesFirst: boolean) => (
+    <Section
+      title={t('nav.inferenceServices')}
+      hint={
+        issuesFirst && serviceItems.length > 0
+          ? t('modelServing.workbench.servicesSummary', {
+              total: serviceItems.length,
+              ...statusCounts,
+            })
+          : undefined
+      }
+      link={{
+        to: '/model-serving/services',
+        label: t('modelServing.workbench.viewServices'),
+      }}
+    >
+      {renderServices(issuesFirst)}
+    </Section>
+  )
+
+  const usageSections = (
+    <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <Section
+        title={t('modelServing.usage.trend')}
+        hint={t('modelServing.usage.trendHint', {
+          minutes: timeWindow.step / SECONDS_PER_MINUTE,
+        })}
+      >
+        {renderUsage(
+          usageSeries.isLoading ? (
+            <Skeleton className="h-[240px] w-full" />
+          ) : trendSeries.length === 0 ? (
+            <p className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+              {t('modelServing.usage.empty')}
+            </p>
+          ) : (
+            <TimeSeriesChart
+              series={trendSeries}
+              formatValue={formatValue}
+              height={240}
+            />
+          )
+        )}
+      </Section>
+      <Section
+        title={t('modelServing.workbench.modelRanking')}
+        link={{
+          to: '/model-serving/usage',
+          label: t('modelServing.workbench.viewUsage'),
+        }}
+      >
+        {renderUsage(
+          modelRanking.length === 0 ? (
+            <p className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+              {t('modelServing.usage.empty')}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-4">
+              {modelRanking.map(({ model, total }) => (
+                <li key={model} className="text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="truncate" title={model}>
+                      {model}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {compact.format(total)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-chart-4"
+                      style={{ width: `${(total / topModelTokens) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+      </Section>
+      <Section
+        title={t('modelServing.workbench.callerLimits')}
+        hint={t('modelServing.workbench.callerLimitsHint')}
+        link={{
+          to: '/model-serving/gateway',
+          label: t('modelServing.workbench.viewGateway'),
+        }}
+      >
+        {renderCallers()}
+      </Section>
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">
           {t('modelServing.workbench.title')}
         </h1>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          value={layout}
+          onValueChange={changeLayout}
+          aria-label={t('modelServing.workbench.layout')}
+        >
+          <ToggleGroupItem value="issues" className="gap-1.5 px-3">
+            <IconListDetails className="size-4" />
+            {t('modelServing.workbench.layouts.issues')}
+          </ToggleGroupItem>
+          <ToggleGroupItem value="overview" className="gap-1.5 px-3">
+            <IconLayoutDashboard className="size-4" />
+            {t('modelServing.workbench.layouts.overview')}
+          </ToggleGroupItem>
+        </ToggleGroup>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <TimeWindowControls timeWindow={timeWindow} />
           <Button
@@ -371,197 +673,65 @@ export function WorkbenchPage() {
         </div>
       </div>
 
-      <WorkbenchAttention
-        services={serviceItems}
-        health={health}
-        gpuNodes={gpus.data?.items ?? []}
-        callers={callers.data?.items ?? []}
-        nearLimitCallers={callerUsage
-          .filter((usage) => usage.nearLimit)
-          .map((usage) => usage.caller)}
-        loading={
-          services.isLoading ||
-          gpus.isLoading ||
-          callers.isLoading ||
-          healthQuery.isLoading
-        }
-        failedSources={[
-          {
-            failed: !!services.error,
-            name: t('nav.inferenceServices'),
-            to: '/model-serving/services',
-          },
-          {
-            failed: !!healthQuery.error,
-            name: t('modelServing.workbench.attention.metrics'),
-            to: '/observability/metrics',
-          },
-          {
-            failed: !!gpus.error,
-            name: t('nav.gpuResources'),
-            to: '/model-serving/gpus',
-          },
-          {
-            failed: !!callers.error,
-            name: t('nav.gateway'),
-            to: '/model-serving/gateway',
-          },
-        ].filter((source) => source.failed)}
-      />
-
-      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-5">
-        <StatCard
-          label={t('modelServing.workbench.servicesReady')}
-          value={
-            services.data ? `${readyServices} / ${serviceItems.length}` : '-'
-          }
-          detail={
-            serviceItems.length === 0
-              ? t('modelServing.services.empty')
-              : readyServices === serviceItems.length
-                ? t('modelServing.workbench.allReady')
-                : t('modelServing.workbench.notReady', {
-                    count: serviceItems.length - readyServices,
-                  })
-          }
-          to="/model-serving/services"
-        />
-        <StatCard
-          label={t('modelServing.workbench.gpuAllocated')}
-          value={
-            gpus.data && gpuShown.capacity
-              ? `${gpuShown.allocated} / ${gpuShown.capacity}`
-              : '-'
-          }
-          detail={gpus.data ? gpuDetail() : ''}
-          to="/model-serving/gpus"
-        />
-        <StatCard
-          label={t('modelServing.workbench.tokens')}
-          value={
-            prometheusConfigured
-              ? compact.format(usageTotals.input + usageTotals.output)
-              : '-'
-          }
-          detail={
-            prometheusConfigured
-              ? t('modelServing.workbench.tokensDetail', {
-                  input: compact.format(usageTotals.input),
-                  output: compact.format(usageTotals.output),
-                })
-              : noData
-          }
-          to="/model-serving/usage"
-        />
-        <StatCard
-          label={t('modelServing.workbench.requests')}
-          value={
-            prometheusConfigured
-              ? Math.round(usageTotals.requests).toLocaleString()
-              : '-'
-          }
-          detail={
-            usageTotals.requests
-              ? t('modelServing.workbench.avgDuration', {
-                  value: formatMs(avgDurationMs),
-                })
-              : noData
-          }
-          to="/model-serving/usage"
-        />
-        <StatCard
-          label={t('modelServing.workbench.ttft')}
-          value={
-            Number.isFinite(ttftSeconds) ? formatMs(ttftSeconds * 1000) : '-'
-          }
-          detail={
-            Number.isFinite(ttftSeconds)
-              ? t('modelServing.workbench.ttftHint')
-              : noData
-          }
-        />
-      </div>
-
-      <Section
-        title={t('nav.inferenceServices')}
-        link={{
-          to: '/model-serving/services',
-          label: t('modelServing.workbench.viewServices'),
-        }}
-      >
-        {renderServices()}
-      </Section>
-
-      <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-        <Section
-          title={t('modelServing.usage.trend')}
-          hint={t('modelServing.usage.trendHint', {
-            minutes: timeWindow.step / SECONDS_PER_MINUTE,
-          })}
-        >
-          {renderUsage(
-            usageSeries.isLoading ? (
-              <Skeleton className="h-[240px] w-full" />
-            ) : trendSeries.length === 0 ? (
-              <p className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-                {t('modelServing.usage.empty')}
-              </p>
-            ) : (
-              <TimeSeriesChart
-                series={trendSeries}
-                formatValue={formatValue}
-                height={240}
+      {layout === 'overview' ? (
+        <>
+          {renderAttention(false)}
+          <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-5">
+            {stats.map((stat) => (
+              <StatCard key={stat.label} {...stat} />
+            ))}
+          </div>
+          {renderServicesSection(false)}
+          {usageSections}
+        </>
+      ) : (
+        <>
+          <StatStrip stats={stats} />
+          <div className="grid grid-cols-1 items-start gap-4 @5xl/main:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            {renderAttention(true)}
+            <Section
+              title={t('modelServing.workbench.gpuNodes')}
+              link={{ to: '/model-serving/gpus', label: t('nav.gpuResources') }}
+            >
+              <WorkbenchGPUNodes
+                nodes={gpus.data?.items ?? []}
+                loading={gpus.isLoading}
+                error={gpus.error}
               />
-            )
-          )}
-        </Section>
-        <Section
-          title={t('modelServing.workbench.modelRanking')}
-          link={{
-            to: '/model-serving/usage',
-            label: t('modelServing.workbench.viewUsage'),
-          }}
-        >
-          {renderUsage(
-            modelRanking.length === 0 ? (
-              <p className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-                {t('modelServing.usage.empty')}
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-4">
-                {modelRanking.map(({ model, total }) => (
-                  <li key={model} className="text-sm">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate" title={model}>
-                        {model}
-                      </span>
-                      <span className="shrink-0 tabular-nums">
-                        {compact.format(total)}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-chart-4"
-                        style={{ width: `${(total / topModelTokens) * 100}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )
-          )}
-        </Section>
-        <Section
-          title={t('modelServing.workbench.callerLimits')}
-          hint={t('modelServing.workbench.callerLimitsHint')}
-          link={{
-            to: '/model-serving/gateway',
-            label: t('modelServing.workbench.viewGateway'),
-          }}
-        >
-          {renderCallers()}
-        </Section>
-      </div>
+            </Section>
+          </div>
+          {renderServicesSection(true)}
+          <Collapsible
+            open={usageOpen}
+            onOpenChange={setUsageOpen}
+            className="flex flex-col gap-4"
+          >
+            <CollapsibleTrigger className="flex items-center gap-2 rounded-xl border bg-card px-4 py-3 text-left hover:bg-muted/50">
+              <IconChevronRight
+                className={cn(
+                  'size-4 shrink-0 text-muted-foreground transition-transform',
+                  usageOpen && 'rotate-90'
+                )}
+              />
+              <span className="text-sm font-semibold">
+                {t('modelServing.workbench.usageSection')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t('modelServing.workbench.usageSectionHint')}
+              </span>
+              {nearLimitCallers.length > 0 && (
+                <span className="ml-auto flex items-center gap-1.5 text-xs text-warning">
+                  <IconAlertTriangle className="size-4" />
+                  {t('modelServing.workbench.callersNearLimit', {
+                    count: nearLimitCallers.length,
+                  })}
+                </span>
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent>{usageSections}</CollapsibleContent>
+          </Collapsible>
+        </>
+      )}
     </div>
   )
 }

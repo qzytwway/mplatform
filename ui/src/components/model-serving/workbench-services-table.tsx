@@ -20,43 +20,71 @@ import {
   formatPercent,
   healthIssues,
   serviceKey,
+  serviceStatus,
   type ServiceHealth,
+  type ServiceStatus,
 } from './service-health'
 import { RUNTIME_LABELS } from './service-modes'
 
 interface WorkbenchServicesTableProps {
   services: InferenceService[]
   health: Map<string, ServiceHealth>
+  // Shows each service's status in a column of its own and tints the rows
+  // that are not ok.
+  statusColumn?: boolean
 }
 
 const WARN_CLASS = 'font-medium text-warning'
+
+const STATUS_ORDER: Record<ServiceStatus, number> = {
+  notReady: 0,
+  attention: 1,
+  ok: 2,
+}
+
+const STATUS_STYLES: Record<
+  ServiceStatus,
+  { badge: string; dot: string; row: string }
+> = {
+  notReady: {
+    badge: 'border-destructive/40 text-destructive',
+    dot: 'bg-destructive',
+    row: 'bg-destructive/5',
+  },
+  attention: {
+    badge: 'border-warning/40 text-warning',
+    dot: 'bg-warning',
+    row: 'bg-warning/5',
+  },
+  ok: { badge: 'text-muted-foreground', dot: 'bg-success', row: '' },
+}
 
 // Lists services with their current inference metrics, the ones that need
 // attention first.
 export function WorkbenchServicesTable({
   services,
   health,
+  statusColumn = false,
 }: WorkbenchServicesTableProps) {
   const { t } = useTranslation()
 
   const rows = services
     .map((service) => {
       const metrics = health.get(serviceKey(service.namespace, service.name))
-      const issues = healthIssues(metrics)
-      const hasIssue = Object.values(issues).some(Boolean)
       return {
         service,
         metrics,
-        issues,
-        rank: !service.ready ? 0 : hasIssue ? 1 : 2,
+        issues: healthIssues(metrics),
+        status: serviceStatus(service.ready, metrics),
       }
     })
-    .sort((a, b) => a.rank - b.rank)
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          {statusColumn && <TableHead>{t('common.fields.status')}</TableHead>}
           <TableHead>{t('common.fields.name')}</TableHead>
           <TableHead>{t('modelServing.services.model')}</TableHead>
           <TableHead>{t('modelServing.services.runtime')}</TableHead>
@@ -78,11 +106,27 @@ export function WorkbenchServicesTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map(({ service, metrics, issues, rank }) => (
-          <TableRow key={serviceKey(service.namespace, service.name)}>
+        {rows.map(({ service, metrics, issues, status }) => (
+          <TableRow
+            key={serviceKey(service.namespace, service.name)}
+            className={statusColumn ? STATUS_STYLES[status].row : undefined}
+          >
+            {statusColumn && (
+              <TableCell>
+                <Badge
+                  variant="outline"
+                  className={STATUS_STYLES[status].badge}
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${STATUS_STYLES[status].dot}`}
+                  />
+                  {t(`modelServing.workbench.status.${status}`)}
+                </Badge>
+              </TableCell>
+            )}
             <TableCell>
               <span className="flex items-center gap-1.5">
-                {rank < 2 && (
+                {!statusColumn && status !== 'ok' && (
                   <IconAlertTriangle
                     className="size-4 shrink-0 text-warning"
                     aria-label={t('modelServing.workbench.attention.title')}
