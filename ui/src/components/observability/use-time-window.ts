@@ -15,9 +15,13 @@ export type RefreshInterval = (typeof REFRESH_INTERVALS)[number]
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
 
-export function useTimeWindow(initialRange: TimeRangeKey = '1h') {
+export function useTimeWindow(
+  initialRange: TimeRangeKey = '1h',
+  initialRefresh: RefreshInterval = 30
+) {
   const [range, setRangeState] = useState<TimeRangeKey>(initialRange)
-  const [refreshSeconds, setRefreshSeconds] = useState<RefreshInterval>(30)
+  const [refreshSeconds, setRefreshSeconds] =
+    useState<RefreshInterval>(initialRefresh)
   const [end, setEnd] = useState(nowSeconds)
 
   useEffect(() => {

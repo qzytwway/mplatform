@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Pencil, Plus, Power, RotateCcw, Trash2 } from 'lucide-react'
+import {
+  LayoutTemplate,
+  Pencil,
+  Plus,
+  Power,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AlertRule, AlertState } from '@/lib/api/alerts'
@@ -32,6 +39,7 @@ const STATE_STYLES: Record<AlertState, string> = {
 
 export interface RuleActions {
   onCreate: () => void
+  onCreateFromTemplate: () => void
   onEdit: (rule: AlertRule) => void
   onDelete: (rule: AlertRule) => void
   onDisable: (rule: AlertRule) => void
@@ -154,7 +162,15 @@ export function AlertRulesTable({
           placeholder={t('observability.alerts.rules.filter')}
           className="max-w-sm"
         />
-        <Button className="ml-auto" onClick={actions.onCreate}>
+        <Button
+          variant="outline"
+          className="ml-auto"
+          onClick={actions.onCreateFromTemplate}
+        >
+          <LayoutTemplate />
+          {t('observability.alerts.templates.open')}
+        </Button>
+        <Button onClick={actions.onCreate}>
           <Plus />
           {t('observability.alerts.rules.create')}
         </Button>

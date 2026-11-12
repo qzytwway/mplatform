@@ -467,6 +467,12 @@
     "metrics": "Prometheus 指标",
     "logs": "日志",
     "alerts": "告警",
+    "alerting": "监控告警",
+    "activeAlerts": "活跃告警",
+    "alertHistory": "告警历史",
+    "alertRules": "告警规则",
+    "alertSilences": "静默",
+    "alertNotifications": "通知管理",
     "modelUsage": "用量",
     "platform": "平台"
   },
@@ -1778,12 +1784,6 @@
     "alerts": {
       "title": "告警",
       "counts": "{{firing}} 条正在触发 · {{pending}} 条待定",
-      "tabs": {
-        "active": "活动",
-        "rules": "规则",
-        "silences": "静默",
-        "notifications": "通知"
-      },
       "empty": "当前没有正在触发的告警",
       "emptyDescription": "{{count}} 条告警规则均未触发。",
       "silenced": "已静默",
@@ -1829,6 +1829,85 @@
         "submit": "创建静默",
         "created": "静默已创建",
         "failed": "静默创建失败"
+      },
+      "templates": {
+        "open": "从模板新建",
+        "title": "从模板新建规则",
+        "description": "选择模板后会在规则编辑器中打开，可以先调整阈值和持续时间再保存。在编辑器里点「预览」可以确认集群有没有模板需要的指标。",
+        "added": "已添加",
+        "categories": {
+          "gpu": "GPU",
+          "inference": "推理服务",
+          "workload": "工作负载",
+          "node": "节点"
+        },
+        "items": {
+          "GPUTemperatureHigh": {
+            "title": "GPU 温度过高",
+            "description": "GPU 温度持续 5 分钟高于 85°C。"
+          },
+          "GPUMemoryAlmostFull": {
+            "title": "GPU 显存将满",
+            "description": "GPU 显存使用率持续 10 分钟超过 95%。"
+          },
+          "GPUXidError": {
+            "title": "GPU XID 错误",
+            "description": "GPU 报告了 XID 错误，通常意味着驱动或硬件故障。"
+          },
+          "InferenceFirstTokenSlow": {
+            "title": "推理首 Token 过慢",
+            "description": "推理服务的 P95 首 Token 延迟持续 10 分钟超过 2 秒。"
+          },
+          "InferenceRequestsQueued": {
+            "title": "推理请求排队",
+            "description": "推理服务持续 5 分钟有超过 10 个请求在排队。"
+          },
+          "InferenceKVCacheFull": {
+            "title": "推理 KV Cache 将满",
+            "description": "推理 Pod 的 KV Cache 使用率持续 10 分钟超过 95%，新请求会排队或被抢占。"
+          },
+          "PodFrequentRestarts": {
+            "title": "Pod 频繁重启",
+            "description": "容器 15 分钟内重启超过 3 次。"
+          },
+          "ContainerOOMKilled": {
+            "title": "容器 OOM",
+            "description": "容器在最近 10 分钟内因内存不足被杀死后重启。"
+          },
+          "ContainerMemoryNearLimit": {
+            "title": "容器内存接近上限",
+            "description": "容器内存使用持续 5 分钟超过内存上限的 90%。"
+          },
+          "NodeCPUUsageHigh": {
+            "title": "节点 CPU 使用率高",
+            "description": "节点 CPU 使用率持续 15 分钟超过 90%。"
+          },
+          "NodeMemoryUsageHigh": {
+            "title": "节点内存使用率高",
+            "description": "节点内存使用率持续 15 分钟超过 90%。"
+          },
+          "NodeDiskUsageHigh": {
+            "title": "节点磁盘使用率高",
+            "description": "节点文件系统使用率持续 10 分钟超过 85%。"
+          }
+        }
+      },
+      "history": {
+        "description": "来自 Prometheus 记录的 ALERTS 指标，能查到 Prometheus 数据保留期内触发过的告警。",
+        "filter": "按名称、对象或标签过滤",
+        "allSeverities": "全部级别",
+        "allStatuses": "全部状态",
+        "status": {
+          "ongoing": "触发中",
+          "resolved": "已恢复"
+        },
+        "counts": "{{total}} 次告警 · {{ongoing}} 次仍在触发",
+        "start": "开始时间",
+        "duration": "持续时长",
+        "startedBefore": "时间范围开始时已在触发",
+        "resolvedAt": "恢复于 {{time}}",
+        "empty": "这段时间没有触发过告警",
+        "truncated": "只显示最近 {{count}} 次告警，缩小过滤条件或时间范围可以查看其他告警。"
       },
       "silences": {
         "showExpired": "显示已失效",
@@ -1892,7 +1971,7 @@
             "done": "已启用内置规则 {{name}}"
           }
         },
-        "mutingUnavailable": "内置规则通过 MPlatform 管理的 Alertmanager 配置停用。集群需要有 Alertmanager，并且要先在「通知」标签页保存一次通知设置。"
+        "mutingUnavailable": "内置规则通过 MPlatform 管理的 Alertmanager 配置停用。集群需要有 Alertmanager，并且要先在「通知管理」页面保存一次通知设置。"
       },
       "ruleEditor": {
         "title": {

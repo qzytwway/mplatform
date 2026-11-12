@@ -62,13 +62,20 @@ function initialRequest(rule?: AlertRule): AlertRuleRequest {
 interface AlertRuleDialogProps {
   mode: RuleEditorMode
   rule?: AlertRule
+  // Prefills a new rule, e.g. from a template.
+  initial?: AlertRuleRequest
   onClose: () => void
 }
 
-export function AlertRuleDialog({ mode, rule, onClose }: AlertRuleDialogProps) {
+export function AlertRuleDialog({
+  mode,
+  rule,
+  initial,
+  onClose,
+}: AlertRuleDialogProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [form, setForm] = useState(() => initialRequest(rule))
+  const [form, setForm] = useState(() => initial ?? initialRequest(rule))
   const [preview, setPreview] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   // A modified built-in rule keeps the alert name it replaces.

@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react'
 import { BellRing } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
 
 import { useAlertRules, useSilences } from '@/lib/api/alerts'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { AlertDetail } from '@/components/observability/alert-detail'
 import { AlertList } from '@/components/observability/alert-list'
 import { AlertNotificationsPanel } from '@/components/observability/alert-notifications-panel'
@@ -14,15 +12,17 @@ import { flattenAlerts } from '@/components/observability/alert-utils'
 import { ObservabilityUnavailable } from '@/components/observability/observability-unavailable'
 import { SilencesTable } from '@/components/observability/silences-table'
 
-const TABS = ['active', 'rules', 'silences', 'notifications'] as const
-type AlertsTab = (typeof TABS)[number]
+type AlertsView = 'active' | 'rules' | 'silences' | 'notifications'
 
-export function AlertsPage() {
+const TITLE_KEYS: Record<AlertsView, string> = {
+  active: 'nav.activeAlerts',
+  rules: 'nav.alertRules',
+  silences: 'nav.alertSilences',
+  notifications: 'nav.alertNotifications',
+}
+
+export function AlertsPage({ view }: { view: AlertsView }) {
   const { t } = useTranslation()
-  const [params, setParams] = useSearchParams()
-  const tab: AlertsTab = TABS.includes(params.get('tab') as AlertsTab)
-    ? (params.get('tab') as AlertsTab)
-    : 'active'
   const rulesQuery = useAlertRules()
   const silencesQuery = useSilences()
   const [selectedId, setSelectedId] = useState<string>()
@@ -33,11 +33,6 @@ export function AlertsPage() {
   const firing = alerts.filter((item) => item.alert.state === 'firing').length
   const pending = alerts.length - firing
   const selected = alerts.find((item) => item.id === selectedId) ?? alerts[0]
-
-  const setTab = (next: string) => {
-    if (!next) return
-    setParams(next === 'active' ? {} : { tab: next }, { replace: true })
-  }
 
   const renderActive = () => {
     if (rulesQuery.isLoading) return <Skeleton className="h-96 w-full" />
@@ -78,31 +73,16 @@ export function AlertsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold">
-          {t('observability.alerts.title')}
-        </h1>
-        {rulesQuery.data && (
+        <h1 className="text-2xl font-bold">{t(TITLE_KEYS[view])}</h1>
+        {view === 'active' && rulesQuery.data && (
           <span className="text-sm text-muted-foreground">
             {t('observability.alerts.counts', { firing, pending })}
           </span>
         )}
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          value={tab}
-          onValueChange={setTab}
-          className="ml-auto"
-        >
-          {TABS.map((value) => (
-            <ToggleGroupItem key={value} value={value} className="px-3">
-              {t(`observability.alerts.tabs.${value}`)}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
       </div>
 
-      {tab === 'active' && renderActive()}
-      {tab === 'rules' &&
+      {view === 'active' && renderActive()}
+      {view === 'rules' &&
         (rulesQuery.error ? (
           <ObservabilityUnavailable
             kind="prometheus"
@@ -113,7 +93,7 @@ export function AlertsPage() {
         ) : (
           <AlertRulesPanel rules={rules} />
         ))}
-      {tab === 'silences' &&
+      {view === 'silences' &&
         (silencesQuery.error ? (
           <ObservabilityUnavailable
             kind="alertmanager"
@@ -124,7 +104,7 @@ export function AlertsPage() {
         ) : (
           <SilencesTable silences={silences} />
         ))}
-      {tab === 'notifications' && <AlertNotificationsPanel />}
+      {view === 'notifications' && <AlertNotificationsPanel />}
     </div>
   )
 }

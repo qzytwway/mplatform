@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -7,6 +7,7 @@ import {
   deleteAlertRule,
   setBuiltinRuleEnabled,
   type AlertRule,
+  type AlertRuleRequest,
 } from '@/lib/api/alerts'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { AlertRuleDialog, type RuleEditorMode } from './alert-rule-dialog'
+import { AlertRuleTemplateDialog } from './alert-rule-template-dialog'
 import { AlertRulesTable } from './alert-rules-table'
 import { isMutingUnavailable } from './alert-utils'
 
@@ -39,7 +41,13 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
   const [editor, setEditor] = useState<{
     mode: RuleEditorMode
     rule?: AlertRule
+    initial?: AlertRuleRequest
   } | null>(null)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const ruleNames = useMemo(
+    () => new Set(rules.map((rule) => rule.name)),
+    [rules]
+  )
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null)
   const [isWorking, setIsWorking] = useState(false)
 
@@ -76,6 +84,7 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
         rules={rules}
         actions={{
           onCreate: () => setEditor({ mode: 'create' }),
+          onCreateFromTemplate: () => setTemplatesOpen(true),
           onEdit: (rule) =>
             setEditor({
               mode: rule.source === 'builtin' ? 'override' : 'edit',
@@ -93,10 +102,21 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
             setConfirm({ kind: 'enable', alert: rule.name, rule }),
         }}
       />
+      {templatesOpen && (
+        <AlertRuleTemplateDialog
+          existingNames={ruleNames}
+          onSelect={(initial) => {
+            setTemplatesOpen(false)
+            setEditor({ mode: 'create', initial })
+          }}
+          onClose={() => setTemplatesOpen(false)}
+        />
+      )}
       {editor && (
         <AlertRuleDialog
           mode={editor.mode}
           rule={editor.rule}
+          initial={editor.initial}
           onClose={() => setEditor(null)}
         />
       )}
