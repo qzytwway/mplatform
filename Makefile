@@ -1,12 +1,10 @@
 # Makefile for MPlatform project
-.PHONY: help dev build clean test docker-build docker-run frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed e2e-model-serving-install-browser e2e-model-serving-up e2e-model-serving-run e2e-model-serving-down
+.PHONY: help dev build clean test frontend backend gpu-operator-chart install deps e2e-install e2e-install-browser e2e-kind-up e2e-kind-down e2e-stop-app e2e-setup-ldap e2e-setup-dex e2e-run e2e-run-headed e2e-test e2e-test-headed e2e-model-serving-install-browser e2e-model-serving-up e2e-model-serving-run e2e-model-serving-down
 
 # Variables
 BINARY_NAME=mplatform
 UI_DIR=ui
 E2E_DIR=e2e
-DOCKER_IMAGE=mplatform
-DOCKER_TAG=latest
 E2E_KIND_NAME ?= mplatform-e2e
 E2E_PORT ?= 38080
 E2E_KUBECONFIG ?= $(shell printf '%s' "$${TMPDIR:-/tmp/}mplatform-e2e.kubeconfig")
@@ -47,7 +45,6 @@ LDFLAGS=-ldflags "-s -w \
 
 # Default target
 .DEFAULT_GOAL := build
-DOCKER_TAG=latest
 
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
