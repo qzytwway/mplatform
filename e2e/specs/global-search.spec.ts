@@ -5,7 +5,7 @@ test('admin can open global search and jump to the cluster settings tab', async 
 }) => {
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Workbench' })).toBeVisible()
 
   await page.getByRole('button', { name: /Search resources/i }).click()
 

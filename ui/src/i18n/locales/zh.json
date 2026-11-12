@@ -459,6 +459,7 @@
     "helmCharts": "App Catalog",
     "observability": "可观测性",
     "modelServing": "模型服务",
+    "workbench": "工作台",
     "inferenceServices": "推理服务",
     "gateway": "网关",
     "modelRegistry": "模型仓库",
@@ -2551,6 +2552,32 @@
       "inputTokens": "输入 Token",
       "outputTokens": "输出 Token",
       "avgDuration": "平均耗时"
+    },
+    "workbench": {
+      "title": "工作台",
+      "servicesReady": "推理服务就绪",
+      "allReady": "全部就绪",
+      "notReady": "{{count}} 个未就绪",
+      "gpuAllocated": "GPU 已分配",
+      "gpuIdle": "已分配 {{percent}}% · 空闲 {{count}} 张",
+      "vgpuAllocated": "vGPU {{allocated}} / {{capacity}}",
+      "vgpuOnly": "vGPU · 已分配 {{percent}}%",
+      "noGPUs": "未发现 GPU 节点",
+      "tokens": "Token 用量",
+      "tokensDetail": "输入 {{input}} · 输出 {{output}}",
+      "requests": "请求数",
+      "avgDuration": "平均耗时 {{value}}",
+      "ttft": "P95 首 Token 延迟",
+      "ttftHint": "统计所有推理服务 Pod",
+      "noData": "暂无数据",
+      "modelRanking": "模型 Token 排行",
+      "viewUsage": "查看用量",
+      "viewServices": "全部服务",
+      "callerLimits": "调用方限流",
+      "callerLimitsHint": "最近一分钟 Token 与每分钟上限",
+      "nearLimit": "接近上限",
+      "disabled": "已停用",
+      "viewGateway": "网关"
     }
   }
 }

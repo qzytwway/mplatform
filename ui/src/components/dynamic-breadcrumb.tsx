@@ -24,7 +24,8 @@ export function DynamicBreadcrumb() {
   const generateBreadcrumbs = (): BreadcrumbSegment[] => {
     const breadcrumbs: BreadcrumbSegment[] = []
 
-    if (pathSegments.length === 0) {
+    // /dashboard is the overview that / shows to everyone but admins.
+    if (pathSegments.length === 0 || location.pathname === '/dashboard') {
       return breadcrumbs
     }
 

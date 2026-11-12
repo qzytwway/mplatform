@@ -6,7 +6,7 @@ test.describe('auth session', () => {
   test('logout returns to login', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Workbench' })).toBeVisible()
 
     await page.locator('header').getByRole('button').last().click()
     await page.getByRole('menuitem', { name: 'Log out' }).click()
@@ -32,7 +32,7 @@ test.describe('password login', () => {
     await page.getByLabel('Password', { exact: true }).fill(adminUser.password)
     await page.getByRole('button', { name: 'Sign In with Password' }).click()
 
-    await page.waitForURL((url) => url.pathname === '/')
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+    await page.waitForURL((url) => url.pathname === '/model-serving/overview')
+    await expect(page.getByRole('heading', { name: 'Workbench' })).toBeVisible()
   })
 })

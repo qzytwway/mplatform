@@ -58,6 +58,11 @@ const OBSERVABILITY_ITEMS = [
 
 const MODEL_SERVING_ITEMS = [
   {
+    url: '/model-serving/overview',
+    titleKey: 'nav.workbench',
+    Icon: IconLayoutDashboard,
+  },
+  {
     url: '/model-serving/services',
     titleKey: 'nav.inferenceServices',
     Icon: IconRocket,
@@ -492,10 +497,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       <SidebarMenuButton
                         tooltip={t('nav.overview')}
                         asChild
-                        isActive={isActive('/')}
+                        isActive={
+                          location.pathname === '/' ||
+                          location.pathname === '/dashboard'
+                        }
                         className={leafItemClass}
                       >
-                        <Link to="/" onClick={handleMenuItemClick}>
+                        <Link to="/dashboard" onClick={handleMenuItemClick}>
                           <IconLayoutDashboard className="opacity-70" />
                           <span>{t('nav.overview')}</span>
                         </Link>

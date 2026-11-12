@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom'
 
 import App, { StandaloneAIChatApp } from './App'
+import { HomeRoute } from './components/home-route'
 import { InitCheckRoute } from './components/init-check-route'
 import { ProtectedRoute } from './components/protected-route'
 import { getSubPath } from './lib/subpath'
@@ -24,6 +25,7 @@ import { ServiceScalePage } from './pages/model-serving/service-scale-page'
 import { ServicesPage } from './pages/model-serving/services-page'
 import { StorageConfigPage } from './pages/model-serving/storage-config-page'
 import { UsagePage } from './pages/model-serving/usage-page'
+import { WorkbenchPage } from './pages/model-serving/workbench-page'
 import { AlertsPage } from './pages/observability/alerts-page'
 import { LogsPage } from './pages/observability/logs-page'
 import { MetricsDashboardPage } from './pages/observability/metrics-dashboard-page'
@@ -74,7 +76,7 @@ export const router = createBrowserRouter(
       children: [
         {
           index: true,
-          element: <Overview />,
+          element: <HomeRoute />,
         },
         {
           path: 'dashboard',
@@ -111,6 +113,10 @@ export const router = createBrowserRouter(
         {
           path: 'observability/alerts',
           element: <AlertsPage />,
+        },
+        {
+          path: 'model-serving/overview',
+          element: <WorkbenchPage />,
         },
         {
           path: 'model-serving/services',

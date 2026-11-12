@@ -84,8 +84,7 @@ async function loginFreshContext(
 
   await page.goto(`${origin}/login`)
   await loginWithPasswordUi(page, username, password)
-  await page.waitForURL((url) => url.pathname === '/')
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  await expectHomePage(page)
 
   return { context, page }
 }
@@ -112,8 +111,17 @@ async function loginCurrentContext(
 ) {
   await page.goto(`${origin}/login`)
   await loginWithPasswordUi(page, username, password)
-  await page.waitForURL((url) => url.pathname === '/')
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  await expectHomePage(page)
+}
+
+// Admins land on the model serving workbench, everyone else on the overview.
+async function expectHomePage(page: Page) {
+  await page.waitForURL((url) =>
+    ['/', '/model-serving/overview'].includes(url.pathname)
+  )
+  await expect(
+    page.getByRole('heading', { name: /^(Overview|Workbench)$/ })
+  ).toBeVisible()
 }
 
 test('password user lifecycle and built-in roles', async ({

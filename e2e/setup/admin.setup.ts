@@ -26,8 +26,8 @@ test('bootstrap a reusable admin session', async ({ page }) => {
   await page.getByLabel(/^Kubeconfig File \*$/).fill(kubeconfig)
   await page.getByRole('button', { name: 'Connect cluster' }).click()
 
-  await page.waitForURL((url) => url.pathname === '/')
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  await page.waitForURL((url) => url.pathname === '/model-serving/overview')
+  await expect(page.getByRole('heading', { name: 'Workbench' })).toBeVisible()
 
   ensureAuthDir()
   await page.context().storageState({ path: authFile })

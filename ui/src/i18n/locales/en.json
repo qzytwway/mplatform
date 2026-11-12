@@ -459,6 +459,7 @@
     "helmCharts": "App Catalog",
     "observability": "Observability",
     "modelServing": "Model Serving",
+    "workbench": "Workbench",
     "inferenceServices": "Inference Services",
     "gateway": "Gateway",
     "modelRegistry": "Model Registry",
@@ -2551,6 +2552,32 @@
       "inputTokens": "Input tokens",
       "outputTokens": "Output tokens",
       "avgDuration": "Avg. duration"
+    },
+    "workbench": {
+      "title": "Workbench",
+      "servicesReady": "Services ready",
+      "allReady": "All ready",
+      "notReady": "{{count}} not ready",
+      "gpuAllocated": "GPUs allocated",
+      "gpuIdle": "{{percent}}% allocated · {{count}} idle",
+      "vgpuAllocated": "vGPU {{allocated}} / {{capacity}}",
+      "vgpuOnly": "vGPU · {{percent}}% allocated",
+      "noGPUs": "No GPU nodes",
+      "tokens": "Tokens",
+      "tokensDetail": "Input {{input}} · Output {{output}}",
+      "requests": "Requests",
+      "avgDuration": "Avg. duration {{value}}",
+      "ttft": "P95 time to first token",
+      "ttftHint": "Across all inference service pods",
+      "noData": "No data",
+      "modelRanking": "Tokens by model",
+      "viewUsage": "View usage",
+      "viewServices": "All services",
+      "callerLimits": "Caller rate limits",
+      "callerLimitsHint": "Tokens in the last minute against the limit",
+      "nearLimit": "Near limit",
+      "disabled": "Disabled",
+      "viewGateway": "Gateway"
     }
   }
 }
