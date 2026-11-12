@@ -12,6 +12,19 @@
 
 MPlatform 是一个轻量的 Kubernetes 管理平台，后端用 Go，前端用 React，打包成单个二进制或镜像即可运行。它把多集群运维、可观测性、权限管理和大模型推理部署放进同一个 Web 控制台：工程师可以在界面上完成从接入集群、准备 GPU，到部署 vLLM / SGLang 推理服务、对外发布接口的全过程，不需要手写 YAML。
 
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/workbench-issues-first.png" alt="模型服务工作台的问题优先布局"></td>
+    <td width="33%"><img src="docs/images/prometheus-metrics.png" alt="Prometheus 监控面板"></td>
+    <td width="33%"><img src="docs/images/logs.png" alt="日志检索"></td>
+  </tr>
+  <tr>
+    <td align="center">问题优先工作台（原型图）</td>
+    <td align="center">Prometheus 监控面板</td>
+    <td align="center">日志检索</td>
+  </tr>
+</table>
+
 ## 功能
 
 ### 集群管理
