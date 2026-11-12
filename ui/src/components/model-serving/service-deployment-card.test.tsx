@@ -174,4 +174,40 @@ describe('ServiceDeploymentCard', () => {
       ).toBe(transfer)
     }
   )
+
+  it('shows where the pods are placed only when they are', () => {
+    const placed: PodConfig = {
+      ...POD,
+      nodeSelector: { gpu: 'h100' },
+      tolerations: [
+        { key: 'nvidia.com/gpu', operator: 'Exists', effect: 'NoSchedule' },
+      ],
+      priorityClassName: 'inference',
+    }
+    const { unmount } = render(
+      <ServiceDeploymentCard
+        config={{
+          ...CONFIG,
+          roles: [{ name: 'default', replicas: 1, pods: [placed] }],
+        }}
+        mode="single"
+      />
+    )
+
+    expect(
+      screen.getByText('modelServing.services.nodeSelector: gpu=h100')
+    ).toBeVisible()
+    expect(
+      screen.getByText(
+        'modelServing.services.tolerations: nvidia.com/gpu:NoSchedule'
+      )
+    ).toBeVisible()
+    expect(
+      screen.getByText('modelServing.services.priorityClass: inference')
+    ).toBeVisible()
+
+    unmount()
+    render(<ServiceDeploymentCard config={CONFIG} mode="single" />)
+    expect(screen.queryByText('modelServing.services.scheduling')).toBeNull()
+  })
 })

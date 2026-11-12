@@ -1,6 +1,7 @@
 package modelserving
 
 import (
+	"encoding/json"
 	"slices"
 	"testing"
 
@@ -157,7 +158,7 @@ func TestBuildLeaderWorkerSetSingleNode(t *testing.T) {
 			}
 			// Extra arguments come last so they override the defaults.
 			assert.Equal(t, []string{"--max-model-len", "8192"}, container.Args[len(container.Args)-2:])
-			assert.NotNil(t, container.ReadinessProbe)
+			assertHealthProbes(t, container)
 			assert.False(t, pod.Spec.HostNetwork)
 			assert.Nil(t, container.SecurityContext)
 		})
@@ -236,10 +237,103 @@ func TestBuildLeaderWorkerSetMultiNode(t *testing.T) {
 			for _, flag := range tt.workerAbsent {
 				assert.NotContains(t, worker.Spec.Containers[0].Args, flag)
 			}
-			assert.NotNil(t, leader.Spec.Containers[0].ReadinessProbe)
+			assertHealthProbes(t, leader.Spec.Containers[0])
 			assert.Nil(t, worker.Spec.Containers[0].ReadinessProbe)
+			assert.Nil(t, worker.Spec.Containers[0].LivenessProbe)
 		})
 	}
+}
+
+func TestSchedulingReachesInferencePods(t *testing.T) {
+	tolerateGPU := corev1.Toleration{Key: "nvidia.com/gpu", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule}
+	tolerateDecode := corev1.Toleration{Key: "pool", Operator: corev1.TolerationOpEqual, Value: "decode"}
+
+	t.Run("a pinned node joins the node selector", func(t *testing.T) {
+		body := singleBody()
+		body.NodeName = "gpu-1"
+		// The pinned node wins over a hostname in the selector.
+		body.NodeSelector = map[string]string{"gpu": "h100", corev1.LabelHostname: "gpu-2"}
+		body.Tolerations = []corev1.Toleration{tolerateGPU}
+		body.PriorityClassName = "inference"
+		req := parseTestRequest(t, body)
+
+		workload, err := buildLeaderWorkerSet(&req, chatModel(), nil)
+
+		require.NoError(t, err)
+		_, pod := groupPods(t, lwsTemplate(t, workload))
+		assert.Equal(t, map[string]string{"gpu": "h100", corev1.LabelHostname: "gpu-1"}, pod.Spec.NodeSelector)
+		assert.Equal(t, []corev1.Toleration{tolerateGPU}, pod.Spec.Tolerations)
+		assert.Equal(t, "inference", pod.Spec.PriorityClassName)
+	})
+
+	t.Run("every node of a group is placed alike", func(t *testing.T) {
+		body := multiBody()
+		body.NodeSelector = map[string]string{"gpu": "h100"}
+		body.Tolerations = []corev1.Toleration{tolerateGPU}
+		req := parseTestRequest(t, body)
+
+		workload, err := buildLeaderWorkerSet(&req, chatModel(), nil)
+
+		require.NoError(t, err)
+		leader, worker := groupPods(t, lwsTemplate(t, workload))
+		require.NotNil(t, leader)
+		for _, pod := range []*corev1.PodTemplateSpec{leader, worker} {
+			assert.Equal(t, map[string]string{"gpu": "h100"}, pod.Spec.NodeSelector)
+			assert.Equal(t, []corev1.Toleration{tolerateGPU}, pod.Spec.Tolerations)
+		}
+	})
+
+	t.Run("pd roles add to the service's placement", func(t *testing.T) {
+		body := pdBody()
+		body.NodeSelector = map[string]string{"gpu": "h100", "zone": "a"}
+		body.Tolerations = []corev1.Toleration{tolerateGPU}
+		body.PriorityClassName = "inference"
+		body.PD.Prefill.NodeSelector = map[string]string{"gpu": "h800"}
+		body.PD.Decode.Tolerations = []corev1.Toleration{tolerateDecode}
+		req := parseTestRequest(t, body)
+
+		workload, err := buildDisaggregatedSet(&req, chatModel(), nil)
+
+		require.NoError(t, err)
+		_, prefill := pdRoleTemplate(t, workload, rolePrefill)
+		_, prefillPod := groupPods(t, prefill)
+		assert.Equal(t, map[string]string{"gpu": "h800", "zone": "a"}, prefillPod.Spec.NodeSelector)
+		assert.Equal(t, []corev1.Toleration{tolerateGPU}, prefillPod.Spec.Tolerations)
+		assert.Equal(t, "inference", prefillPod.Spec.PriorityClassName)
+		_, decode := pdRoleTemplate(t, workload, roleDecode)
+		_, decodePod := groupPods(t, decode)
+		assert.Equal(t, map[string]string{"gpu": "h100", "zone": "a"}, decodePod.Spec.NodeSelector)
+		assert.Equal(t, []corev1.Toleration{tolerateGPU, tolerateDecode}, decodePod.Spec.Tolerations)
+		assert.Equal(t, "inference", decodePod.Spec.PriorityClassName)
+		// The router needs no GPU node, but must not lose its place to the
+		// engines it routes to.
+		router := routerDeployment(t, &req)
+		assert.Empty(t, router.Spec.Template.Spec.NodeSelector)
+		assert.Equal(t, []corev1.Toleration{tolerateGPU}, router.Spec.Template.Spec.Tolerations)
+		assert.Equal(t, "inference", router.Spec.Template.Spec.PriorityClassName)
+	})
+}
+
+// assertHealthProbes checks that a serving container is started, routed to
+// and restarted by its /health, within a timeout its runtime's health check
+// fits in. The container is named after its runtime.
+func assertHealthProbes(t *testing.T, container corev1.Container) {
+	t.Helper()
+	health := &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(servingPort)}
+	timeout := int32(vllmHealthTimeoutSeconds)
+	if container.Name == runtimeSGLang {
+		timeout = sglangHealthTimeoutSeconds
+	}
+	for name, probe := range map[string]*corev1.Probe{
+		"startup":   container.StartupProbe,
+		"readiness": container.ReadinessProbe,
+		"liveness":  container.LivenessProbe,
+	} {
+		require.NotNil(t, probe, name)
+		assert.Equal(t, health, probe.HTTPGet, name)
+		assert.Equal(t, timeout, probe.TimeoutSeconds, name)
+	}
+	assert.Equal(t, int32(livenessFailureThreshold), container.LivenessProbe.FailureThreshold)
 }
 
 func TestBuildLeaderWorkerSetRDMA(t *testing.T) {
@@ -824,8 +918,10 @@ func TestWorkloadAnnotations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := parseTestRequest(t, tt.body)
 
-			annotations := workloadMeta(&req, chatModel()).Annotations
+			meta, err := workloadMeta(&req, chatModel())
 
+			require.NoError(t, err)
+			annotations := meta.Annotations
 			assert.Equal(t, req.Mode, annotations[modeAnnotation])
 			for _, key := range []string{rdmaAnnotation, transferBackendAnnotation, ibDevicesAnnotation, routerPolicyAnnotation} {
 				want, ok := tt.want[key]
@@ -835,6 +931,50 @@ func TestWorkloadAnnotations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkloadRecordsItsRequest(t *testing.T) {
+	recorded := func(t *testing.T, req *serviceRequest) serviceRequest {
+		t.Helper()
+		meta, err := workloadMeta(req, chatModel())
+		require.NoError(t, err)
+		var got serviceRequest
+		require.NoError(t, json.Unmarshal([]byte(meta.Annotations[requestAnnotation]), &got))
+		return got
+	}
+
+	t.Run("as parsed", func(t *testing.T) {
+		body := multiBody()
+		body.Env = []envVar{{Name: "HF_TOKEN", Value: "hf_abc"}}
+		body.NodeSelector = map[string]string{"gpu": "h100"}
+		req := parseTestRequest(t, body)
+
+		assert.Equal(t, req, recorded(t, &req))
+	})
+
+	t.Run("a defaulted router image follows the service image", func(t *testing.T) {
+		body := pdBody()
+		body.PD.RouterImage = ""
+		req := parseTestRequest(t, body)
+		require.Equal(t, req.Image, req.PD.RouterImage)
+
+		got := recorded(t, &req)
+
+		assert.Empty(t, got.PD.RouterImage)
+		got.Image = "my/sglang:next"
+		edited := parseTestRequest(t, got)
+		assert.Equal(t, "my/sglang:next", edited.PD.RouterImage)
+		// The parsed request itself is left as it was.
+		assert.Equal(t, req.Image, req.PD.RouterImage)
+	})
+
+	t.Run("a router image of its own is kept", func(t *testing.T) {
+		body := pdBody()
+		body.PD.RouterImage = "my/router:1"
+		req := parseTestRequest(t, body)
+
+		assert.Equal(t, "my/router:1", recorded(t, &req).PD.RouterImage)
+	})
 }
 
 func TestMergeEnv(t *testing.T) {

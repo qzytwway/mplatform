@@ -61,6 +61,10 @@ type podConfig struct {
 	Privileged  bool               `json:"privileged"`
 	IPCLock     bool               `json:"ipcLock"`
 	Networks    string             `json:"networks,omitempty"`
+	// Where the pods are placed.
+	NodeSelector      map[string]string   `json:"nodeSelector,omitempty"`
+	Tolerations       []corev1.Toleration `json:"tolerations,omitempty"`
+	PriorityClassName string              `json:"priorityClassName,omitempty"`
 }
 
 // configEnvVar is a container variable as shown: ValueFrom describes where a
@@ -166,6 +170,10 @@ func readPodConfig(role string, template *corev1.PodTemplateSpec) podConfig {
 		Resources:   []resourceQuantity{},
 		HostNetwork: template.Spec.HostNetwork,
 		Networks:    template.Annotations[multusAnnotation],
+
+		NodeSelector:      template.Spec.NodeSelector,
+		Tolerations:       template.Spec.Tolerations,
+		PriorityClassName: template.Spec.PriorityClassName,
 	}
 	if len(template.Spec.Containers) == 0 {
 		return pod

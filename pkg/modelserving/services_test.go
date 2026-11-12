@@ -20,6 +20,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -44,14 +46,18 @@ func (clusters testClusters) GetClientSet(name string) (*cluster.ClientSet, erro
 	return cs, nil
 }
 
-// newFakeClientSet knows Deployments, CRDs and, as unstructured objects, the
-// LeaderWorkerSet and DisaggregatedSet kinds.
+// newFakeClientSet knows Deployments, Secrets, PriorityClasses, CRDs and, as
+// unstructured objects, the LeaderWorkerSet and DisaggregatedSet kinds.
 func newFakeClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.Object) *cluster.ClientSet {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, schedulingv1.AddToScheme(scheme))
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme))
 	mapper := meta.NewDefaultRESTMapper(nil)
+	mapper.Add(corev1.SchemeGroupVersion.WithKind("Secret"), meta.RESTScopeNamespace)
+	mapper.Add(schedulingv1.SchemeGroupVersion.WithKind("PriorityClass"), meta.RESTScopeRoot)
 	for _, gvk := range []schema.GroupVersionKind{lwsGVK, disaggregatedSetGVK} {
 		scheme.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})
 		scheme.AddKnownTypeWithName(gvk.GroupVersion().WithKind(gvk.Kind+"List"), &unstructured.UnstructuredList{})

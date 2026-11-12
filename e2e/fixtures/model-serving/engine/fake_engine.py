@@ -40,6 +40,10 @@ FAILURE_REPORT_ATTEMPTS = 5
 CONNECT_TIMEOUT_SECONDS = 5
 # vLLM's NixlConnector serves its handshake here unless told otherwise.
 NIXL_SIDE_CHANNEL_PORT = 5600
+# SGLang's /health generates a token and answers after a second at the least.
+SGLANG_HEALTH_SECONDS = 1.5
+# Tests make a server fail its health check by creating this file in its pod.
+UNHEALTHY_FILE = "/tmp/fake-engine-unhealthy"
 LATENCY_BUCKETS = ("0.1", "0.5", "1.0", "5.0", "+Inf")
 # Variables the platform, LeaderWorkerSet or the tests set; the rest of the
 # environment is the image's and stays out of the log.
@@ -272,7 +276,11 @@ def handler_for(engine, server_name):
             if server_name == "bootstrap":
                 self.reply(200, {"status": "ok"})
             elif path == "/health":
-                if engine.ready():
+                if engine.info["runtime"] == "sglang":
+                    time.sleep(SGLANG_HEALTH_SECONDS)
+                if os.path.exists(UNHEALTHY_FILE):
+                    self.reply(503, {"status": "unhealthy"})
+                elif engine.ready():
                     self.reply(200, {"status": "ok"})
                 else:
                     self.reply(503, {"status": "waiting for nodes"})

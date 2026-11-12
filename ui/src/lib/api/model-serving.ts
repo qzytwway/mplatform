@@ -103,6 +103,8 @@ export interface InferenceServiceDetail extends InferenceService {
   // Set on single and multi-node services created before their
   // LeaderWorkerSet got a headless Service per group; they never get ready.
   sharedSubdomain?: boolean
+  // False for services created before their request was recorded.
+  editable?: boolean
 }
 
 // DeploymentConfig is read back from the pod templates of a service's
@@ -136,6 +138,9 @@ export interface PodConfig {
   privileged: boolean
   ipcLock: boolean
   networks?: string
+  nodeSelector?: Record<string, string>
+  tolerations?: Toleration[]
+  priorityClassName?: string
 }
 
 // valueFrom describes where a variable without a value gets one, such as
@@ -190,6 +195,22 @@ export interface CreateInferenceServiceRequest {
   }
   vgpu?: VGPUSpec
   rdma?: RDMARequest
+  // Place the inference pods; PD roles add their own.
+  nodeSelector?: Record<string, string>
+  tolerations?: Toleration[]
+  priorityClassName?: string
+}
+
+export type TaintEffect = 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute'
+
+// A Kubernetes toleration: an empty operator means Equal, an empty effect
+// matches every effect.
+export interface Toleration {
+  key?: string
+  operator?: 'Equal' | 'Exists'
+  value?: string
+  effect?: TaintEffect | ''
+  tolerationSeconds?: number
 }
 
 export type TransferBackend = 'mooncake' | 'mooncake-tcp' | 'nixl'
@@ -201,7 +222,8 @@ export type RouterPolicy =
 export type RDMAMode = 'device-plugin' | 'host'
 
 // Empty image, cpu and memory keep the service's; env follows the service's
-// and overrides variables of the same name.
+// and overrides variables of the same name, nodeSelector overrides labels of
+// the same key and tolerations add to the service's.
 export interface PDRoleRequest {
   replicas: number
   groupSize: number
@@ -211,6 +233,8 @@ export interface PDRoleRequest {
   cpu?: string
   memory?: string
   env?: EnvVar[]
+  nodeSelector?: Record<string, string>
+  tolerations?: Toleration[]
 }
 
 export interface RDMARequest {
@@ -387,6 +411,32 @@ export function createInferenceService(
 ) {
   return apiClient.post<InferenceService>(
     clusterPath(cluster, '/services'),
+    request
+  )
+}
+
+// The request a service was created or last edited with, with its current
+// replicas, which the edit form starts from.
+export function getInferenceServiceRequest(
+  cluster: string,
+  namespace: string,
+  name: string
+) {
+  return apiClient.get<CreateInferenceServiceRequest>(
+    `${servicePath(cluster, namespace, name)}/request`
+  )
+}
+
+// Name, namespace, runtime, mode and model stay as they are, and so do the
+// replicas, which scaling changes.
+export function updateInferenceService(
+  cluster: string,
+  namespace: string,
+  name: string,
+  request: CreateInferenceServiceRequest
+) {
+  return apiClient.put<InferenceService>(
+    servicePath(cluster, namespace, name),
     request
   )
 }

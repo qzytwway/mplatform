@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { DetailItem } from './detail-item'
+import { formatToleration } from './service-form'
 
 // Long values wrap rather than widen the card; the lines a command is laid
 // out in stay.
@@ -134,6 +135,24 @@ function PodConfigView({ pod }: { pod: PodConfig }) {
     pod.privileged && t('modelServing.deployment.privileged'),
     pod.ipcLock && 'IPC_LOCK',
   ].filter((item): item is string => !!item)
+  const placement = [
+    ...Object.entries(pod.nodeSelector ?? {}).map(([key, value]) => ({
+      label: t('modelServing.services.nodeSelector'),
+      value: `${key}=${value}`,
+    })),
+    ...(pod.tolerations ?? []).map((item) => ({
+      label: t('modelServing.services.tolerations'),
+      value: formatToleration(item),
+    })),
+    ...(pod.priorityClassName
+      ? [
+          {
+            label: t('modelServing.services.priorityClass'),
+            value: pod.priorityClassName,
+          },
+        ]
+      : []),
+  ]
   const formatResource = ({ request, limit }: ResourceQuantity) => {
     if (!limit) return t('modelServing.deployment.requestOnly', { request })
     if (request && request !== limit)
@@ -175,6 +194,21 @@ function PodConfigView({ pod }: { pod: PodConfig }) {
               {settings.map((item) => (
                 <Badge key={item} variant="secondary">
                   {item}
+                </Badge>
+              ))}
+            </div>
+          </DetailItem>
+        )}
+        {placement.length > 0 && (
+          <DetailItem label={t('modelServing.services.scheduling')}>
+            <div className="flex flex-wrap gap-1">
+              {placement.map(({ label, value }) => (
+                <Badge
+                  key={`${label}:${value}`}
+                  variant="outline"
+                  className="font-mono font-normal break-all whitespace-normal"
+                >
+                  {label}: {value}
                 </Badge>
               ))}
             </div>

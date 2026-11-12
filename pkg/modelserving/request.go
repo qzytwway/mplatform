@@ -9,6 +9,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/qzytwway/mplatform/pkg/model"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
@@ -43,6 +44,11 @@ type serviceRequest struct {
 	// VGPU asks HAMi for GPUCount vGPUs; without it the pods get whole GPUs.
 	VGPU *vgpuRequest `json:"vgpu"`
 	RDMA *rdmaRequest `json:"rdma"`
+	// NodeSelector, Tolerations and PriorityClassName place the inference
+	// pods; the router of a pd service runs anywhere.
+	NodeSelector      map[string]string   `json:"nodeSelector"`
+	Tolerations       []corev1.Toleration `json:"tolerations"`
+	PriorityClassName string              `json:"priorityClassName"`
 }
 
 type envVar struct {
@@ -80,17 +86,20 @@ type pdRequest struct {
 	RouterPolicy string `json:"routerPolicy"`
 }
 
-// pdRoleRequest sizes one pd role. Its extraArgs and env follow the service's
-// and override them; an empty image, cpu or memory keeps the service's.
+// pdRoleRequest sizes one pd role. Its extraArgs, env, nodeSelector and
+// tolerations follow the service's and override them; an empty image, cpu or
+// memory keeps the service's.
 type pdRoleRequest struct {
-	Replicas  int32    `json:"replicas"`
-	GroupSize int32    `json:"groupSize"`
-	GPUCount  int64    `json:"gpuCount"`
-	ExtraArgs []string `json:"extraArgs"`
-	Image     string   `json:"image"`
-	CPU       string   `json:"cpu"`
-	Memory    string   `json:"memory"`
-	Env       []envVar `json:"env"`
+	Replicas     int32               `json:"replicas"`
+	GroupSize    int32               `json:"groupSize"`
+	GPUCount     int64               `json:"gpuCount"`
+	ExtraArgs    []string            `json:"extraArgs"`
+	Image        string              `json:"image"`
+	CPU          string              `json:"cpu"`
+	Memory       string              `json:"memory"`
+	Env          []envVar            `json:"env"`
+	NodeSelector map[string]string   `json:"nodeSelector"`
+	Tolerations  []corev1.Toleration `json:"tolerations"`
 }
 
 // scaleRequest leaves the router of a pd service as it is when RouterReplicas
@@ -108,23 +117,26 @@ var routerPolicies = []string{"cache_aware", "power_of_two", "round_robin", "ran
 
 func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	req := serviceRequest{
-		Name:      strings.TrimSpace(body.Name),
-		Namespace: strings.TrimSpace(body.Namespace),
-		ModelID:   body.ModelID,
-		Runtime:   body.Runtime,
-		Image:     strings.TrimSpace(body.Image),
-		Mode:      body.Mode,
-		Replicas:  body.Replicas,
-		GroupSize: body.GroupSize,
-		GPUCount:  body.GPUCount,
-		CPU:       strings.TrimSpace(body.CPU),
-		Memory:    strings.TrimSpace(body.Memory),
-		NodeName:  strings.TrimSpace(body.NodeName),
-		ExtraArgs: body.ExtraArgs,
-		Env:       body.Env,
-		PD:        body.PD,
-		VGPU:      body.VGPU,
-		RDMA:      body.RDMA,
+		Name:              strings.TrimSpace(body.Name),
+		Namespace:         strings.TrimSpace(body.Namespace),
+		ModelID:           body.ModelID,
+		Runtime:           body.Runtime,
+		Image:             strings.TrimSpace(body.Image),
+		Mode:              body.Mode,
+		Replicas:          body.Replicas,
+		GroupSize:         body.GroupSize,
+		GPUCount:          body.GPUCount,
+		CPU:               strings.TrimSpace(body.CPU),
+		Memory:            strings.TrimSpace(body.Memory),
+		NodeName:          strings.TrimSpace(body.NodeName),
+		ExtraArgs:         body.ExtraArgs,
+		Env:               body.Env,
+		PD:                body.PD,
+		VGPU:              body.VGPU,
+		RDMA:              body.RDMA,
+		NodeSelector:      body.NodeSelector,
+		Tolerations:       body.Tolerations,
+		PriorityClassName: strings.TrimSpace(body.PriorityClassName),
 	}
 	// A Service is created under the same name, which must start with a letter.
 	// LeaderWorkerSet and DisaggregatedSet append role, revision and index
@@ -152,6 +164,12 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	}
 	if err := validateServiceResources(&req); err != nil {
 		return req, err
+	}
+	if err := validateScheduling("", req.NodeSelector, req.Tolerations); err != nil {
+		return req, err
+	}
+	if req.PriorityClassName != "" && len(validation.IsDNS1123Subdomain(req.PriorityClassName)) > 0 {
+		return req, fmt.Errorf("priorityClassName must be a valid PriorityClass name")
 	}
 	return parseServiceMode(req)
 }
@@ -273,14 +291,16 @@ func defaultRouterImage(req *serviceRequest) string {
 func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
 	field := "pd." + name
 	role := pdRoleRequest{
-		Replicas:  body.Replicas,
-		GroupSize: body.GroupSize,
-		GPUCount:  body.GPUCount,
-		ExtraArgs: body.ExtraArgs,
-		Image:     strings.TrimSpace(body.Image),
-		CPU:       strings.TrimSpace(body.CPU),
-		Memory:    strings.TrimSpace(body.Memory),
-		Env:       body.Env,
+		Replicas:     body.Replicas,
+		GroupSize:    body.GroupSize,
+		GPUCount:     body.GPUCount,
+		ExtraArgs:    body.ExtraArgs,
+		Image:        strings.TrimSpace(body.Image),
+		CPU:          strings.TrimSpace(body.CPU),
+		Memory:       strings.TrimSpace(body.Memory),
+		Env:          body.Env,
+		NodeSelector: body.NodeSelector,
+		Tolerations:  body.Tolerations,
 	}
 	if role.Replicas < 1 || role.GroupSize < 1 || role.GPUCount < 1 {
 		return role, fmt.Errorf("%s replicas, groupSize and gpuCount must be at least 1", field)
@@ -300,6 +320,9 @@ func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
 		return role, err
 	}
 	if err := validateQuantity(field+".memory", role.Memory); err != nil {
+		return role, err
+	}
+	if err := validateScheduling(field+".", role.NodeSelector, role.Tolerations); err != nil {
 		return role, err
 	}
 	return role, validateEnv(field+".env", role.Env)
@@ -386,6 +409,39 @@ func validateEnv(field string, env []envVar) error {
 	for _, item := range env {
 		if len(validation.IsEnvVarName(item.Name)) > 0 {
 			return fmt.Errorf("%s name %q is not a valid environment variable name", field, item.Name)
+		}
+	}
+	return nil
+}
+
+var tolerationEffects = []corev1.TaintEffect{"", corev1.TaintEffectNoSchedule, corev1.TaintEffectPreferNoSchedule, corev1.TaintEffectNoExecute}
+
+// validateScheduling checks a node selector and tolerations as the API server
+// would check them in a pod, which is only created once the request is long
+// answered. prefix names their parent field.
+func validateScheduling(prefix string, nodeSelector map[string]string, tolerations []corev1.Toleration) error {
+	for key, value := range nodeSelector {
+		if len(validation.IsQualifiedName(key)) > 0 || len(validation.IsValidLabelValue(value)) > 0 {
+			return fmt.Errorf("%snodeSelector %s=%s is not a valid label", prefix, key, value)
+		}
+	}
+	for _, item := range tolerations {
+		field := prefix + "tolerations"
+		switch {
+		case item.Key != "" && len(validation.IsQualifiedName(item.Key)) > 0:
+			return fmt.Errorf("%s key %q is not a valid taint key", field, item.Key)
+		case item.Operator != "" && item.Operator != corev1.TolerationOpEqual && item.Operator != corev1.TolerationOpExists:
+			return fmt.Errorf("%s operator must be %s or %s", field, corev1.TolerationOpEqual, corev1.TolerationOpExists)
+		case item.Key == "" && item.Operator != corev1.TolerationOpExists:
+			return fmt.Errorf("%s without a key must use the %s operator", field, corev1.TolerationOpExists)
+		case item.Operator == corev1.TolerationOpExists && item.Value != "":
+			return fmt.Errorf("%s with the %s operator must not have a value", field, corev1.TolerationOpExists)
+		case len(validation.IsValidLabelValue(item.Value)) > 0:
+			return fmt.Errorf("%s value %q is not a valid taint value", field, item.Value)
+		case !slices.Contains(tolerationEffects, item.Effect):
+			return fmt.Errorf("%s effect must be %s, %s or %s", field, corev1.TaintEffectNoSchedule, corev1.TaintEffectPreferNoSchedule, corev1.TaintEffectNoExecute)
+		case item.TolerationSeconds != nil && item.Effect != corev1.TaintEffectNoExecute:
+			return fmt.Errorf("%s tolerationSeconds is only allowed with the %s effect", field, corev1.TaintEffectNoExecute)
 		}
 	}
 	return nil

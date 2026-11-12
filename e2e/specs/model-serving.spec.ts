@@ -10,7 +10,9 @@ import {
   kubeContext,
   kubectl,
   kubectlJSON,
+  minute,
   namespaceDiagnostics,
+  podReady,
   removePrometheusCRDs,
   resetNamespace,
   waitFor,
@@ -26,6 +28,7 @@ import {
   createService,
   deleteNamespaceServices,
   deleteServiceAndWaitGone,
+  describeServicePods,
   engineBootstraps,
   engineDist,
   engineKVTransfers,
@@ -1492,6 +1495,354 @@ test.describe('model serving', () => {
     const routerLog = kubectl(['logs', '-n', namespace, router.metadata.name])
     expect.soft(routerLog).not.toMatch(/forbidden/i)
     expect.soft(routerLog).not.toMatch(/huggingface|tokenizer/i)
+
+    await deleteServiceAndWaitGone(api, namespace, req.name)
+  })
+
+  test('a leader whose engine stops serving is restarted', async () => {
+    // The fake SGLang engine answers /health after 1.5 seconds, as SGLang
+    // does, which a one second probe timeout would never see.
+    const req = service({ name: 'liveness', mode: 'single' })
+    await createReadyService(api, req, { pods: 1 })
+
+    const [pod] = servicePods(namespace, req.name)
+    const container = runtimeContainer(pod)
+    for (const probe of [
+      container.startupProbe,
+      container.readinessProbe,
+      container.livenessProbe,
+    ]) {
+      expect.soft(probe?.httpGet?.path).toBe('/health')
+      expect.soft(probe?.timeoutSeconds).toBe(30)
+    }
+    expect
+      .soft(container.livenessProbe)
+      .toMatchObject({ periodSeconds: 10, failureThreshold: 6 })
+
+    kubectl([
+      'exec',
+      '-n',
+      namespace,
+      pod.metadata.name,
+      '-c',
+      container.name,
+      '--',
+      'touch',
+      '/tmp/fake-engine-unhealthy',
+    ])
+    // The kubelet restarts the container, or LeaderWorkerSet recreates the
+    // group around it.
+    await waitFor(
+      'the engine that stopped serving to be restarted',
+      () => {
+        const same = servicePods(namespace, req.name).find(
+          (item) => item.metadata.uid === pod.metadata.uid
+        )
+        const restarts = same?.status.containerStatuses?.[0]?.restartCount ?? 0
+        return !same || restarts > 0 ? true : undefined
+      },
+      { timeout: 4 * minute }
+    )
+    await waitForServiceReady(api, namespace, req.name, { pods: 1 })
+
+    await deleteServiceAndWaitGone(api, namespace, req.name)
+  })
+
+  test('node labels, tolerations and a priority place the pods of every mode', async () => {
+    const node = kubectl([
+      'get',
+      'nodes',
+      '-l',
+      '!node-role.kubernetes.io/control-plane',
+      '-o',
+      'jsonpath={.items[-1:].metadata.name}',
+    ]).trim()
+    const priorityClass = 'e2e-inference'
+    const toleration = {
+      key: 'e2e-dedicated',
+      operator: 'Equal' as const,
+      value: 'inference',
+      effect: 'NoSchedule',
+    }
+    kubectl(['apply', '-f', '-'], {
+      input: `apiVersion: scheduling.k8s.io/v1\nkind: PriorityClass\nmetadata:\n  name: ${priorityClass}\nvalue: 1000\n`,
+    })
+    kubectl(['label', 'node', node, 'e2e-pool=placed', '--overwrite'])
+    kubectl([
+      'taint',
+      'node',
+      node,
+      'e2e-dedicated=inference:NoSchedule',
+      '--overwrite',
+    ])
+    try {
+      const missing = await tryCreateService(
+        api,
+        service({
+          name: 'placed-missing',
+          mode: 'single',
+          priorityClassName: 'e2e-missing',
+        })
+      )
+      expect.soft(missing.status, missing.text).toBe(400)
+      expect
+        .soft(missing.text)
+        .toContain('PriorityClass e2e-missing does not exist')
+
+      const single = service({
+        name: 'placed-single',
+        mode: 'single',
+        nodeSelector: { 'e2e-pool': 'placed' },
+        tolerations: [toleration],
+        priorityClassName: priorityClass,
+      })
+      // Only prefill tolerates the tainted node, which only it selects.
+      const pd = pdService(
+        'placed-pd',
+        {
+          prefill: {
+            replicas: 1,
+            groupSize: 1,
+            gpuCount: 1,
+            nodeSelector: { 'e2e-pool': 'placed' },
+            tolerations: [toleration],
+          },
+        },
+        { priorityClassName: priorityClass }
+      )
+      await Promise.all([
+        createReadyService(api, single, { pods: 1 }),
+        createReadyService(api, pd, { pods: 3 }),
+      ])
+
+      const [singlePod] = servicePods(namespace, single.name)
+      expect.soft(singlePod.spec.nodeName).toBe(node)
+      expect.soft(singlePod.spec.nodeSelector).toEqual({ 'e2e-pool': 'placed' })
+      expect.soft(singlePod.spec.tolerations).toContainEqual(toleration)
+      expect.soft(singlePod.spec.priorityClassName).toBe(priorityClass)
+      expect.soft(singlePod.spec.priority).toBe(1000)
+      const [prefill] = servicePods(namespace, pd.name, `${roleLabel}=prefill`)
+      const [decode] = servicePods(namespace, pd.name, `${roleLabel}=decode`)
+      const [router] = servicePods(namespace, pd.name, `${roleLabel}=router`)
+      expect.soft(prefill.spec.nodeName).toBe(node)
+      expect.soft(decode.spec.nodeName).not.toBe(node)
+      for (const pod of [prefill, decode, router]) {
+        expect
+          .soft(pod.spec.priorityClassName, pod.metadata.name)
+          .toBe(priorityClass)
+      }
+      // The router needs no GPU node.
+      expect.soft(router.spec.nodeSelector).toBeUndefined()
+
+      const detail = await expectJSON<{
+        deployment: {
+          roles: { name: string; pods: { nodeSelector?: object }[] }[]
+        }
+      }>(await api.getService(namespace, pd.name), 200)
+      expect
+        .soft(
+          detail.deployment.roles.map((role) => [
+            role.name,
+            role.pods[0].nodeSelector ?? null,
+          ])
+        )
+        .toEqual([
+          ['prefill', { 'e2e-pool': 'placed' }],
+          ['decode', null],
+          ['router', null],
+        ])
+
+      await deleteServiceAndWaitGone(api, namespace, single.name)
+      await deleteServiceAndWaitGone(api, namespace, pd.name)
+    } finally {
+      kubectl(['taint', 'node', node, 'e2e-dedicated-'])
+      kubectl(['label', 'node', node, 'e2e-pool-'])
+      kubectl(['delete', 'priorityclass', priorityClass, '--ignore-not-found'])
+    }
+  })
+
+  test('editing a single node service replaces its pods and keeps its replicas', async () => {
+    const req = service({
+      name: 'edit-single',
+      mode: 'single',
+      env: [{ name: 'E2E_MARK', value: 'before' }],
+    })
+    await createReadyService(api, req, { pods: 1 })
+    await expectJSON(
+      await api.scaleService(namespace, req.name, { replicas: 2 }),
+      200
+    )
+    await waitForServiceReady(api, namespace, req.name, { pods: 2 })
+    const detail = await expectJSON<InferenceService>(
+      await api.getService(namespace, req.name),
+      200
+    )
+    expect.soft(detail.editable).toBe(true)
+
+    const recorded = await api.getServiceRequest(namespace, req.name)
+    expect.soft(recorded.replicas).toBe(2)
+    expect.soft(recorded.env).toEqual(req.env)
+    const refused = await api.updateService(namespace, req.name, {
+      ...recorded,
+      runtime: 'vllm',
+    })
+    expect.soft(refused.status(), await refused.text()).toBe(400)
+
+    // Saving the recorded request again changes no template, so no pod is
+    // replaced.
+    const before = servicePods(namespace, req.name).map(
+      (pod) => pod.metadata.uid
+    )
+    await expectJSON(
+      await api.updateService(namespace, req.name, recorded),
+      200
+    )
+    await new Promise((resolve) => setTimeout(resolve, 15_000))
+    expect
+      .soft(
+        servicePods(namespace, req.name)
+          .map((pod) => pod.metadata.uid)
+          .sort()
+      )
+      .toEqual([...before].sort())
+
+    await expectJSON(
+      await api.updateService(namespace, req.name, {
+        ...recorded,
+        // Scaling owns replicas; an edit leaves them.
+        replicas: 5,
+        env: [{ name: 'E2E_MARK', value: 'after' }],
+        extraArgs: ['--max-model-len', '2048'],
+      }),
+      200
+    )
+    expect
+      .soft(getObject('leaderworkerset', namespace, req.name)?.spec.replicas)
+      .toBe(2)
+    const pods = await waitFor(
+      'every group to be replaced by one of the new template',
+      () => {
+        const items = servicePods(namespace, req.name)
+        return items.length === 2 &&
+          items.every(
+            (pod) =>
+              podReady(pod) &&
+              !before.includes(pod.metadata.uid) &&
+              envOf(runtimeContainer(pod)).E2E_MARK === 'after'
+          )
+          ? items
+          : undefined
+      },
+      {
+        timeout: 5 * minute,
+        diagnose: () => describeServicePods(namespace, req.name),
+      }
+    )
+    const { argv } = engineLaunch(namespace, pods[0].metadata.name)
+    expect.soft(argv.slice(-2)).toEqual(['--max-model-len', '2048'])
+    expect
+      .soft((await api.getServiceRequest(namespace, req.name)).env)
+      .toEqual([{ name: 'E2E_MARK', value: 'after' }])
+    await waitForServiceReady(api, namespace, req.name, { pods: 2 })
+
+    await deleteServiceAndWaitGone(api, namespace, req.name)
+  })
+
+  test('editing a multi node service can resize its groups', async () => {
+    const req = service({ name: 'edit-multi', mode: 'multi', groupSize: 2 })
+    await createReadyService(api, req, { pods: 2 })
+    const before = servicePods(namespace, req.name).map(
+      (pod) => pod.metadata.uid
+    )
+
+    const recorded = await api.getServiceRequest(namespace, req.name)
+    await expectJSON(
+      await api.updateService(namespace, req.name, {
+        ...recorded,
+        groupSize: 3,
+      }),
+      200
+    )
+    await waitForServiceReady(api, namespace, req.name, {
+      pods: 3,
+      timeout: 5 * minute,
+    })
+    const pods = servicePods(namespace, req.name)
+    expect
+      .soft(pods.some((pod) => before.includes(pod.metadata.uid)))
+      .toBe(false)
+    expect
+      .soft(
+        getObject('leaderworkerset', namespace, req.name)?.spec
+          .leaderWorkerTemplate.size
+      )
+      .toBe(3)
+    // Every node of the new group joined its leader.
+    for (const pod of workersOf(pods)) {
+      expect
+        .soft(argValue(engineLaunch(namespace, pod.metadata.name).argv, '--tp'))
+        .toBe('3')
+    }
+
+    await deleteServiceAndWaitGone(api, namespace, req.name)
+  })
+
+  test('editing a pd service rolls out a new revision and updates its router', async () => {
+    const req = pdService('edit-pd')
+    await createReadyService(api, req, { pods: 3 })
+    const revisions = () =>
+      kubectlJSON<{ items: KubeObject[] }>([
+        'get',
+        'leaderworkersets',
+        '-n',
+        namespace,
+        '-l',
+        `disaggregatedset.x-k8s.io/name=${req.name}`,
+      ]).items.map(
+        (item) => item.metadata.labels?.['disaggregatedset.x-k8s.io/revision']
+      )
+    const [oldRevision] = revisions()
+
+    const recorded = await api.getServiceRequest(namespace, req.name)
+    const pd = recorded.pd!
+    await expectJSON(
+      await api.updateService(namespace, req.name, {
+        ...recorded,
+        pd: {
+          ...pd,
+          routerPolicy: 'round_robin',
+          decode: {
+            ...pd.decode,
+            env: [{ name: 'E2E_MARK', value: 'decode-edited' }],
+          },
+        },
+      }),
+      200
+    )
+    await waitFor(
+      'the old revision to be replaced',
+      () => {
+        const current = revisions()
+        return current.length === 2 && !current.includes(oldRevision)
+          ? current
+          : undefined
+      },
+      { timeout: 5 * minute }
+    )
+    await waitForServiceReady(api, namespace, req.name, {
+      pods: 3,
+      timeout: 5 * minute,
+    })
+    const [decode] = servicePods(namespace, req.name, `${roleLabel}=decode`)
+    const [prefill] = servicePods(namespace, req.name, `${roleLabel}=prefill`)
+    expect.soft(envOf(runtimeContainer(decode)).E2E_MARK).toBe('decode-edited')
+    expect.soft(envOf(runtimeContainer(prefill)).E2E_MARK).toBeUndefined()
+    const router = getObject('deployment', namespace, `${req.name}-router`)
+    expect
+      .soft(argValue(router?.spec.template.spec.containers[0].args, '--policy'))
+      .toBe('round_robin')
+    expect.soft(router?.spec.replicas).toBe(1)
+    await waitForRouterWorkers(namespace, req.name, { prefill: 1, decode: 1 })
 
     await deleteServiceAndWaitGone(api, namespace, req.name)
   })

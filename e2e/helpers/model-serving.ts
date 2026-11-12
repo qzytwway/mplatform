@@ -90,6 +90,16 @@ export interface PDRole {
   groupSize: number
   gpuCount: number
   extraArgs?: string[]
+  env?: { name: string; value: string }[]
+  nodeSelector?: Record<string, string>
+  tolerations?: Toleration[]
+}
+
+export interface Toleration {
+  key?: string
+  operator?: 'Equal' | 'Exists'
+  value?: string
+  effect?: string
 }
 
 export interface ServiceRequest {
@@ -112,6 +122,7 @@ export interface ServiceRequest {
     decode: PDRole
     routerImage: string
     routerReplicas?: number
+    routerPolicy?: string
     transferBackend?: 'mooncake' | 'mooncake-tcp' | 'nixl'
     ibDevices?: string
   }
@@ -121,6 +132,9 @@ export interface ServiceRequest {
     resourceCount?: number
     networks?: string
   }
+  nodeSelector?: Record<string, string>
+  tolerations?: Toleration[]
+  priorityClassName?: string
 }
 
 export interface ServiceRole {
@@ -143,6 +157,7 @@ export interface InferenceService {
   roles: ServiceRole[]
   ready: boolean
   sharedSubdomain?: boolean
+  editable?: boolean
   endpoint: string
   pods?: {
     name: string
@@ -248,6 +263,18 @@ export class ModelServingAPI {
     return this.request.put(`${this.servicePath(namespace, name)}/scale`, {
       data: body,
     })
+  }
+
+  /** The request the edit form starts from, with the current replicas. */
+  async getServiceRequest(namespace: string, name: string) {
+    return expectJSON<ServiceRequest>(
+      await this.request.get(`${this.servicePath(namespace, name)}/request`),
+      200
+    )
+  }
+
+  updateService(namespace: string, name: string, body: ServiceRequest) {
+    return this.request.put(this.servicePath(namespace, name), { data: body })
   }
 
   deleteService(namespace: string, name: string) {

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/qzytwway/mplatform/pkg/cluster"
@@ -35,6 +36,10 @@ func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, stora
 		roleReq.Image = cmp.Or(role.spec.Image, req.Image)
 		roleReq.CPU = cmp.Or(role.spec.CPU, req.CPU)
 		roleReq.Memory = cmp.Or(role.spec.Memory, req.Memory)
+		roleReq.NodeSelector = map[string]string{}
+		maps.Copy(roleReq.NodeSelector, req.NodeSelector)
+		maps.Copy(roleReq.NodeSelector, role.spec.NodeSelector)
+		roleReq.Tolerations = append(slices.Clone(req.Tolerations), role.spec.Tolerations...)
 		template, err := groupTemplate(&roleReq, served, storage, role.name)
 		if err != nil {
 			return nil, err
@@ -48,7 +53,11 @@ func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, stora
 			},
 		})
 	}
-	return newWorkload(disaggregatedSetGVK, workloadMeta(req, served), map[string]any{"roles": roles})
+	meta, err := workloadMeta(req, served)
+	if err != nil {
+		return nil, err
+	}
+	return newWorkload(disaggregatedSetGVK, meta, map[string]any{"roles": roles})
 }
 
 // routerObjects returns the router with the RBAC objects its pod discovery
@@ -93,6 +102,11 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: meta.Name,
+					// The router serves every request, so it is not preempted for
+					// its own engines and runs where they may, but needs no GPU
+					// node.
+					PriorityClassName: req.PriorityClassName,
+					Tolerations:       req.Tolerations,
 					// Spreads router replicas over nodes when it can, so one node
 					// going down leaves the others serving. It is set even for one
 					// replica so that scaling up later spreads too, and only counts

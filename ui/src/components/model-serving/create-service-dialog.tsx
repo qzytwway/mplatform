@@ -1,25 +1,24 @@
 import { useState, type FormEvent } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import {
   createInferenceService,
+  getInferenceServiceRequest,
+  updateInferenceService,
   useGPUComponents,
   useGPUNodes,
   useModelServingStatus,
   useServedModels,
   type DeploymentMode,
-  type EnvVar,
   type GPUMode,
   type InferenceRuntime,
   type ModelType,
-  type PDRoleRequest,
-  type RDMARequest,
-  type TransferBackend,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -38,99 +37,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
 import {
-  ServiceModeFields,
-  type PDRoleValues,
-  type ServiceModeValues,
-} from './service-mode-fields'
+  ANY_NODE,
+  DEFAULT_TRANSFER_BACKENDS,
+  defaultFormValues,
+  defaultImage,
+  formValuesFromRequest,
+  requestFromFormValues,
+  type ServiceFormValues,
+  type VGPUMemoryUnit,
+} from './service-form'
+import { ServiceModeFields } from './service-mode-fields'
 import {
   MAX_PD_NAME_LENGTH,
   modeBlocker,
   pdRoleImagesDiffer,
 } from './service-modes'
-import {
-  ServiceNetworkFields,
-  type NetworkValues,
-} from './service-network-fields'
-
-const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
-  vllm: 'vllm/vllm-openai:latest',
-  sglang: 'lmsysorg/sglang:latest',
-}
-
-// vLLM prefill and decode refuse to transfer KV between different builds, so
-// PD pins a release whose image includes NIXL instead of following latest.
-const VLLM_PD_IMAGE = 'vllm/vllm-openai:v0.33.0'
-
-const defaultImage = (runtime: InferenceRuntime, mode: DeploymentMode) =>
-  runtime === 'vllm' && mode === 'pd' ? VLLM_PD_IMAGE : DEFAULT_IMAGES[runtime]
-
-// vLLM transfers over NIXL only. SGLang starts with Mooncake over TCP, since
-// Mooncake over RDMA needs an RDMA network, which starts unset.
-const DEFAULT_TRANSFER_BACKENDS: Record<InferenceRuntime, TransferBackend> = {
-  vllm: 'nixl',
-  sglang: 'mooncake-tcp',
-}
-
-// Radix Select items cannot have an empty value.
-const ANY_NODE = '__any__'
+import { ServiceNetworkFields } from './service-network-fields'
+import { ServiceSchedulingFields } from './service-scheduling-fields'
 
 const MAX_NAME_LENGTH = 40
-
-const DEFAULT_PD_ROLE: PDRoleValues = {
-  replicas: '1',
-  groupSize: '1',
-  gpuCount: '1',
-  extraArgs: '',
-  image: '',
-  cpu: '',
-  memory: '',
-  env: '',
-}
-
-type VGPUMemoryUnit = 'mib' | 'percentage'
-
-const splitArgs = (value: string) => value.split(/\s+/).filter(Boolean)
-
-function toPDRole(values: PDRoleValues): PDRoleRequest {
-  return {
-    replicas: Number(values.replicas),
-    groupSize: Number(values.groupSize),
-    gpuCount: Number(values.gpuCount),
-    extraArgs: splitArgs(values.extraArgs),
-    image: values.image.trim(),
-    cpu: values.cpu.trim(),
-    memory: values.memory.trim(),
-    env: parseEnv(values.env),
-  }
-}
-
-function toRDMA(values: NetworkValues): RDMARequest | undefined {
-  if (values.rdma === 'none') return undefined
-  if (values.rdma === 'host') return { mode: 'host' }
-  return {
-    mode: 'device-plugin',
-    resource: values.resource.trim(),
-    resourceCount: Number(values.resourceCount),
-    networks: values.networks.trim(),
-  }
-}
-
-// Reads one KEY=VALUE per line; a line without '=' sets an empty value.
-function parseEnv(value: string): EnvVar[] {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const index = line.indexOf('=')
-      if (index < 0) return { name: line, value: '' }
-      return { name: line.slice(0, index).trim(), value: line.slice(index + 1) }
-    })
-}
 
 interface CreateServiceDialogProps {
   open: boolean
@@ -144,13 +74,104 @@ export function CreateServiceDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open ? (
-        <CreateServiceDialogContent onClose={() => onOpenChange(false)} />
+        <ServiceFormContent
+          initial={defaultFormValues()}
+          onClose={() => onOpenChange(false)}
+        />
       ) : null}
     </Dialog>
   )
 }
 
-function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
+interface EditServiceDialogProps extends CreateServiceDialogProps {
+  namespace: string
+  name: string
+}
+
+export function EditServiceDialog({
+  open,
+  onOpenChange,
+  namespace,
+  name,
+}: EditServiceDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <EditServiceDialogContent
+          namespace={namespace}
+          name={name}
+          onClose={() => onOpenChange(false)}
+        />
+      ) : null}
+    </Dialog>
+  )
+}
+
+function EditServiceDialogContent({
+  namespace,
+  name,
+  onClose,
+}: {
+  namespace: string
+  name: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const { currentCluster } = useCluster()
+  // Read afresh each time the dialog opens, since scaling changes replicas.
+  const { data, error } = useQuery({
+    queryKey: [
+      'model-serving-service-request',
+      currentCluster,
+      namespace,
+      name,
+    ],
+    queryFn: () =>
+      getInferenceServiceRequest(currentCluster ?? '', namespace, name),
+    enabled: !!currentCluster,
+    gcTime: 0,
+    retry: false,
+  })
+
+  if (data) {
+    return (
+      <ServiceFormContent
+        initial={formValuesFromRequest(data)}
+        editing
+        onClose={onClose}
+      />
+    )
+  }
+  return (
+    <DialogContent className="sm:max-w-2xl">
+      <DialogHeader>
+        <DialogTitle>{t('modelServing.services.editTitle')}</DialogTitle>
+        <DialogDescription>
+          {t('modelServing.services.editDescription')}
+        </DialogDescription>
+      </DialogHeader>
+      {error ? (
+        <p className="text-sm text-destructive">{translateError(error, t)}</p>
+      ) : (
+        <Skeleton className="h-64 w-full" />
+      )}
+    </DialogContent>
+  )
+}
+
+interface ServiceFormContentProps {
+  initial: ServiceFormValues
+  onClose: () => void
+  // Editing keeps the name, namespace, model, runtime and mode, and leaves
+  // replicas to scaling.
+  editing?: boolean
+}
+
+function ServiceFormContent({
+  initial,
+  onClose,
+  editing = false,
+}: ServiceFormContentProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
@@ -158,46 +179,15 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
   const { data: gpuNodes } = useGPUNodes()
   const { data: status } = useModelServingStatus()
   const { data: gpuComponents } = useGPUComponents()
-  const [name, setName] = useState('')
-  const [namespace, setNamespace] = useState('default')
-  const [modelId, setModelId] = useState('')
-  const [runtime, setRuntime] = useState<InferenceRuntime>('vllm')
-  const [image, setImage] = useState(DEFAULT_IMAGES.vllm)
-  const [mode, setMode] = useState<DeploymentMode>('single')
-  const [modeValues, setModeValues] = useState<ServiceModeValues>({
-    replicas: '1',
-    groupSize: '2',
-    prefill: DEFAULT_PD_ROLE,
-    decode: DEFAULT_PD_ROLE,
-    // The backend runs the router from the service image with SGLang and
-    // from vllm-router's image with vLLM when empty.
-    routerImage: '',
-    routerReplicas: '1',
-    routerPolicy: 'default',
-    transferBackend: DEFAULT_TRANSFER_BACKENDS.vllm,
-    ibDevices: '',
-  })
-  const [networkValues, setNetworkValues] = useState<NetworkValues>({
-    rdma: 'none',
-    resource: '',
-    resourceCount: '1',
-    networks: '',
-  })
-  const [gpuType, setGpuType] = useState<GPUMode>('whole')
-  const [gpuCount, setGpuCount] = useState('1')
-  const [vgpuMemoryUnit, setVgpuMemoryUnit] = useState<VGPUMemoryUnit>('mib')
-  const [vgpuMemory, setVgpuMemory] = useState('')
-  const [vgpuCores, setVgpuCores] = useState('')
-  const [cpu, setCpu] = useState('')
-  const [memory, setMemory] = useState('')
-  const [nodeName, setNodeName] = useState(ANY_NODE)
-  const [extraArgs, setExtraArgs] = useState('')
-  const [env, setEnv] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
+  const [values, setValues] = useState(initial)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const set = (patch: Partial<ServiceFormValues>) =>
+    setValues((current) => ({ ...current, ...patch }))
+  const { mode, runtime, image, gpuType, modeValues } = values
 
   const modelTypeOf = (id: string): ModelType | undefined =>
     models?.items.find((model) => String(model.id) === id)?.type
-  const modelType = modelTypeOf(modelId)
+  const modelType = modelTypeOf(values.modelId)
   const hamiInstalled = !!gpuComponents?.hami.installed
   // The backend rejects it; the PD fields say why.
   const vllmImagesDiffer =
@@ -209,97 +199,67 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
       : t('modelServing.services.gpuCount')
 
   // A node serves either whole GPUs or vGPUs.
-  const handleGpuTypeChange = (value: string) => {
-    setGpuType(value as GPUMode)
-    setNodeName(ANY_NODE)
-    if (value === 'vgpu' && Number(gpuCount) < 1) setGpuCount('1')
-  }
+  const handleGpuTypeChange = (value: string) =>
+    set({
+      gpuType: value as GPUMode,
+      nodeName: ANY_NODE,
+      ...(value === 'vgpu' && Number(values.gpuCount) < 1 && { gpuCount: '1' }),
+    })
 
   // The image follows the default of the runtime and mode until it is edited.
-  const changeImageDefault = (
-    nextRuntime: InferenceRuntime,
-    nextMode: DeploymentMode
-  ) => {
-    if (image === defaultImage(runtime, mode))
-      setImage(defaultImage(nextRuntime, nextMode))
-  }
+  const imageFor = (nextRuntime: InferenceRuntime, nextMode: DeploymentMode) =>
+    image === defaultImage(runtime, mode)
+      ? defaultImage(nextRuntime, nextMode)
+      : image
 
-  const handleModeChange = (next: DeploymentMode) => {
-    changeImageDefault(runtime, next)
-    setMode(next)
-  }
+  const handleModeChange = (next: DeploymentMode) =>
+    set({ mode: next, image: imageFor(runtime, next) })
 
   // vLLM PD runs each replica on one node, so switching to it drops groups
   // of several nodes.
   const handleRuntimeChange = (value: string) => {
     const next = value as InferenceRuntime
-    changeImageDefault(next, mode)
-    setRuntime(next)
-    setModeValues((values) => ({
-      ...values,
-      transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
-      ...(next === 'vllm' && {
-        prefill: { ...values.prefill, groupSize: '1' },
-        decode: { ...values.decode, groupSize: '1' },
-      }),
-    }))
+    set({
+      runtime: next,
+      image: imageFor(next, mode),
+      modeValues: {
+        ...modeValues,
+        transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
+        ...(next === 'vllm' && {
+          prefill: { ...modeValues.prefill, groupSize: '1' },
+          decode: { ...modeValues.decode, groupSize: '1' },
+        }),
+      },
+    })
   }
 
-  const handleModelChange = (id: string) => {
-    setModelId(id)
-    if (modeBlocker(mode, modelTypeOf(id), status)) handleModeChange('single')
-  }
+  const handleModelChange = (id: string) =>
+    set({
+      modelId: id,
+      ...(modeBlocker(mode, modelTypeOf(id), status) && {
+        mode: 'single',
+        image: imageFor(runtime, 'single'),
+      }),
+    })
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentCluster) return
-    setIsCreating(true)
+    setIsSubmitting(true)
     try {
-      await createInferenceService(currentCluster, {
-        name: name.trim(),
-        namespace,
-        modelId: Number(modelId),
-        runtime,
-        image: image.trim(),
-        mode,
-        replicas: Number(modeValues.replicas),
-        groupSize: mode === 'multi' ? Number(modeValues.groupSize) : 1,
-        // PD roles set their own GPU counts.
-        gpuCount: mode === 'pd' ? 0 : Number(gpuCount),
-        cpu: cpu.trim(),
-        memory: memory.trim(),
-        nodeName: mode === 'single' && nodeName !== ANY_NODE ? nodeName : '',
-        extraArgs: splitArgs(extraArgs),
-        env: parseEnv(env),
-        ...(mode === 'pd' && {
-          pd: {
-            prefill: toPDRole(modeValues.prefill),
-            decode: toPDRole(modeValues.decode),
-            // Empty runs the runtime's default router.
-            routerImage: modeValues.routerImage.trim(),
-            routerReplicas: Number(modeValues.routerReplicas),
-            routerPolicy:
-              modeValues.routerPolicy === 'default'
-                ? ''
-                : modeValues.routerPolicy,
-            transferBackend: modeValues.transferBackend,
-            ibDevices:
-              modeValues.transferBackend === 'mooncake'
-                ? modeValues.ibDevices.trim()
-                : '',
-          },
-        }),
-        ...(mode !== 'single' && { rdma: toRDMA(networkValues) }),
-        ...(gpuType === 'vgpu' && {
-          vgpu: {
-            memory: vgpuMemoryUnit === 'mib' ? Number(vgpuMemory) : 0,
-            memoryPercentage:
-              vgpuMemoryUnit === 'percentage' ? Number(vgpuMemory) : 0,
-            cores: Number(vgpuCores),
-          },
-        }),
-      })
-      toast.success(t('modelServing.services.messages.created'))
+      const request = requestFromFormValues(values)
+      if (editing) {
+        await updateInferenceService(
+          currentCluster,
+          values.namespace,
+          values.name,
+          request
+        )
+        toast.success(t('modelServing.services.messages.updated'))
+      } else {
+        await createInferenceService(currentCluster, request)
+        toast.success(t('modelServing.services.messages.created'))
+      }
       await queryClient.invalidateQueries({
         queryKey: ['model-serving-services'],
       })
@@ -307,35 +267,58 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
-      setIsCreating(false)
+      setIsSubmitting(false)
     }
   }
 
   return (
     <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
       <DialogHeader>
-        <DialogTitle>{t('modelServing.services.createTitle')}</DialogTitle>
+        <DialogTitle>
+          {editing
+            ? t('modelServing.services.editTitle')
+            : t('modelServing.services.createTitle')}
+        </DialogTitle>
         <DialogDescription>
-          {t('modelServing.services.createDescription')}
+          {editing
+            ? t('modelServing.services.editDescription')
+            : t('modelServing.services.createDescription')}
         </DialogDescription>
       </DialogHeader>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {editing && (
+          <Alert>
+            <AlertDescription className="space-y-1">
+              <p>{t('modelServing.services.editWarning')}</p>
+              {mode === 'pd' && (
+                <p>{t('modelServing.services.editPDWarning')}</p>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="inference-name">{t('common.fields.name')}</Label>
             <Input
               id="inference-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              value={values.name}
+              onChange={(event) => set({ name: event.target.value })}
               placeholder="qwen-chat"
               pattern="[a-z]([a-z0-9\-]*[a-z0-9])?"
               maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
+              disabled={editing}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.nameHint')}
-            </p>
-            {mode === 'pd' && (
+            {editing ? (
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.editLockedHint')}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.nameHint')}
+              </p>
+            )}
+            {mode === 'pd' && !editing && (
               <p className="text-xs text-muted-foreground">
                 {t('modelServing.services.pdNameHint', {
                   max: MAX_PD_NAME_LENGTH,
@@ -346,9 +329,10 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           <div className="space-y-2">
             <Label>{t('common.fields.namespace')}</Label>
             <NamespaceSelector
-              value={namespace}
-              onChange={setNamespace}
+              value={values.namespace}
+              onChange={(namespace) => set({ namespace })}
               triggerClassName="sm:w-full sm:max-w-none"
+              disabled={editing}
               modal
             />
           </div>
@@ -356,7 +340,11 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             <Label htmlFor="inference-model">
               {t('modelServing.services.model')}
             </Label>
-            <Select value={modelId} onValueChange={handleModelChange}>
+            <Select
+              value={values.modelId}
+              onValueChange={handleModelChange}
+              disabled={editing}
+            >
               <SelectTrigger id="inference-model" className="w-full">
                 <SelectValue
                   placeholder={t('modelServing.services.selectModel')}
@@ -380,7 +368,11 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             <Label htmlFor="inference-runtime">
               {t('modelServing.services.runtime')}
             </Label>
-            <Select value={runtime} onValueChange={handleRuntimeChange}>
+            <Select
+              value={runtime}
+              onValueChange={handleRuntimeChange}
+              disabled={editing}
+            >
               <SelectTrigger id="inference-runtime" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -396,7 +388,7 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           <Input
             id="inference-image"
             value={image}
-            onChange={(event) => setImage(event.target.value)}
+            onChange={(event) => set({ image: event.target.value })}
             required
           />
         </div>
@@ -410,11 +402,17 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           }}
           runtime={runtime}
           values={modeValues}
-          onValuesChange={setModeValues}
+          onValuesChange={(next) => set({ modeValues: next })}
           gpuCountLabel={gpuCountLabel}
-          service={{ image, cpu, memory }}
-          rdmaEnabled={networkValues.rdma !== 'none'}
+          service={{ image, cpu: values.cpu, memory: values.memory }}
+          rdmaEnabled={values.networkValues.rdma !== 'none'}
+          editing={editing}
         />
+        {editing && (
+          <p className="text-xs text-muted-foreground">
+            {t('modelServing.services.editReplicasHint')}
+          </p>
+        )}
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="inference-gpu-type">
@@ -450,15 +448,21 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
                     id="inference-vgpu-memory"
                     type="number"
                     min={1}
-                    max={vgpuMemoryUnit === 'percentage' ? 100 : undefined}
-                    value={vgpuMemory}
-                    onChange={(event) => setVgpuMemory(event.target.value)}
-                    placeholder={vgpuMemoryUnit === 'mib' ? '8192' : '50'}
+                    max={
+                      values.vgpuMemoryUnit === 'percentage' ? 100 : undefined
+                    }
+                    value={values.vgpuMemory}
+                    onChange={(event) =>
+                      set({ vgpuMemory: event.target.value })
+                    }
+                    placeholder={
+                      values.vgpuMemoryUnit === 'mib' ? '8192' : '50'
+                    }
                   />
                   <Select
-                    value={vgpuMemoryUnit}
+                    value={values.vgpuMemoryUnit}
                     onValueChange={(value) =>
-                      setVgpuMemoryUnit(value as VGPUMemoryUnit)
+                      set({ vgpuMemoryUnit: value as VGPUMemoryUnit })
                     }
                   >
                     <SelectTrigger
@@ -486,8 +490,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
                   type="number"
                   min={1}
                   max={100}
-                  value={vgpuCores}
-                  onChange={(event) => setVgpuCores(event.target.value)}
+                  value={values.vgpuCores}
+                  onChange={(event) => set({ vgpuCores: event.target.value })}
                   placeholder="50"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -505,8 +509,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
                 id="inference-gpu-count"
                 type="number"
                 min={gpuType === 'vgpu' ? 1 : 0}
-                value={gpuCount}
-                onChange={(event) => setGpuCount(event.target.value)}
+                value={values.gpuCount}
+                onChange={(event) => set({ gpuCount: event.target.value })}
                 required
               />
             </div>
@@ -515,8 +519,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             <Label htmlFor="inference-cpu">{t('common.fields.cpu')}</Label>
             <Input
               id="inference-cpu"
-              value={cpu}
-              onChange={(event) => setCpu(event.target.value)}
+              value={values.cpu}
+              onChange={(event) => set({ cpu: event.target.value })}
               placeholder="8"
             />
           </div>
@@ -526,8 +530,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             </Label>
             <Input
               id="inference-memory"
-              value={memory}
-              onChange={(event) => setMemory(event.target.value)}
+              value={values.memory}
+              onChange={(event) => set({ memory: event.target.value })}
               placeholder="32Gi"
             />
           </div>
@@ -535,7 +539,10 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
         {mode === 'single' && (
           <div className="space-y-2">
             <Label htmlFor="inference-node">{t('common.fields.node')}</Label>
-            <Select value={nodeName} onValueChange={setNodeName}>
+            <Select
+              value={values.nodeName}
+              onValueChange={(nodeName) => set({ nodeName })}
+            >
               <SelectTrigger id="inference-node" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -558,8 +565,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
         )}
         {mode !== 'single' && (
           <ServiceNetworkFields
-            values={networkValues}
-            onValuesChange={setNetworkValues}
+            values={values.networkValues}
+            onValuesChange={(networkValues) => set({ networkValues })}
           />
         )}
         <div className="space-y-2">
@@ -568,8 +575,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           </Label>
           <Input
             id="inference-extra-args"
-            value={extraArgs}
-            onChange={(event) => setExtraArgs(event.target.value)}
+            value={values.extraArgs}
+            onChange={(event) => set({ extraArgs: event.target.value })}
             placeholder="--max-model-len 8192"
             className="font-mono"
           />
@@ -585,8 +592,8 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
           </Label>
           <Textarea
             id="inference-env"
-            value={env}
-            onChange={(event) => setEnv(event.target.value)}
+            value={values.env}
+            onChange={(event) => set({ env: event.target.value })}
             placeholder="NCCL_IB_GID_INDEX=3"
             className="font-mono"
             rows={3}
@@ -595,17 +602,30 @@ function CreateServiceDialogContent({ onClose }: { onClose: () => void }) {
             {t('modelServing.services.envHint')}
           </p>
         </div>
+        <ServiceSchedulingFields
+          values={values.scheduling}
+          onValuesChange={(scheduling) => set({ scheduling })}
+        />
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             {t('common.actions.cancel')}
           </Button>
           <Button
             type="submit"
-            disabled={isCreating || !modelId || !namespace || vllmImagesDiffer}
+            disabled={
+              isSubmitting ||
+              !values.modelId ||
+              !values.namespace ||
+              vllmImagesDiffer
+            }
           >
-            {isCreating
-              ? t('common.messages.creating')
-              : t('common.actions.create')}
+            {editing
+              ? isSubmitting
+                ? t('common.actions.saving')
+                : t('common.actions.save')
+              : isSubmitting
+                ? t('common.messages.creating')
+                : t('common.actions.create')}
           </Button>
         </DialogFooter>
       </form>

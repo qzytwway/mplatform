@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func singleBody() serviceRequest {
@@ -128,6 +129,24 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		{"vllm invalid router image", vllmPDBody(), func(r *serviceRequest) { r.PD.RouterImage = "vllm/vllm-router:" }, "pd.routerImage must be a valid image reference"},
 		{"vllm name too long", vllmPDBody(), func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength+1) }, "name must be at most 30 characters in pd mode"},
 		{"vllm decode over the replica cap", vllmPDBody(), func(r *serviceRequest) { r.PD.Decode.Replicas = maxPDRoleReplicas + 1 }, "pd.decode replicas must be at most 100"},
+		{"invalid node selector key", multiBody(), func(r *serviceRequest) { r.NodeSelector = map[string]string{"gpu type": "h100"} }, "nodeSelector gpu type=h100 is not a valid label"},
+		{"invalid node selector value", singleBody(), func(r *serviceRequest) { r.NodeSelector = map[string]string{"gpu": "h100 sxm"} }, "nodeSelector gpu=h100 sxm is not a valid label"},
+		{"invalid toleration key", multiBody(), func(r *serviceRequest) {
+			r.Tolerations = []corev1.Toleration{{Key: "bad key", Operator: corev1.TolerationOpExists}}
+		}, `tolerations key "bad key" is not a valid taint key`},
+		{"unknown toleration operator", multiBody(), func(r *serviceRequest) { r.Tolerations = []corev1.Toleration{{Key: "gpu", Operator: "In"}} }, "tolerations operator must be Equal or Exists"},
+		{"toleration without key needs exists", multiBody(), func(r *serviceRequest) { r.Tolerations = []corev1.Toleration{{Value: "x"}} }, "tolerations without a key must use the Exists operator"},
+		{"exists toleration with a value", multiBody(), func(r *serviceRequest) {
+			r.Tolerations = []corev1.Toleration{{Key: "gpu", Operator: corev1.TolerationOpExists, Value: "h100"}}
+		}, "tolerations with the Exists operator must not have a value"},
+		{"invalid toleration value", multiBody(), func(r *serviceRequest) { r.Tolerations = []corev1.Toleration{{Key: "gpu", Value: "a b"}} }, `tolerations value "a b" is not a valid taint value`},
+		{"unknown toleration effect", multiBody(), func(r *serviceRequest) { r.Tolerations = []corev1.Toleration{{Key: "gpu", Effect: "NoRun"}} }, "tolerations effect must be NoSchedule, PreferNoSchedule or NoExecute"},
+		{"toleration seconds without no execute", multiBody(), func(r *serviceRequest) {
+			r.Tolerations = []corev1.Toleration{{Key: "gpu", Effect: corev1.TaintEffectNoSchedule, TolerationSeconds: new(int64(60))}}
+		}, "tolerations tolerationSeconds is only allowed with the NoExecute effect"},
+		{"invalid priority class", singleBody(), func(r *serviceRequest) { r.PriorityClassName = "High_Priority" }, "priorityClassName must be a valid PriorityClass name"},
+		{"prefill invalid node selector", pdBody(), func(r *serviceRequest) { r.PD.Prefill.NodeSelector = map[string]string{"": "h100"} }, "pd.prefill.nodeSelector =h100 is not a valid label"},
+		{"decode invalid toleration", pdBody(), func(r *serviceRequest) { r.PD.Decode.Tolerations = []corev1.Toleration{{Key: "gpu", Operator: "In"}} }, "pd.decode.tolerations operator must be Equal or Exists"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

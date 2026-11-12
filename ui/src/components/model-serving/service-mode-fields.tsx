@@ -80,8 +80,8 @@ const ROLE_PLACEHOLDERS: Record<
   },
 }
 
-// image, cpu and memory are empty to keep the service's; env holds one
-// KEY=VALUE per line.
+// image, cpu and memory are empty to keep the service's; env and nodeSelector
+// hold one KEY=VALUE per line, tolerations one toleration per line.
 export interface PDRoleValues {
   replicas: string
   groupSize: string
@@ -91,6 +91,8 @@ export interface PDRoleValues {
   cpu: string
   memory: string
   env: string
+  nodeSelector: string
+  tolerations: string
 }
 
 // The service settings PD roles use unless they set their own.
@@ -124,6 +126,8 @@ interface ServiceModeFieldsProps {
   service: ServiceDefaults
   // Whether an RDMA network is chosen, which Mooncake over RDMA needs.
   rdmaEnabled: boolean
+  // Editing keeps the mode and leaves replicas to scaling.
+  editing?: boolean
 }
 
 export function ServiceModeFields({
@@ -136,6 +140,7 @@ export function ServiceModeFields({
   gpuCountLabel,
   service,
   rdmaEnabled,
+  editing = false,
 }: ServiceModeFieldsProps) {
   const { t } = useTranslation()
   const update = (patch: Partial<ServiceModeValues>) =>
@@ -150,6 +155,7 @@ export function ServiceModeFields({
         <Select
           value={mode}
           onValueChange={(value) => onModeChange(value as DeploymentMode)}
+          disabled={editing}
         >
           <SelectTrigger id="inference-mode" className="w-full">
             <SelectValue />
@@ -175,24 +181,27 @@ export function ServiceModeFields({
           gpuCountLabel={gpuCountLabel}
           service={service}
           rdmaEnabled={rdmaEnabled}
+          editing={editing}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="inference-replicas">
-              {mode === 'multi'
-                ? t('modelServing.services.groups')
-                : t('common.fields.replicas')}
-            </Label>
-            <Input
-              id="inference-replicas"
-              type="number"
-              min={1}
-              value={values.replicas}
-              onChange={(event) => update({ replicas: event.target.value })}
-              required
-            />
-          </div>
+          {!editing && (
+            <div className="space-y-2">
+              <Label htmlFor="inference-replicas">
+                {mode === 'multi'
+                  ? t('modelServing.services.groups')
+                  : t('common.fields.replicas')}
+              </Label>
+              <Input
+                id="inference-replicas"
+                type="number"
+                min={1}
+                value={values.replicas}
+                onChange={(event) => update({ replicas: event.target.value })}
+                required
+              />
+            </div>
+          )}
           {mode === 'multi' && (
             <div className="space-y-2">
               <Label htmlFor="inference-group-size">
@@ -221,6 +230,7 @@ interface PDFieldsProps {
   gpuCountLabel: string
   service: ServiceDefaults
   rdmaEnabled: boolean
+  editing: boolean
 }
 
 function PDFields({
@@ -230,6 +240,7 @@ function PDFields({
   gpuCountLabel,
   service,
   rdmaEnabled,
+  editing,
 }: PDFieldsProps) {
   const { t } = useTranslation()
   const isVLLM = runtime === 'vllm'
@@ -256,22 +267,26 @@ function PDFields({
             })}
           </p>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="inference-router-replicas">
-            {t('modelServing.services.routerReplicas')}
-          </Label>
-          <Input
-            id="inference-router-replicas"
-            type="number"
-            min={1}
-            value={values.routerReplicas}
-            onChange={(event) => update({ routerReplicas: event.target.value })}
-            required
-          />
-          <p className="text-xs text-muted-foreground">
-            {t('modelServing.services.routerReplicasHint')}
-          </p>
-        </div>
+        {!editing && (
+          <div className="space-y-2">
+            <Label htmlFor="inference-router-replicas">
+              {t('modelServing.services.routerReplicas')}
+            </Label>
+            <Input
+              id="inference-router-replicas"
+              type="number"
+              min={1}
+              value={values.routerReplicas}
+              onChange={(event) =>
+                update({ routerReplicas: event.target.value })
+              }
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.services.routerReplicasHint')}
+            </p>
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="inference-router-policy">
             {t('modelServing.services.routerPolicy')}
@@ -383,6 +398,7 @@ function PDFields({
           runtime={runtime}
           gpuCountLabel={gpuCountLabel}
           service={service}
+          editing={editing}
         />
       ))}
     </>
@@ -396,6 +412,7 @@ interface PDRoleFieldsProps {
   runtime: InferenceRuntime
   gpuCountLabel: string
   service: ServiceDefaults
+  editing: boolean
 }
 
 function PDRoleFields({
@@ -405,6 +422,7 @@ function PDRoleFields({
   runtime,
   gpuCountLabel,
   service,
+  editing,
 }: PDRoleFieldsProps) {
   const { t } = useTranslation()
   const id = (field: string) => `inference-${role}-${field}`
@@ -413,25 +431,37 @@ function PDRoleFields({
   const singleNode = runtime === 'vllm'
   // Starts open when the role overrides anything, so it is not hidden.
   const [advancedOpen, setAdvancedOpen] = useState(
-    () => !!(values.image || values.cpu || values.memory || values.env)
+    () =>
+      !!(
+        values.image ||
+        values.cpu ||
+        values.memory ||
+        values.env ||
+        values.nodeSelector ||
+        values.tolerations
+      )
   )
 
   return (
     <div className="space-y-4 rounded-md border p-4">
       <p className="text-sm font-medium">{t(`modelServing.roles.${role}`)}</p>
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor={id('replicas')}>{t('common.fields.replicas')}</Label>
-          <Input
-            id={id('replicas')}
-            type="number"
-            min={1}
-            max={MAX_PD_ROLE_REPLICAS}
-            value={values.replicas}
-            onChange={(event) => onChange({ replicas: event.target.value })}
-            required
-          />
-        </div>
+        {!editing && (
+          <div className="space-y-2">
+            <Label htmlFor={id('replicas')}>
+              {t('common.fields.replicas')}
+            </Label>
+            <Input
+              id={id('replicas')}
+              type="number"
+              min={1}
+              max={MAX_PD_ROLE_REPLICAS}
+              value={values.replicas}
+              onChange={(event) => onChange({ replicas: event.target.value })}
+              required
+            />
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor={id('group-size')}>
             {t('modelServing.services.nodesPerReplica')}
@@ -547,6 +577,44 @@ function PDRoleFields({
             <p className="text-xs text-muted-foreground">
               {t('modelServing.services.roleEnvHint')}
             </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={id('node-selector')}>
+                {t('modelServing.services.nodeSelector')}
+              </Label>
+              <Textarea
+                id={id('node-selector')}
+                value={values.nodeSelector}
+                onChange={(event) =>
+                  onChange({ nodeSelector: event.target.value })
+                }
+                placeholder="nvidia.com/gpu.product=NVIDIA-H100-80GB-HBM3"
+                className="font-mono"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.roleNodeSelectorHint')}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={id('tolerations')}>
+                {t('modelServing.services.tolerations')}
+              </Label>
+              <Textarea
+                id={id('tolerations')}
+                value={values.tolerations}
+                onChange={(event) =>
+                  onChange({ tolerations: event.target.value })
+                }
+                placeholder={`pool=${role}:NoSchedule`}
+                className="font-mono"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('modelServing.services.roleTolerationsHint')}
+              </p>
+            </div>
           </div>
         </CollapsibleContent>
       </Collapsible>

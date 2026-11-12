@@ -2286,7 +2286,8 @@
         "deleteNote": "The workload, router, Service, and storage credential Secret of this service will be deleted.",
         "scaled": "Inference service scaled",
         "published": "Service published to the gateway",
-        "unpublished": "Service unpublished"
+        "unpublished": "Service unpublished",
+        "updated": "Inference service saved; its pods are being replaced"
       },
       "gpuType": "GPU type",
       "gpuTypes": {
@@ -2299,7 +2300,24 @@
       "vgpuMemoryUnit": "Memory unit",
       "vgpuMemoryHint": "Leave empty to take the whole memory of a GPU. A percentage is of the memory of the GPU assigned.",
       "vgpuCores": "Cores per vGPU (%)",
-      "vgpuCoresHint": "Leave empty for no core limit."
+      "vgpuCoresHint": "Leave empty for no core limit.",
+      "scheduling": "Scheduling",
+      "nodeSelector": "Node selector",
+      "nodeSelectorHint": "One key=value node label per line; the pods only run on nodes that have all of them.",
+      "roleNodeSelectorHint": "Merged into the service's node selector; a key set here replaces the service's value.",
+      "tolerations": "Tolerations",
+      "tolerationsHint": "One per line, written like kubectl taint: key=value:NoSchedule tolerates that taint, key:NoSchedule any value of the key, key alone any value and effect, and * every taint.",
+      "roleTolerationsHint": "Added to the service's tolerations.",
+      "priorityClass": "Priority class",
+      "noPriorityClass": "None",
+      "priorityClassHint": "When the cluster is full, pods of a higher priority can preempt pods of a lower one. The router gets the same priority. Pods of vGPUs are scheduled by HAMi and may not preempt others.",
+      "editTitle": "Edit inference service",
+      "editDescription": "Change how the service is deployed. Its pods are recreated with the new settings.",
+      "editWarning": "Saving recreates the pods group by group; a service with one replica stops serving until its new pods are ready. Changes made directly to the YAML of the workload are overwritten.",
+      "editPDWarning": "During the rollout, old and new prefill and decode pods serve side by side. vLLM cannot transfer KV between different versions, so requests may fail until the rollout finishes.",
+      "editLockedHint": "Name, namespace, model, runtime and mode cannot be changed; create another service to change them.",
+      "editReplicasHint": "Replicas are changed with Scale and are kept as they are.",
+      "notEditable": "This service was created before services could be edited; delete and recreate it to change it."
     },
     "models": {
       "title": "Model Registry",

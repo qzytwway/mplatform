@@ -515,6 +515,26 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 		assert.Empty(t, config.TransferBackend)
 	})
 
+	t.Run("placement is read back", func(t *testing.T) {
+		body := multiBody()
+		body.NodeSelector = map[string]string{"gpu": "h100"}
+		body.Tolerations = []corev1.Toleration{{Key: "nvidia.com/gpu", Operator: corev1.TolerationOpExists}}
+		body.PriorityClassName = "inference"
+		req := parseTestRequest(t, body)
+		workload, err := buildLeaderWorkerSet(&req, chatModel(), nil)
+		require.NoError(t, err)
+
+		config, err := readDeploymentConfig(workload, nil)
+
+		require.NoError(t, err)
+		require.Len(t, config.Roles[0].Pods, 2)
+		for _, pod := range config.Roles[0].Pods {
+			assert.Equal(t, map[string]string{"gpu": "h100"}, pod.NodeSelector, pod.Role)
+			assert.Equal(t, body.Tolerations, pod.Tolerations, pod.Role)
+			assert.Equal(t, "inference", pod.PriorityClassName, pod.Role)
+		}
+	})
+
 	t.Run("pd with role overrides over a device plugin", func(t *testing.T) {
 		body := pdBody()
 		body.CPU = "8"

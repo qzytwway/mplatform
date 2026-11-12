@@ -60,6 +60,9 @@ type serviceDetail struct {
 	Pods            []servicePod      `json:"pods"`
 	Deployment      *deploymentConfig `json:"deployment"`
 	SharedSubdomain bool              `json:"sharedSubdomain,omitempty"`
+	// Editable is false for services created before their request was
+	// recorded.
+	Editable bool `json:"editable"`
 }
 
 // describeWorkload reports a LeaderWorkerSet or DisaggregatedSet as an

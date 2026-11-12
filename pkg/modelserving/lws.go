@@ -75,7 +75,11 @@ func buildLeaderWorkerSet(req *serviceRequest, served *model.ServedModel, storag
 	if err != nil {
 		return nil, err
 	}
-	return newWorkload(lwsGVK, workloadMeta(req, served), map[string]any{
+	meta, err := workloadMeta(req, served)
+	if err != nil {
+		return nil, err
+	}
+	return newWorkload(lwsGVK, meta, map[string]any{
 		"replicas":             int64(req.Replicas),
 		"rolloutStrategy":      noSurgeRollout(),
 		"leaderWorkerTemplate": template,

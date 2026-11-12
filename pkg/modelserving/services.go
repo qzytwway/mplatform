@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -196,6 +197,7 @@ func (h *Handler) GetService(c *gin.Context) {
 		Pods:             pods,
 		Deployment:       config,
 		SharedSubdomain:  sharedSubdomain(workload),
+		Editable:         workload.GetAnnotations()[requestAnnotation] != "",
 	})
 }
 
@@ -247,6 +249,10 @@ func (h *Handler) CreateService(c *gin.Context) {
 			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
+	}
+	if status, err := requirePriorityClass(ctx, cs, req.PriorityClassName); err != nil {
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
 	}
 	objects, workload, err := buildServiceObjects(&req, served, storage)
 	if err == nil {
@@ -309,6 +315,23 @@ func requireWorkloadCRD(ctx context.Context, cs *cluster.ClientSet, mode string)
 		return "", http.StatusBadRequest, errors.New(missing)
 	}
 	return crd, http.StatusOK, nil
+}
+
+// requirePriorityClass checks that the PriorityClass pods are given exists,
+// since pods naming a missing one are rejected only once the workload
+// controller creates them. An empty name needs none.
+func requirePriorityClass(ctx context.Context, cs *cluster.ClientSet, name string) (int, error) {
+	if name == "" {
+		return http.StatusOK, nil
+	}
+	err := cs.K8sClient.Get(ctx, types.NamespacedName{Name: name}, &schedulingv1.PriorityClass{})
+	switch {
+	case apierrors.IsNotFound(err):
+		return http.StatusBadRequest, fmt.Errorf("PriorityClass %s does not exist in this cluster", name)
+	case err != nil:
+		return http.StatusInternalServerError, err
+	}
+	return http.StatusOK, nil
 }
 
 // groupNameConflict returns the inference service among workloads whose

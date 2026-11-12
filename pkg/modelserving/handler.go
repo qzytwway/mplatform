@@ -36,6 +36,8 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g.GET("/clusters/:cluster/services", h.ListServices)
 	g.POST("/clusters/:cluster/services", h.CreateService)
 	g.GET("/clusters/:cluster/services/:namespace/:name", h.GetService)
+	g.PUT("/clusters/:cluster/services/:namespace/:name", h.UpdateService)
+	g.GET("/clusters/:cluster/services/:namespace/:name/request", h.GetServiceRequest)
 	g.PUT("/clusters/:cluster/services/:namespace/:name/scale", h.ScaleService)
 	g.DELETE("/clusters/:cluster/services/:namespace/:name", h.DeleteService)
 	g.PUT("/clusters/:cluster/services/:namespace/:name/publish", h.PublishService)

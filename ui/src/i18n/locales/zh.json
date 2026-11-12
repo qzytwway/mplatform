@@ -2373,7 +2373,8 @@
         "deleteNote": "将删除该服务的工作负载、路由、Service 和存储凭证 Secret。",
         "scaled": "推理服务已伸缩",
         "published": "服务已发布到网关",
-        "unpublished": "服务已取消发布"
+        "unpublished": "服务已取消发布",
+        "updated": "已保存，Pod 正在按新配置滚动重建"
       },
       "gpuType": "GPU 类型",
       "gpuTypes": {
@@ -2386,7 +2387,24 @@
       "vgpuMemoryUnit": "显存单位",
       "vgpuMemoryHint": "留空则独占整卡显存。百分比按所分配 GPU 的显存计算。",
       "vgpuCores": "每个 vGPU 算力 (%)",
-      "vgpuCoresHint": "留空则不限制算力。"
+      "vgpuCoresHint": "留空则不限制算力。",
+      "scheduling": "调度",
+      "nodeSelector": "节点标签",
+      "nodeSelectorHint": "每行一个 key=value 节点标签，Pod 只会调度到同时带有这些标签的节点上。",
+      "roleNodeSelectorHint": "与服务级的节点标签合并，同名标签以这里为准。",
+      "tolerations": "容忍",
+      "tolerationsHint": "每行一条，写法同 kubectl taint：key=value:NoSchedule 容忍这个污点，key:NoSchedule 容忍该键的任意值，只写 key 容忍任意值和效果，* 容忍所有污点。",
+      "roleTolerationsHint": "追加在服务级的容忍之后。",
+      "priorityClass": "优先级类",
+      "noPriorityClass": "不设置",
+      "priorityClassHint": "集群资源不足时，高优先级的 Pod 可以抢占低优先级的 Pod。路由也会使用同一个优先级。vGPU 的 Pod 由 HAMi 调度，可能无法抢占。",
+      "editTitle": "修改推理服务",
+      "editDescription": "修改服务的部署配置，Pod 会按新配置重建。",
+      "editWarning": "保存后会逐组重建 Pod；只有 1 个副本的服务在新 Pod 就绪前会中断服务。直接在工作负载 YAML 里做的改动会被覆盖。",
+      "editPDWarning": "滚动更新期间，新旧版本的 Prefill 和 Decode 会同时提供服务。vLLM 不能在不同版本之间传输 KV，更新完成前请求可能失败。",
+      "editLockedHint": "名称、命名空间、模型、运行时和部署模式不能修改；需要改这些请新建服务。",
+      "editReplicasHint": "副本数通过“伸缩”调整，修改时保持不变。",
+      "notEditable": "该服务创建于支持修改之前，不能修改；如需修改请删除后重建。"
     },
     "models": {
       "title": "模型仓库",

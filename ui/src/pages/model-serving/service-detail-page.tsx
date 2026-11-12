@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { ErrorMessage } from '@/components/error-message'
+import { EditServiceDialog } from '@/components/model-serving/create-service-dialog'
 import { DetailItem } from '@/components/model-serving/detail-item'
 import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { ScaleServiceDialog } from '@/components/model-serving/scale-service-dialog'
@@ -50,6 +51,7 @@ export function ServiceDetailPage() {
     refetch,
   } = useInferenceService(namespace, name)
   const [scaling, setScaling] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -115,13 +117,28 @@ export function ServiceDetailPage() {
           </div>
           <p className="text-sm text-muted-foreground">{service.namespace}</p>
         </div>
-        <Button
-          variant="outline"
-          className="shrink-0"
-          onClick={() => setConfirmingDelete(true)}
-        >
-          {t('common.actions.delete')}
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          {/* A disabled button gets no pointer events, so its wrapper
+              explains why. */}
+          <span
+            title={
+              service.editable
+                ? undefined
+                : t('modelServing.services.notEditable')
+            }
+          >
+            <Button
+              variant="outline"
+              onClick={() => setEditing(true)}
+              disabled={!service.editable}
+            >
+              {t('common.actions.edit')}
+            </Button>
+          </span>
+          <Button variant="outline" onClick={() => setConfirmingDelete(true)}>
+            {t('common.actions.delete')}
+          </Button>
+        </div>
       </div>
 
       {service.sharedSubdomain && (
@@ -266,6 +283,13 @@ export function ServiceDetailPage() {
         service={service}
         open={scaling}
         onOpenChange={setScaling}
+      />
+
+      <EditServiceDialog
+        namespace={service.namespace}
+        name={service.name}
+        open={editing}
+        onOpenChange={setEditing}
       />
 
       <DeleteConfirmationDialog

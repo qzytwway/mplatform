@@ -1,7 +1,9 @@
 package modelserving
 
 import (
+	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/qzytwway/mplatform/pkg/model"
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +31,9 @@ const (
 	transferBackendAnnotation = "model-serving.mplatform.io/transfer-backend"
 	ibDevicesAnnotation       = "model-serving.mplatform.io/ib-devices"
 	routerPolicyAnnotation    = "model-serving.mplatform.io/router-policy"
+	// requestAnnotation holds the request a service was created or last
+	// edited with, which editing starts from.
+	requestAnnotation = "model-serving.mplatform.io/request"
 
 	runtimeVLLM   = "vllm"
 	runtimeSGLang = "sglang"
@@ -81,8 +86,14 @@ const (
 	regionEnv           = "AWS_DEFAULT_REGION"
 
 	probePeriodSeconds = 10
+	// SGLang answers /health only after a one-token generation, which it
+	// waits up to 20 seconds for and never answers within one second. vLLM
+	// only checks that its engine is alive.
+	sglangHealthTimeoutSeconds = 30
+	vllmHealthTimeoutSeconds   = 5
 	// Loading large model weights can take up to half an hour.
-	startupFailureThreshold = 180
+	startupFailureThreshold  = 180
+	livenessFailureThreshold = 6
 )
 
 const (
@@ -100,8 +111,21 @@ func serviceLabels(name string) map[string]string {
 	return map[string]string{managedByLabel: managedByValue, serviceLabel: name}
 }
 
-func workloadMeta(req *serviceRequest, served *model.ServedModel) metav1.ObjectMeta {
+func workloadMeta(req *serviceRequest, served *model.ServedModel) (metav1.ObjectMeta, error) {
+	// A defaulted router image is recorded as unset, so that an edit keeps
+	// following the default, the service image with SGLang.
+	recorded := *req
+	if req.PD != nil && req.PD.RouterImage == defaultRouterImage(req) {
+		pd := *req.PD
+		pd.RouterImage = ""
+		recorded.PD = &pd
+	}
+	request, err := json.Marshal(recorded)
+	if err != nil {
+		return metav1.ObjectMeta{}, err
+	}
 	annotations := map[string]string{
+		requestAnnotation:    string(request),
 		modelAnnotation:      served.Name,
 		modelTypeAnnotation:  served.Type,
 		runtimeAnnotation:    req.Runtime,
@@ -123,7 +147,7 @@ func workloadMeta(req *serviceRequest, served *model.ServedModel) metav1.ObjectM
 		Namespace:   req.Namespace,
 		Labels:      serviceLabels(req.Name),
 		Annotations: annotations,
-	}
+	}, nil
 }
 
 // groupTemplate returns the leaderWorkerTemplate of req's groups. pdRole is
@@ -149,9 +173,14 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 	if served.SourceType == sourceTypeS3 {
 		podSpec.InitContainers = []corev1.Container{downloaderContainer(req, served, storage)}
 	}
+	podSpec.NodeSelector = map[string]string{}
+	maps.Copy(podSpec.NodeSelector, req.NodeSelector)
+	// The node picked in single mode wins over a hostname in the selector.
 	if req.NodeName != "" {
-		podSpec.NodeSelector = map[string]string{corev1.LabelHostname: req.NodeName}
+		podSpec.NodeSelector[corev1.LabelHostname] = req.NodeName
 	}
+	podSpec.Tolerations = req.Tolerations
+	podSpec.PriorityClassName = req.PriorityClassName
 	annotations := map[string]string{}
 	if req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
 		podSpec.HostNetwork = true
@@ -205,15 +234,30 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 	healthProbe := corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(servingPort)},
 	}
+	healthTimeout := int32(vllmHealthTimeoutSeconds)
+	if req.Runtime == runtimeSGLang {
+		healthTimeout = sglangHealthTimeoutSeconds
+	}
 	container.Ports = []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
 	if pdRole != "" && req.Runtime == runtimeVLLM {
 		container.Ports = append(container.Ports, corev1.ContainerPort{Name: "nixl", ContainerPort: nixlSideChannelPort})
 	}
-	container.ReadinessProbe = &corev1.Probe{ProbeHandler: healthProbe, PeriodSeconds: probePeriodSeconds}
+	container.ReadinessProbe = &corev1.Probe{ProbeHandler: healthProbe, PeriodSeconds: probePeriodSeconds, TimeoutSeconds: healthTimeout}
 	container.StartupProbe = &corev1.Probe{
 		ProbeHandler:     healthProbe,
 		PeriodSeconds:    probePeriodSeconds,
+		TimeoutSeconds:   healthTimeout,
 		FailureThreshold: startupFailureThreshold,
+	}
+	// Restarts an engine that stopped serving. A worker that hangs stalls its
+	// leader, whose restart recreates the whole group. A busy SGLang server
+	// may finish nothing within one health check, so a minute or more of
+	// failures passes first.
+	container.LivenessProbe = &corev1.Probe{
+		ProbeHandler:     healthProbe,
+		PeriodSeconds:    probePeriodSeconds,
+		TimeoutSeconds:   healthTimeout,
+		FailureThreshold: livenessFailureThreshold,
 	}
 	return container
 }

@@ -2,11 +2,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { CreateServiceDialog } from './create-service-dialog'
+import type { CreateInferenceServiceRequest } from '@/lib/api/model-serving'
 
-const { createInferenceService } = vi.hoisted(() => ({
-  createInferenceService: vi.fn(),
-}))
+import { CreateServiceDialog, EditServiceDialog } from './create-service-dialog'
+
+const { createInferenceService, updateInferenceService, recorded } = vi.hoisted(
+  () => ({
+    createInferenceService: vi.fn(),
+    updateInferenceService: vi.fn(),
+    // The request the edit dialog loads.
+    recorded: { request: undefined as unknown },
+  })
+)
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -14,6 +21,13 @@ vi.mock('react-i18next', () => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  // No PriorityClasses for the scheduling fields to list.
+  useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
+    data:
+      queryKey[0] === 'model-serving-service-request'
+        ? recorded.request
+        : undefined,
+  }),
 }))
 vi.mock('@/hooks/use-cluster', () => ({
   useCluster: () => ({ currentCluster: 'dev' }),
@@ -23,6 +37,8 @@ vi.mock('@/components/selector/namespace-selector', () => ({
 }))
 vi.mock('@/lib/api/model-serving', () => ({
   createInferenceService,
+  updateInferenceService,
+  getInferenceServiceRequest: vi.fn(),
   useServedModels: () => ({
     data: { items: [{ id: 1, name: 'qwen', type: 'chat' }] },
   }),
@@ -175,5 +191,112 @@ describe('CreateServiceDialog', () => {
       },
     })
     expect(request.rdma).toBeUndefined()
+  })
+})
+
+const pdRole = {
+  replicas: 2,
+  groupSize: 1,
+  gpuCount: 4,
+  extraArgs: [],
+  image: '',
+  cpu: '',
+  memory: '',
+  env: [],
+  nodeSelector: {},
+  tolerations: [],
+}
+
+const recordedPD: CreateInferenceServiceRequest = {
+  name: 'qwen-pd',
+  namespace: 'ai',
+  modelId: 1,
+  runtime: 'sglang',
+  image: 'lmsysorg/sglang:latest',
+  mode: 'pd',
+  replicas: 0,
+  groupSize: 1,
+  gpuCount: 0,
+  cpu: '',
+  memory: '',
+  nodeName: '',
+  extraArgs: [],
+  env: [],
+  nodeSelector: {},
+  tolerations: [],
+  priorityClassName: '',
+  pd: {
+    prefill: pdRole,
+    decode: { ...pdRole, replicas: 3 },
+    routerImage: '',
+    routerReplicas: 2,
+    routerPolicy: '',
+    transferBackend: 'mooncake-tcp',
+    ibDevices: '',
+  },
+}
+
+describe('EditServiceDialog', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+    Element.prototype.hasPointerCapture = vi.fn(() => false)
+    Element.prototype.releasePointerCapture = vi.fn()
+    updateInferenceService.mockResolvedValue({})
+    recorded.request = recordedPD
+    render(
+      <EditServiceDialog
+        namespace="ai"
+        name="qwen-pd"
+        open
+        onOpenChange={() => {}}
+      />
+    )
+  })
+
+  it('keeps what cannot change and leaves replicas to scaling', () => {
+    expect(document.getElementById('inference-name')).toHaveValue('qwen-pd')
+    expect(document.getElementById('inference-name')).toBeDisabled()
+    for (const label of [
+      'modelServing.services.model',
+      'modelServing.services.runtime',
+      'modelServing.services.mode',
+    ])
+      expect(screen.getByLabelText(label)).toBeDisabled()
+    for (const id of [
+      'inference-prefill-replicas',
+      'inference-decode-replicas',
+      'inference-router-replicas',
+    ])
+      expect(document.getElementById(id)).toBeNull()
+    expect(screen.getByText('modelServing.services.editWarning')).toBeVisible()
+    expect(
+      screen.getByText('modelServing.services.editPDWarning')
+    ).toBeVisible()
+  })
+
+  it('saves the edited request under the service name', async () => {
+    fireEvent.change(imageInput()!, { target: { value: 'my/sglang:next' } })
+    // Nothing is scheduled yet, so the section starts closed.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'modelServing.services.scheduling' })
+    )
+    fireEvent.change(document.getElementById('inference-tolerations')!, {
+      target: { value: 'nvidia.com/gpu:NoSchedule' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.actions.save' }))
+
+    await waitFor(() => expect(updateInferenceService).toHaveBeenCalledOnce())
+    const [cluster, namespace, name, request] =
+      updateInferenceService.mock.calls[0]
+    expect([cluster, namespace, name]).toEqual(['dev', 'ai', 'qwen-pd'])
+    expect(request).toEqual({
+      ...recordedPD,
+      image: 'my/sglang:next',
+      tolerations: [
+        { key: 'nvidia.com/gpu', operator: 'Exists', effect: 'NoSchedule' },
+      ],
+      rdma: undefined,
+    })
   })
 })

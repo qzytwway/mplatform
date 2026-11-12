@@ -40,8 +40,9 @@ export interface Container {
   args?: string[]
   env?: { name: string; value?: string }[]
   ports?: { containerPort: number }[]
-  readinessProbe?: unknown
-  startupProbe?: unknown
+  readinessProbe?: Probe
+  startupProbe?: Probe
+  livenessProbe?: Probe
   resources?: {
     requests?: Record<string, string>
     limits?: Record<string, string>
@@ -63,7 +64,16 @@ export interface PodTemplate {
     dnsPolicy?: string
     serviceAccountName?: string
     nodeSelector?: Record<string, string>
+    tolerations?: Record<string, unknown>[]
+    priorityClassName?: string
   }
+}
+
+export interface Probe {
+  httpGet?: { path: string; port: number | string }
+  periodSeconds?: number
+  timeoutSeconds?: number
+  failureThreshold?: number
 }
 
 export interface Pod extends KubeObject {
@@ -71,12 +81,13 @@ export interface Pod extends KubeObject {
     labels: Record<string, string>
     annotations?: Record<string, string>
   }
-  spec: PodTemplate['spec'] & { nodeName?: string }
+  spec: PodTemplate['spec'] & { nodeName?: string; priority?: number }
   status: {
     phase: string
     podIP?: string
     hostIP?: string
     conditions?: { type: string; status: string }[]
+    containerStatuses?: { name: string; restartCount: number }[]
   }
 }
 
