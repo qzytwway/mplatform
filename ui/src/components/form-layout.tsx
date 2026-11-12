@@ -1,8 +1,15 @@
 import type { ReactNode } from 'react'
+import { IconInfoCircle } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export function Section({
   title,
@@ -37,6 +44,40 @@ export function Field({
       <Label htmlFor={id}>{label}</Label>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
+
+// HintLabel keeps a field's help out of the layout, behind an icon next to the
+// label. The icon sits beside the label rather than in it, so the label stays
+// the field's accessible name.
+export function HintLabel({
+  htmlFor,
+  hint,
+  children,
+}: {
+  htmlFor?: string
+  hint?: ReactNode
+  children: ReactNode
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex items-center gap-1">
+      <Label htmlFor={htmlFor}>{children}</Label>
+      {hint && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={t('common.actions.moreInfo')}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <IconInfoCircle className="size-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-sm text-left">{hint}</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   )
 }

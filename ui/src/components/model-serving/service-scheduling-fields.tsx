@@ -1,15 +1,6 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { useResources } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -18,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { HintLabel } from '@/components/form-layout'
 
 import type { SchedulingValues } from './service-form'
 
@@ -30,18 +22,14 @@ interface ServiceSchedulingFieldsProps {
 }
 
 // ServiceSchedulingFields places the inference pods of every mode; PD roles
-// add their own node selector and tolerations.
+// add their own node selector and tolerations. Its fields fill the caller's
+// grid.
 export function ServiceSchedulingFields({
   values,
   onValuesChange,
 }: ServiceSchedulingFieldsProps) {
   const { t } = useTranslation()
   const { data: priorityClasses } = useResources('priorityclasses')
-  // Starts open when anything is set, so it is not hidden.
-  const [open, setOpen] = useState(
-    () =>
-      !!(values.nodeSelector || values.tolerations || values.priorityClassName)
-  )
   const update = (patch: Partial<SchedulingValues>) =>
     onValuesChange({ ...values, ...patch })
   const listed = priorityClasses?.map((item) => item.metadata?.name ?? '') ?? []
@@ -52,88 +40,69 @@ export function ServiceSchedulingFields({
       : listed
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="-ml-2 text-muted-foreground"
+    <>
+      <div className="space-y-2">
+        <HintLabel
+          htmlFor="inference-node-selector"
+          hint={t('modelServing.services.nodeSelectorHint')}
         >
-          {open ? (
-            <ChevronDown className="size-4" />
-          ) : (
-            <ChevronRight className="size-4" />
-          )}
-          {t('modelServing.services.scheduling')}
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-4 pt-2">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="inference-node-selector">
-              {t('modelServing.services.nodeSelector')}
-            </Label>
-            <Textarea
-              id="inference-node-selector"
-              value={values.nodeSelector}
-              onChange={(event) => update({ nodeSelector: event.target.value })}
-              placeholder="nvidia.com/gpu.product=NVIDIA-H100-80GB-HBM3"
-              className="font-mono"
-              rows={2}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.nodeSelectorHint')}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="inference-tolerations">
-              {t('modelServing.services.tolerations')}
-            </Label>
-            <Textarea
-              id="inference-tolerations"
-              value={values.tolerations}
-              onChange={(event) => update({ tolerations: event.target.value })}
-              placeholder="nvidia.com/gpu:NoSchedule"
-              className="font-mono"
-              rows={2}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.tolerationsHint')}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="inference-priority-class">
-            {t('modelServing.services.priorityClass')}
-          </Label>
-          <Select
-            value={values.priorityClassName || NO_PRIORITY_CLASS}
-            onValueChange={(value) =>
-              update({
-                priorityClassName: value === NO_PRIORITY_CLASS ? '' : value,
-              })
-            }
-          >
-            <SelectTrigger id="inference-priority-class" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_PRIORITY_CLASS}>
-                {t('modelServing.services.noPriorityClass')}
+          {t('modelServing.services.nodeSelector')}
+        </HintLabel>
+        <Textarea
+          id="inference-node-selector"
+          value={values.nodeSelector}
+          onChange={(event) => update({ nodeSelector: event.target.value })}
+          placeholder="nvidia.com/gpu.product=NVIDIA-H100-80GB-HBM3"
+          className="font-mono"
+          rows={2}
+        />
+      </div>
+      <div className="space-y-2">
+        <HintLabel
+          htmlFor="inference-tolerations"
+          hint={t('modelServing.services.tolerationsHint')}
+        >
+          {t('modelServing.services.tolerations')}
+        </HintLabel>
+        <Textarea
+          id="inference-tolerations"
+          value={values.tolerations}
+          onChange={(event) => update({ tolerations: event.target.value })}
+          placeholder="nvidia.com/gpu:NoSchedule"
+          className="font-mono"
+          rows={2}
+        />
+      </div>
+      <div className="space-y-2">
+        <HintLabel
+          htmlFor="inference-priority-class"
+          hint={t('modelServing.services.priorityClassHint')}
+        >
+          {t('modelServing.services.priorityClass')}
+        </HintLabel>
+        <Select
+          value={values.priorityClassName || NO_PRIORITY_CLASS}
+          onValueChange={(value) =>
+            update({
+              priorityClassName: value === NO_PRIORITY_CLASS ? '' : value,
+            })
+          }
+        >
+          <SelectTrigger id="inference-priority-class" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_PRIORITY_CLASS}>
+              {t('modelServing.services.noPriorityClass')}
+            </SelectItem>
+            {names.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
               </SelectItem>
-              {names.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            {t('modelServing.services.priorityClassHint')}
-          </p>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
   )
 }

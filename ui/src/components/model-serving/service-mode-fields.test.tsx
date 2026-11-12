@@ -1,5 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { InferenceRuntime } from '@/lib/api/model-serving'
@@ -77,6 +77,16 @@ function renderPD(
   )
 }
 
+// Opens the help next to a field's label, which a focus shows at once, and
+// returns its text.
+async function hintOf(label: string) {
+  const trigger = within(screen.getByText(label).parentElement!).getByRole(
+    'button'
+  )
+  act(() => trigger.focus())
+  return (await screen.findByRole('tooltip')).textContent
+}
+
 // Opens a Radix Select from the keyboard, which jsdom supports, and lists
 // its options.
 function selectOptions(label: string) {
@@ -98,15 +108,15 @@ describe('ServiceModeFields in PD mode', () => {
       expect(screen.queryByText(warning)).not.toBeInTheDocument()
   })
 
-  it('offers the service image for the router', () => {
+  it('offers the service image for the router', async () => {
     renderPD({})
 
     expect(
       screen.getByLabelText('modelServing.services.routerImage')
     ).toHaveAttribute('placeholder', SERVICE_IMAGE)
-    expect(
-      screen.getByText('modelServing.services.routerImageHints.sglang')
-    ).toBeInTheDocument()
+    expect(await hintOf('modelServing.services.routerImage')).toBe(
+      'modelServing.services.routerImageHints.sglang'
+    )
   })
 
   it('changes the role whose field is edited', () => {
@@ -222,15 +232,15 @@ describe('ServiceModeFields in PD mode', () => {
     )
   })
 
-  it('shows nixl selected without mooncake settings for vLLM', () => {
+  it('shows nixl selected without mooncake settings for vLLM', async () => {
     renderPD(VLLM_VALUES, { runtime: 'vllm' })
 
     expect(
       screen.getByLabelText('modelServing.services.transferBackend')
     ).toHaveTextContent('modelServing.services.transferBackends.nixl')
-    expect(
-      screen.getByText('modelServing.services.transferBackendHintVLLM')
-    ).toBeInTheDocument()
+    expect(await hintOf('modelServing.services.transferBackend')).toBe(
+      'modelServing.services.transferBackendHintVLLM'
+    )
     expect(
       screen.queryByText('modelServing.services.transferBackendHints.nixl')
     ).not.toBeInTheDocument()
@@ -262,15 +272,15 @@ describe('ServiceModeFields in PD mode', () => {
     expect(screen.queryAllByText(SINGLE_NODE_HINT)).toHaveLength(locked ? 2 : 0)
   })
 
-  it('offers the vllm-router image for the router of vLLM', () => {
+  it('offers the vllm-router image for the router of vLLM', async () => {
     renderPD(VLLM_VALUES, { runtime: 'vllm' })
 
     expect(
       screen.getByLabelText('modelServing.services.routerImage')
     ).toHaveAttribute('placeholder', 'vllm/vllm-router:v0.1.17')
-    expect(
-      screen.getByText('modelServing.services.routerImageHints.vllm')
-    ).toBeInTheDocument()
+    expect(await hintOf('modelServing.services.routerImage')).toBe(
+      'modelServing.services.routerImageHints.vllm'
+    )
   })
 
   it.each([

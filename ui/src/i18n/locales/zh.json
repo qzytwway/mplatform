@@ -42,6 +42,7 @@
       "scale": "扩缩容",
       "search": "搜索",
       "show": "显示",
+      "moreInfo": "说明",
       "assigning": "分配中...",
       "removing": "移除中...",
       "taint": "污点",
@@ -2273,7 +2274,6 @@
       "env": "环境变量",
       "envHint": "每行一个 KEY=VALUE，加到所有推理容器，例如 NCCL_IB_GID_INDEX、NCCL_SOCKET_IFNAME。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
       "sections": {
-        "mode": "部署模式",
         "network": "网络",
         "advanced": "高级配置"
       },

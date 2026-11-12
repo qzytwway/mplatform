@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next'
 
 import type { RDMAMode } from '@/lib/api/model-serving'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -10,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { HintLabel } from '@/components/form-layout'
 
 // Radix Select items cannot have an empty value.
 export type RDMAChoice = RDMAMode | 'none'
@@ -29,6 +29,7 @@ interface ServiceNetworkFieldsProps {
 }
 
 // ServiceNetworkFields connects the nodes of a group and PD roles over RDMA.
+// Its fields fill the caller's grid.
 export function ServiceNetworkFields({
   values,
   onValuesChange,
@@ -40,9 +41,12 @@ export function ServiceNetworkFields({
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="inference-rdma">
+        <HintLabel
+          htmlFor="inference-rdma"
+          hint={t(`modelServing.services.rdmaModeHints.${values.rdma}`)}
+        >
           {t('modelServing.services.rdma')}
-        </Label>
+        </HintLabel>
         <Select
           value={values.rdma}
           onValueChange={(value) => update({ rdma: value as RDMAChoice })}
@@ -58,16 +62,13 @@ export function ServiceNetworkFields({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {t(`modelServing.services.rdmaModeHints.${values.rdma}`)}
-        </p>
       </div>
       {values.rdma === 'device-plugin' && (
-        <div className="grid gap-4 md:grid-cols-3">
+        <>
           <div className="space-y-2">
-            <Label htmlFor="inference-rdma-resource">
+            <HintLabel htmlFor="inference-rdma-resource">
               {t('modelServing.services.rdmaResource')}
-            </Label>
+            </HintLabel>
             <Input
               id="inference-rdma-resource"
               value={values.resource}
@@ -78,9 +79,9 @@ export function ServiceNetworkFields({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="inference-rdma-count">
+            <HintLabel htmlFor="inference-rdma-count">
               {t('modelServing.services.rdmaResourceCount')}
-            </Label>
+            </HintLabel>
             <Input
               id="inference-rdma-count"
               type="number"
@@ -93,9 +94,12 @@ export function ServiceNetworkFields({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="inference-rdma-networks">
+            <HintLabel
+              htmlFor="inference-rdma-networks"
+              hint={t('modelServing.services.rdmaNetworksHint')}
+            >
               {t('modelServing.services.rdmaNetworks')}
-            </Label>
+            </HintLabel>
             <Input
               id="inference-rdma-networks"
               value={values.networks}
@@ -104,10 +108,7 @@ export function ServiceNetworkFields({
               className="font-mono"
             />
           </div>
-          <p className="text-xs text-muted-foreground md:col-span-3">
-            {t('modelServing.services.rdmaNetworksHint')}
-          </p>
-        </div>
+        </>
       )}
     </>
   )

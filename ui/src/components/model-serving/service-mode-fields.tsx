@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { HintLabel } from '@/components/form-layout'
 
 import {
   DEPLOYMENT_MODES,
@@ -149,9 +150,12 @@ export function ServiceModeFields({
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor="inference-mode">
+        <HintLabel
+          htmlFor="inference-mode"
+          hint={t(`modelServing.services.modeHints.${mode}`)}
+        >
           {t('modelServing.services.mode')}
-        </Label>
+        </HintLabel>
         <Select
           value={mode}
           onValueChange={(value) => onModeChange(value as DeploymentMode)}
@@ -169,22 +173,22 @@ export function ServiceModeFields({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {t(`modelServing.services.modeHints.${mode}`)}
-        </p>
       </div>
+      {/* The fields fill the caller's grid; PD takes rows of its own. */}
       {mode === 'pd' ? (
-        <PDFields
-          values={values}
-          update={update}
-          runtime={runtime}
-          gpuCountLabel={gpuCountLabel}
-          service={service}
-          rdmaEnabled={rdmaEnabled}
-          editing={editing}
-        />
+        <div className="col-span-full space-y-4">
+          <PDFields
+            values={values}
+            update={update}
+            runtime={runtime}
+            gpuCountLabel={gpuCountLabel}
+            service={service}
+            rdmaEnabled={rdmaEnabled}
+            editing={editing}
+          />
+        </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <>
           {!editing && (
             <div className="space-y-2">
               <Label htmlFor="inference-replicas">
@@ -217,7 +221,7 @@ export function ServiceModeFields({
               />
             </div>
           )}
-        </div>
+        </>
       )}
     </>
   )
@@ -250,28 +254,31 @@ function PDFields({
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-4 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="inference-router-image">
+          <HintLabel
+            htmlFor="inference-router-image"
+            hint={t(`modelServing.services.routerImageHints.${runtime}`, {
+              image: VLLM_ROUTER_IMAGE,
+            })}
+          >
             {t('modelServing.services.routerImage')}
-          </Label>
+          </HintLabel>
           <Input
             id="inference-router-image"
             value={values.routerImage}
             onChange={(event) => update({ routerImage: event.target.value })}
             placeholder={isVLLM ? VLLM_ROUTER_IMAGE : service.image}
           />
-          <p className="text-xs text-muted-foreground">
-            {t(`modelServing.services.routerImageHints.${runtime}`, {
-              image: VLLM_ROUTER_IMAGE,
-            })}
-          </p>
         </div>
         {!editing && (
           <div className="space-y-2">
-            <Label htmlFor="inference-router-replicas">
+            <HintLabel
+              htmlFor="inference-router-replicas"
+              hint={t('modelServing.services.routerReplicasHint')}
+            >
               {t('modelServing.services.routerReplicas')}
-            </Label>
+            </HintLabel>
             <Input
               id="inference-router-replicas"
               type="number"
@@ -282,15 +289,17 @@ function PDFields({
               }
               required
             />
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.routerReplicasHint')}
-            </p>
           </div>
         )}
         <div className="space-y-2">
-          <Label htmlFor="inference-router-policy">
+          <HintLabel
+            htmlFor="inference-router-policy"
+            hint={t(
+              `modelServing.services.routerPolicyHints.${values.routerPolicy}`
+            )}
+          >
             {t('modelServing.services.routerPolicy')}
-          </Label>
+          </HintLabel>
           <Select
             value={values.routerPolicy}
             onValueChange={(value) =>
@@ -308,11 +317,6 @@ function PDFields({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              `modelServing.services.routerPolicyHints.${values.routerPolicy}`
-            )}
-          </p>
           {cacheAware && Number(values.routerReplicas) > 1 && (
             <p className="text-xs text-destructive">
               {t('modelServing.services.routerCacheWarning')}
@@ -320,9 +324,18 @@ function PDFields({
           )}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="inference-transfer-backend">
+          <HintLabel
+            htmlFor="inference-transfer-backend"
+            hint={
+              isVLLM
+                ? t('modelServing.services.transferBackendHintVLLM')
+                : t(
+                    `modelServing.services.transferBackendHints.${values.transferBackend}`
+                  )
+            }
+          >
             {t('modelServing.services.transferBackend')}
-          </Label>
+          </HintLabel>
           {/* Remounts with the runtime's options: in a form, Radix empties a
               select whose value and options change together. */}
           <Select
@@ -344,41 +357,35 @@ function PDFields({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            {isVLLM
-              ? t('modelServing.services.transferBackendHintVLLM')
-              : t(
-                  `modelServing.services.transferBackendHints.${values.transferBackend}`
-                )}
-          </p>
           {values.transferBackend === 'mooncake' && !rdmaEnabled && (
             <p className="text-xs text-destructive">
               {t('modelServing.services.transferBackendNeedsRDMA')}
             </p>
           )}
-          {values.transferBackend === 'nixl' && !rdmaEnabled && (
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.ucxTCPHint')}
-            </p>
-          )}
         </div>
+        {values.transferBackend === 'mooncake' && (
+          <div className="space-y-2">
+            <HintLabel
+              htmlFor="inference-ib-devices"
+              hint={t('modelServing.services.ibDevicesHint')}
+            >
+              {t('modelServing.services.ibDevices')}
+            </HintLabel>
+            <Input
+              id="inference-ib-devices"
+              value={values.ibDevices}
+              onChange={(event) => update({ ibDevices: event.target.value })}
+              placeholder="mlx5_0,mlx5_1"
+              className="font-mono"
+            />
+          </div>
+        )}
       </div>
-      {values.transferBackend === 'mooncake' && (
-        <div className="space-y-2">
-          <Label htmlFor="inference-ib-devices">
-            {t('modelServing.services.ibDevices')}
-          </Label>
-          <Input
-            id="inference-ib-devices"
-            value={values.ibDevices}
-            onChange={(event) => update({ ibDevices: event.target.value })}
-            placeholder="mlx5_0,mlx5_1"
-            className="font-mono"
-          />
-          <p className="text-xs text-muted-foreground">
-            {t('modelServing.services.ibDevicesHint')}
-          </p>
-        </div>
+      {/* Long, so it gets the full width rather than its field's column. */}
+      {values.transferBackend === 'nixl' && !rdmaEnabled && (
+        <p className="text-xs text-muted-foreground">
+          {t('modelServing.services.ucxTCPHint')}
+        </p>
       )}
       {pdRoleImagesDiffer(values, service.image) && (
         <p className="text-xs text-destructive">
@@ -387,20 +394,22 @@ function PDFields({
             : t('modelServing.services.roleImagesDiffer')}
         </p>
       )}
-      {(['prefill', 'decode'] as const).map((role) => (
-        <PDRoleFields
-          key={role}
-          role={role}
-          values={values[role]}
-          onChange={(patch) =>
-            update({ [role]: { ...values[role], ...patch } })
-          }
-          runtime={runtime}
-          gpuCountLabel={gpuCountLabel}
-          service={service}
-          editing={editing}
-        />
-      ))}
+      <div className="grid grid-cols-2 gap-4">
+        {(['prefill', 'decode'] as const).map((role) => (
+          <PDRoleFields
+            key={role}
+            role={role}
+            values={values[role]}
+            onChange={(patch) =>
+              update({ [role]: { ...values[role], ...patch } })
+            }
+            runtime={runtime}
+            gpuCountLabel={gpuCountLabel}
+            service={service}
+            editing={editing}
+          />
+        ))}
+      </div>
     </>
   )
 }
@@ -445,7 +454,7 @@ function PDRoleFields({
   return (
     <div className="space-y-4 rounded-md border p-4">
       <p className="text-sm font-medium">{t(`modelServing.roles.${role}`)}</p>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-3 gap-4">
         {!editing && (
           <div className="space-y-2">
             <Label htmlFor={id('replicas')}>
@@ -476,14 +485,6 @@ function PDRoleFields({
             aria-describedby={singleNode ? id('group-size-hint') : undefined}
             required
           />
-          {singleNode && (
-            <p
-              id={id('group-size-hint')}
-              className="text-xs text-muted-foreground"
-            >
-              {t('modelServing.services.nodesPerReplicaVLLMHint')}
-            </p>
-          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor={id('gpu-count')}>{gpuCountLabel}</Label>
@@ -497,6 +498,12 @@ function PDRoleFields({
           />
         </div>
       </div>
+      {/* Below the row rather than in its narrow column. */}
+      {singleNode && (
+        <p id={id('group-size-hint')} className="text-xs text-muted-foreground">
+          {t('modelServing.services.nodesPerReplicaVLLMHint')}
+        </p>
+      )}
       <div className="space-y-2">
         <Label htmlFor={id('extra-args')}>
           {t('modelServing.services.extraArgs')}
@@ -527,18 +534,20 @@ function PDRoleFields({
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label htmlFor={id('image')}>{t('common.fields.image')}</Label>
+            <HintLabel
+              htmlFor={id('image')}
+              hint={t('modelServing.services.roleImageHint')}
+            >
+              {t('common.fields.image')}
+            </HintLabel>
             <Input
               id={id('image')}
               value={values.image}
               onChange={(event) => onChange({ image: event.target.value })}
               placeholder={service.image}
             />
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.roleImageHint')}
-            </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor={id('cpu')}>{t('common.fields.cpu')}</Label>
               <Input
@@ -565,7 +574,12 @@ function PDRoleFields({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor={id('env')}>{t('modelServing.services.env')}</Label>
+            <HintLabel
+              htmlFor={id('env')}
+              hint={t('modelServing.services.roleEnvHint')}
+            >
+              {t('modelServing.services.env')}
+            </HintLabel>
             <Textarea
               id={id('env')}
               value={values.env}
@@ -574,15 +588,15 @@ function PDRoleFields({
               className="font-mono"
               rows={2}
             />
-            <p className="text-xs text-muted-foreground">
-              {t('modelServing.services.roleEnvHint')}
-            </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor={id('node-selector')}>
+              <HintLabel
+                htmlFor={id('node-selector')}
+                hint={t('modelServing.services.roleNodeSelectorHint')}
+              >
                 {t('modelServing.services.nodeSelector')}
-              </Label>
+              </HintLabel>
               <Textarea
                 id={id('node-selector')}
                 value={values.nodeSelector}
@@ -593,14 +607,14 @@ function PDRoleFields({
                 className="font-mono"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">
-                {t('modelServing.services.roleNodeSelectorHint')}
-              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={id('tolerations')}>
+              <HintLabel
+                htmlFor={id('tolerations')}
+                hint={t('modelServing.services.roleTolerationsHint')}
+              >
                 {t('modelServing.services.tolerations')}
-              </Label>
+              </HintLabel>
               <Textarea
                 id={id('tolerations')}
                 value={values.tolerations}
@@ -611,9 +625,6 @@ function PDRoleFields({
                 className="font-mono"
                 rows={2}
               />
-              <p className="text-xs text-muted-foreground">
-                {t('modelServing.services.roleTolerationsHint')}
-              </p>
             </div>
           </div>
         </CollapsibleContent>

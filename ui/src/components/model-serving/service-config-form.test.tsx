@@ -273,7 +273,9 @@ describe('ServiceConfigForm when editing', () => {
     fireEvent.change(imageInput()!, { target: { value: 'my/sglang:next' } })
     // Nothing is scheduled yet, so the section starts closed.
     fireEvent.click(
-      screen.getByRole('button', { name: 'modelServing.services.scheduling' })
+      screen.getByRole('button', {
+        name: 'modelServing.services.sections.advanced',
+      })
     )
     fireEvent.change(document.getElementById('inference-tolerations')!, {
       target: { value: 'nvidia.com/gpu:NoSchedule' },
