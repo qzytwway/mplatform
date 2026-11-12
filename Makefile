@@ -112,7 +112,8 @@ package-binaries: ## Package each mplatform binary file separately
 
 frontend: static ## Build frontend only
 
-static: ui/src/**/*.tsx ui/src/**/*.ts ui/index.html ui/**/*.css ui/package.json ui/vite.config.ts
+# GNU make has no recursive **, so list the frontend sources with find.
+static: $(shell find ui/src ui/plugins -type f) ui/index.html ui/package.json ui/vite.config.ts ui/tsconfig.json ui/tsconfig.app.json ui/tsconfig.node.json
 	@echo "📦 Ensuring static files are built..."
 	cd $(UI_DIR) && pnpm run build
 
