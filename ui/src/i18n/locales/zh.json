@@ -2342,6 +2342,10 @@
       "localPathHint": "模型在节点上的绝对目录。",
       "s3PathHint": "模型在存储桶内的 key 前缀。",
       "storageRequired": "尚未配置对象存储，配置后才能为对象存储中的模型创建服务。",
+      "sections": {
+        "basic": "基本信息",
+        "source": "模型来源"
+      },
       "messages": {
         "created": "模型已添加",
         "updated": "模型已更新",
@@ -2361,6 +2365,10 @@
       "secretKeyKeep": "留空则保留当前密钥",
       "downloaderImage": "下载器镜像",
       "downloaderImageHint": "执行 aws s3 sync 的 init 容器镜像。",
+      "sections": {
+        "connection": "连接信息",
+        "downloader": "模型下载"
+      },
       "messages": {
         "saved": "对象存储已保存",
         "deleted": "对象存储配置已删除",
@@ -2525,11 +2533,13 @@
       "limitsUnavailableHint": "限速和总额度需要网关已安装并升级后才能生效，请先安装或升级网关。",
       "quotaLimitedHint": "额度用完后请求会被拒绝。额度不会自动重置，可在调用方列表中设置或追加。",
       "initialQuota": "初始额度（Token）",
+      "limitsSection": "限速与额度",
       "rateLimit": "限速",
       "perMinute": "{{tokens}} / 分钟",
       "remainingQuota": "剩余额度",
       "unlimited": "不限",
       "quotaUnknown": "无法读取剩余额度。",
+      "quotaNotLimitedHint": "该调用方未开启总额度限制，请先编辑调用方并开启“限制总额度”。",
       "adjustQuota": "调整额度",
       "adjustQuotaTitle": "调整 {{name}} 的额度",
       "currentQuota": "剩余额度：{{remaining}} Token",

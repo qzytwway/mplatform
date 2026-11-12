@@ -2342,6 +2342,10 @@
       "localPathHint": "Absolute directory of the model on the node.",
       "s3PathHint": "Key prefix of the model inside the bucket.",
       "storageRequired": "Object storage is not configured. Services cannot be created for object storage models until it is.",
+      "sections": {
+        "basic": "Basic Information",
+        "source": "Model Source"
+      },
       "messages": {
         "created": "Model added",
         "updated": "Model updated",
@@ -2361,6 +2365,10 @@
       "secretKeyKeep": "Leave blank to keep the current key",
       "downloaderImage": "Downloader image",
       "downloaderImageHint": "Init container image that runs aws s3 sync.",
+      "sections": {
+        "connection": "Connection",
+        "downloader": "Model Download"
+      },
       "messages": {
         "saved": "Object storage saved",
         "deleted": "Object storage configuration deleted",
@@ -2525,11 +2533,13 @@
       "limitsUnavailableHint": "Rate limits and quotas take effect only after the gateway is installed and upgraded. Install or upgrade it first.",
       "quotaLimitedHint": "Requests are rejected once the quota is used up. It never resets on its own; set or add to it from the callers table.",
       "initialQuota": "Initial quota (tokens)",
+      "limitsSection": "Rate Limit and Quota",
       "rateLimit": "Rate limit",
       "perMinute": "{{tokens}} / min",
       "remainingQuota": "Remaining quota",
       "unlimited": "Unlimited",
       "quotaUnknown": "The remaining quota could not be read.",
+      "quotaNotLimitedHint": "This caller has no total quota. Edit it and turn on Limit total quota first.",
       "adjustQuota": "Adjust Quota",
       "adjustQuotaTitle": "Adjust the quota of {{name}}",
       "currentQuota": "Remaining quota: {{remaining}} tokens",

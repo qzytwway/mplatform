@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
@@ -14,48 +15,25 @@ import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Field, Section } from '@/components/form-layout'
 
-interface CallerDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+import { GATEWAY_PATH } from './caller-page-layout'
+
+export interface IssuedKey {
+  name: string
+  apiKey: string
+}
+
+interface CallerFormProps {
   caller: ModelCaller | null
-  onCreated: (issuedKey: { name: string; apiKey: string }) => void
+  // Called with the new caller's key after a create, and with nothing after an edit.
+  onSaved: (issuedKey?: IssuedKey) => void
 }
 
-export function CallerDialog({
-  open,
-  onOpenChange,
-  caller,
-  onCreated,
-}: CallerDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {open ? (
-        <CallerDialogContent
-          caller={caller}
-          onCreated={onCreated}
-          onClose={() => onOpenChange(false)}
-        />
-      ) : null}
-    </Dialog>
-  )
-}
-
-function CallerDialogContent({
-  caller,
-  onCreated,
-  onClose,
-}: Omit<CallerDialogProps, 'open' | 'onOpenChange'> & { onClose: () => void }) {
+export function CallerForm({ caller, onSaved }: CallerFormProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
@@ -99,6 +77,7 @@ function CallerDialogContent({
           quotaLimited,
         })
         toast.success(t('modelServing.callers.messages.updated'))
+        onSaved()
       } else {
         const created = await createModelCaller(currentCluster, {
           name: name.trim(),
@@ -110,9 +89,8 @@ function CallerDialogContent({
           ...(quotaLimited && { quota: Number(quota) }),
         })
         toast.success(t('modelServing.callers.messages.created'))
-        onCreated({ name: created.name, apiKey: created.apiKey })
+        onSaved({ name: created.name, apiKey: created.apiKey })
       }
-      onClose()
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
@@ -123,17 +101,17 @@ function CallerDialogContent({
   }
 
   return (
-    <DialogContent className="max-h-[90vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle>
-          {caller
-            ? t('modelServing.callers.editTitle')
-            : t('modelServing.callers.createTitle')}
-        </DialogTitle>
-      </DialogHeader>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="caller-name">{t('common.fields.name')}</Label>
+    <form onSubmit={handleSubmit} className="flex max-w-4xl flex-col gap-4">
+      <Section title={t('common.fields.basicInformation')}>
+        <Field
+          id="caller-name"
+          label={t('common.fields.name')}
+          hint={
+            caller
+              ? t('common.messages.nameImmutable')
+              : t('modelServing.callers.nameHint')
+          }
+        >
           <Input
             id="caller-name"
             value={name}
@@ -144,24 +122,18 @@ function CallerDialogContent({
             disabled={!!caller}
             required
           />
-          <p className="text-xs text-muted-foreground">
-            {caller
-              ? t('common.messages.nameImmutable')
-              : t('modelServing.callers.nameHint')}
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="caller-description">
-            {t('common.fields.description')}
-          </Label>
+        </Field>
+        <Field id="caller-description" label={t('common.fields.description')}>
           <Input
             id="caller-description"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
-        </div>
+        </Field>
+      </Section>
+
+      <Section title={t('modelServing.callers.models')}>
         <div className="space-y-2">
-          <Label>{t('modelServing.callers.models')}</Label>
           <div className="flex items-center gap-2">
             <Checkbox
               id="caller-allow-all"
@@ -206,15 +178,19 @@ function CallerDialogContent({
             {t('modelServing.callers.modelsHint')}
           </p>
         </div>
+      </Section>
+
+      <Section title={t('modelServing.callers.limitsSection')}>
         {!limitsAvailable && (
           <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
             {t('modelServing.callers.limitsUnavailableHint')}
           </p>
         )}
-        <div className="space-y-2">
-          <Label htmlFor="caller-tokens-per-minute">
-            {t('modelServing.callers.tokensPerMinute')}
-          </Label>
+        <Field
+          id="caller-tokens-per-minute"
+          label={t('modelServing.callers.tokensPerMinute')}
+          hint={t('modelServing.callers.tokensPerMinuteHint')}
+        >
           <Input
             id="caller-tokens-per-minute"
             type="number"
@@ -225,52 +201,51 @@ function CallerDialogContent({
             disabled={!limitsAvailable}
             placeholder={t('modelServing.callers.unlimited')}
           />
-          <p className="text-xs text-muted-foreground">
-            {t('modelServing.callers.tokensPerMinuteHint')}
-          </p>
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-4">
+        </Field>
+        {/* ToggleRow cannot be disabled, so this row is written out. */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
             <Label htmlFor="caller-quota-limited">
               {t('modelServing.callers.quotaLimited')}
             </Label>
-            <Switch
-              id="caller-quota-limited"
-              checked={quotaLimited}
-              onCheckedChange={setQuotaLimited}
-              disabled={!limitsAvailable}
-            />
+            <p className="text-xs text-muted-foreground">
+              {t('modelServing.callers.quotaLimitedHint')}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t('modelServing.callers.quotaLimitedHint')}
-          </p>
-          {quotaLimited && !caller && (
-            <>
-              <Label htmlFor="caller-quota">
-                {t('modelServing.callers.initialQuota')}
-              </Label>
-              <Input
-                id="caller-quota"
-                type="number"
-                min={0}
-                step={1}
-                value={quota}
-                onChange={(event) => setQuota(event.target.value)}
-                disabled={!limitsAvailable}
-                placeholder="1000000"
-              />
-            </>
-          )}
+          <Switch
+            id="caller-quota-limited"
+            checked={quotaLimited}
+            onCheckedChange={setQuotaLimited}
+            disabled={!limitsAvailable}
+          />
         </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t('common.actions.cancel')}
-          </Button>
-          <Button type="submit" disabled={isSaving}>
-            {isSaving ? t('common.actions.saving') : t('common.actions.save')}
-          </Button>
-        </DialogFooter>
-      </form>
-    </DialogContent>
+        {quotaLimited && !caller && (
+          <Field
+            id="caller-quota"
+            label={t('modelServing.callers.initialQuota')}
+          >
+            <Input
+              id="caller-quota"
+              type="number"
+              min={0}
+              step={1}
+              value={quota}
+              onChange={(event) => setQuota(event.target.value)}
+              disabled={!limitsAvailable}
+              placeholder="1000000"
+            />
+          </Field>
+        )}
+      </Section>
+
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" asChild>
+          <Link to={GATEWAY_PATH}>{t('common.actions.cancel')}</Link>
+        </Button>
+        <Button type="submit" disabled={isSaving}>
+          {isSaving ? t('common.actions.saving') : t('common.actions.save')}
+        </Button>
+      </div>
+    </form>
   )
 }

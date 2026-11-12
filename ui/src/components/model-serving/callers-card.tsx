@@ -8,6 +8,7 @@ import {
 } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
@@ -29,9 +30,8 @@ import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 import { callerColumns } from './caller-columns'
-import { CallerDialog } from './caller-dialog'
 import { CallerKeyDialog } from './caller-key-dialog'
-import { CallerQuotaDialog } from './caller-quota-dialog'
+import { GATEWAY_PATH } from './caller-page-layout'
 import { ConfirmDialog } from './confirm-dialog'
 
 export function CallersCard({
@@ -40,6 +40,7 @@ export function CallersCard({
   gatewayInstalled: boolean
 }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
   const { data, isLoading, error } = useModelCallers()
@@ -49,13 +50,10 @@ export function CallersCard({
   const remainingQuotas = Object.fromEntries(
     (quotas.data?.items ?? []).map((item) => [item.id, item.remaining])
   )
-  const [showDialog, setShowDialog] = useState(false)
-  const [editingCaller, setEditingCaller] = useState<ModelCaller | null>(null)
   const [deletingCaller, setDeletingCaller] = useState<ModelCaller | null>(null)
   const [resettingCaller, setResettingCaller] = useState<ModelCaller | null>(
     null
   )
-  const [quotaCaller, setQuotaCaller] = useState<ModelCaller | null>(null)
   const [issuedKey, setIssuedKey] = useState<{
     name: string
     apiKey: string
@@ -198,7 +196,8 @@ export function CallersCard({
           {t('modelServing.callers.adjustQuota')}
         </>
       ),
-      onClick: (caller) => setQuotaCaller(caller),
+      onClick: (caller) =>
+        navigate(`${GATEWAY_PATH}/callers/${caller.id}/quota`),
       shouldDisable: (caller) => !caller.quotaLimited || !limitsAvailable,
     },
     {
@@ -208,10 +207,8 @@ export function CallersCard({
           {t('common.actions.edit')}
         </>
       ),
-      onClick: (caller) => {
-        setEditingCaller(caller)
-        setShowDialog(true)
-      },
+      onClick: (caller) =>
+        navigate(`${GATEWAY_PATH}/callers/${caller.id}/edit`),
     },
     {
       label: (
@@ -249,14 +246,11 @@ export function CallersCard({
               {t('modelServing.callers.description')}
             </p>
           </div>
-          <Button
-            onClick={() => {
-              setEditingCaller(null)
-              setShowDialog(true)
-            }}
-          >
-            <IconPlus className="mr-2 h-4 w-4" />
-            {t('modelServing.callers.create')}
+          <Button asChild>
+            <Link to={`${GATEWAY_PATH}/callers/create`}>
+              <IconPlus className="mr-2 h-4 w-4" />
+              {t('modelServing.callers.create')}
+            </Link>
           </Button>
         </div>
       </CardHeader>
@@ -269,20 +263,9 @@ export function CallersCard({
         {renderCallers()}
       </CardContent>
 
-      <CallerDialog
-        open={showDialog}
-        onOpenChange={setShowDialog}
-        caller={editingCaller}
-        onCreated={setIssuedKey}
-      />
       <CallerKeyDialog
         issuedKey={issuedKey}
         onClose={() => setIssuedKey(null)}
-      />
-      <CallerQuotaDialog
-        caller={quotaCaller}
-        remaining={quotaCaller ? remainingQuotas[quotaCaller.id] : undefined}
-        onClose={() => setQuotaCaller(null)}
       />
       <ConfirmDialog
         open={!!resettingCaller}
