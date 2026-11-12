@@ -96,6 +96,43 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* A slim rounded thumb on no track, inset so it stays clear of rounded
+     panel edges. Chromium ignores these once scrollbar-color is set, so the
+     standard properties are left to browsers without them. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent)
+      padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    border-width: 2px;
+    background-color: color-mix(
+      in oklch,
+      var(--muted-foreground) 65%,
+      transparent
+    );
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(
+          in oklch,
+          var(--muted-foreground) 40%,
+          transparent
+        )
+        transparent;
+    }
+  }
 }
 
 @layer components {

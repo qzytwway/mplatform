@@ -53,6 +53,8 @@
 }
 
 .dark {
+  /* Native scrollbars and form controls follow the dark theme. */
+  color-scheme: dark;
   --background: oklch(0.18 0 0);
   --foreground: oklch(0.93 0 0);
   --card: oklch(0.21 0 0);
