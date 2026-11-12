@@ -1,6 +1,6 @@
 import './App.css'
 
-import { ReactNode } from 'react'
+import { ReactNode, useLayoutEffect, useRef } from 'react'
 import { IconServer } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom'
@@ -90,6 +90,13 @@ function AppContent() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const isIframe = searchParams.get('iframe') === 'true'
+  const insetRef = useRef<HTMLElement>(null)
+
+  // Pages scroll inside the inset, which the router's ScrollRestoration does
+  // not reach. Tabs kept in the query string leave the position alone.
+  useLayoutEffect(() => {
+    if (insetRef.current) insetRef.current.scrollTop = 0
+  }, [pathname])
   const needsCluster =
     clusters.length === 0 &&
     !CLUSTER_FREE_PATHS.some(
@@ -104,7 +111,10 @@ function AppContent() {
     <>
       <SidebarProvider>
         <AppSidebar variant="inset" />
-        <SidebarInset className="h-dvh overflow-y-auto overscroll-none scrollbar-hide">
+        <SidebarInset
+          ref={insetRef}
+          className="h-dvh overflow-y-auto overscroll-none scrollbar-hide"
+        >
           <SiteHeader />
           <div className="@container/main flex min-h-0 flex-1 flex-col">
             <div className="flex min-h-0 flex-1 flex-col gap-4 py-4 md:gap-6">
