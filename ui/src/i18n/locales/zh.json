@@ -359,8 +359,6 @@
       "pvcs": "PVCs",
       "pvs": "PVs"
     },
-    "customize": "自定义侧边栏",
-    "customizeTitle": "自定义侧边栏",
     "layout": "布局",
     "layout.default": "默认",
     "layout.compact": "紧凑",
@@ -381,8 +379,6 @@
     "unsetGlobal": "取消全局侧边栏",
     "unsetGlobalSuccess": "已取消全局侧边栏",
     "unsetGlobalError": "取消全局侧边栏失败",
-    "expand": "展开",
-    "collapse": "收起",
     "updateAvailable": "有新的 MPlatform 版本可用"
   },
   "nav": {
@@ -412,7 +408,6 @@
     "events": "Events",
     "crds": "CRDs",
     "kubectl": "Kubectl 终端",
-    "settings": "设置",
     "serviceaccounts": "ServiceAccounts",
     "roles": "Roles",
     "rolebindings": "RoleBindings",
@@ -811,22 +806,17 @@
     "crdNotInstalled": "此集群未安装 {{kind}} ({{version}})。请先安装对应的 CRD。"
   },
   "rbac": {
-    "title": "RBAC 管理",
     "noPermissionCluster": "用户 {{user}} 没有权限在集群 {{cluster}} 上 {{verb}} {{resource}}",
     "noPermissionNamespace": "用户 {{user}} 没有权限在集群 {{cluster}} 的 Namespace {{namespace}} 中 {{verb}} {{resource}}",
     "accessDenied": "访问被拒绝",
     "insufficientPermissions": "权限不足，无法执行此操作",
     "allNamespaces": "所有 Namespace",
-    "get": "查看",
     "anyUser": "任意用户",
     "confirmRemoveOwnRoleTitle": "移除自己的角色？",
     "deleteOwnRoleWarning": "这个角色已分配给当前用户，删除后可能影响你的权限。",
     "permissionPreviewTitle": "权限预览",
     "permissionPreview": "允许在集群 {{clusters}} 的 Namespace {{namespaces}} 中，对 {{resources}} 执行 {{verbs}}。",
     "resourceHint": "内置资源使用复数资源名，可输入内容过滤建议。CRD 和自定义资源请输入 URL 中的 CRD 名称，例如 widgets.example.com。",
-    "actions": {
-      "add": "添加角色"
-    },
     "verb": {
       "get": "查看",
       "create": "创建",
@@ -846,6 +836,8 @@
       "rbac": "RBAC",
       "users": "用户",
       "apikeys": "API 密钥",
+      "templates": "模板",
+      "audit": "审计",
       "logging": "日志",
       "monitoring": "监控"
     }
@@ -1354,10 +1346,6 @@
     "actions": {
       "add": "添加 Provider"
     },
-    "empty": {
-      "title": "暂无 OAuth Provider",
-      "description": "添加第一个 OAuth Provider"
-    },
     "messages": {
       "created": "OAuth Provider 创建成功",
       "updated": "OAuth Provider 更新成功",
@@ -1386,21 +1374,6 @@
       "scopes": "Scopes",
       "issuer": "Issuer",
       "enabled": "启用"
-    }
-  },
-  "userManagement": {
-    "title": "用户管理",
-    "actions": {
-      "add": "添加用户"
-    },
-    "dialog": {
-      "editTitle": "编辑用户",
-      "resetPassword": "重置密码",
-      "assignRoles": "分配角色"
-    },
-    "empty": {
-      "title": "暂无用户",
-      "description": "添加第一个用户开始使用"
     }
   },
   "initialization": {
@@ -1478,35 +1451,8 @@
     }
   },
   "apikeyManagement": {
-    "title": "API 密钥管理",
-    "description": "管理用于程序化访问的 API 密钥",
     "actions": {
       "add": "添加 API 密钥"
-    },
-    "empty": {
-      "title": "暂无 API 密钥",
-      "description": "创建第一个 API 密钥开始使用"
-    },
-    "messages": {
-      "created": "API 密钥创建成功",
-      "deleted": "API 密钥删除成功",
-      "createError": "创建 API 密钥失败",
-      "deleteError": "删除 API 密钥失败",
-      "copied": "已复制到剪贴板",
-      "copyError": "复制失败"
-    },
-    "errors": {
-      "loadFailed": "加载 API 密钥失败"
-    },
-    "deleteConfirmation": "确定要删除此 API 密钥吗？此操作不可撤销。",
-    "neverUsed": "从未使用",
-    "dialog": {
-      "createTitle": "创建 API 密钥",
-      "editTitle": "编辑 API 密钥",
-      "title": "创建 API 密钥",
-      "description": "创建新的 API 密钥用于程序化访问。",
-      "namePlaceholder": "例如：生产环境 API 密钥",
-      "nameRequired": "名称为必填项"
     }
   },
   "deleteConfirmation": {
@@ -1564,33 +1510,6 @@
         "workloadIssues": "列出异常工作负载及可能根因",
         "runbook": "给出按优先级排序的排障清单"
       }
-    }
-  },
-  "templateManagement": {
-    "title": "模板管理",
-    "description": "管理用于创建资源的 YAML 模板。",
-    "actions": {
-      "add": "添加模板"
-    },
-    "messages": {
-      "created": "模板创建成功",
-      "updated": "模板更新成功",
-      "deleted": "模板删除成功"
-    },
-    "errors": {
-      "required": "名称和 YAML 内容为必填项"
-    },
-    "empty": {
-      "description": "暂无模板"
-    },
-    "dialog": {
-      "createTitle": "创建模板",
-      "editTitle": "编辑模板",
-      "createDescription": "添加新的资源模板",
-      "updateDescription": "编辑已有模板"
-    },
-    "hints": {
-      "nameImmutable": "创建后名称不可修改"
     }
   },
   "detail": {
@@ -1658,9 +1577,6 @@
       "podCapacity": "Pod 容量",
       "noMessage": "无消息"
     }
-  },
-  "log": {
-    "jumpToBottom": "跳到底部"
   },
   "helmCharts": {
     "actions": {

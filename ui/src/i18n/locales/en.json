@@ -835,6 +835,9 @@
       "oauth": "Authentication",
       "rbac": "RBAC",
       "users": "User",
+      "apikeys": "API Keys",
+      "templates": "Templates",
+      "audit": "Audit",
       "logging": "Logging",
       "monitoring": "Monitoring"
     }
