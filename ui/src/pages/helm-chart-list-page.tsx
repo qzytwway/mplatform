@@ -430,6 +430,7 @@ export function HelmChartListPage() {
       }),
       columnHelper.accessor('description', {
         header: t('common.fields.description'),
+        meta: { align: 'left' },
         cell: ({ getValue }) => (
           <span className="block whitespace-normal break-words text-left text-sm leading-5 text-muted-foreground line-clamp-2">
             {getValue() || '-'}

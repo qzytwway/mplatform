@@ -41,7 +41,20 @@ export function TablePanel({
       panel.transformations
     )
     const columns = table.fields
-      .map((field) => ({ field, config: fieldConfig(panel, field.name) }))
+      .map((field) => {
+        const config = fieldConfig(panel, field.name)
+        const align = config.custom?.align as string | undefined
+        const numeric = field.values.some((value) => typeof value === 'number')
+        // The heading shares its column's alignment, so numbers line up
+        // under it.
+        const textAlign =
+          align === 'center'
+            ? 'text-center'
+            : align === 'right' || (numeric && align !== 'left')
+              ? 'text-right'
+              : undefined
+        return { field, config, textAlign }
+      })
       .filter(({ config }) => !config.custom?.hidden)
     const rows = Array.from({ length: table.length }, (_, row) =>
       Object.fromEntries(
@@ -81,15 +94,19 @@ export function TablePanel({
       <Table className="text-xs">
         <TableHeader>
           <TableRow>
-            {columns.map(({ field, config }, index) => (
+            {columns.map(({ field, config, textAlign }, index) => (
               <TableHead
                 key={field.name}
-                className="h-8 px-2"
+                className={cn('h-8 px-2', textAlign)}
                 style={{ width: config.custom?.width as number | undefined }}
               >
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 font-medium"
+                  className={cn(
+                    'inline-flex items-center gap-1 font-medium',
+                    // The sort arrow goes on the inner side.
+                    textAlign === 'text-right' && 'flex-row-reverse'
+                  )}
                   onClick={() => toggleSort(index)}
                 >
                   {config.displayName
@@ -109,7 +126,7 @@ export function TablePanel({
         <TableBody>
           {sortedRows.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
-              {columns.map(({ field, config }) => {
+              {columns.map(({ field, config, textAlign }) => {
                 const value: CellValue = row[field.name] ?? null
                 const numeric = typeof value === 'number'
                 const text = numeric
@@ -123,16 +140,10 @@ export function TablePanel({
                 const cellType = (
                   config.custom?.cellOptions as { type?: string } | undefined
                 )?.type
-                const align = config.custom?.align as string | undefined
                 return (
                   <TableCell
                     key={field.name}
-                    className={cn(
-                      'px-2 py-1.5 tabular-nums',
-                      (align === 'right' || (numeric && align !== 'left')) &&
-                        'text-right',
-                      align === 'center' && 'text-center'
-                    )}
+                    className={cn('px-2 py-1.5 tabular-nums', textAlign)}
                   >
                     {target ? (
                       <button

@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react'
 import {
+  Column,
   flexRender,
   PaginationState,
   Table as TableInstance,
@@ -44,6 +45,15 @@ interface ResourceTableViewProps<T> {
   pageSizeOptions?: number[]
 }
 
+// The first two columns (selection and name) align left and the rest center;
+// a column's meta.align overrides that for its heading and cells alike.
+function alignClass<T>(column: Column<T, unknown>, index: number) {
+  const meta = column.columnDef.meta as
+    { align?: 'left' | 'center' } | undefined
+  const align = meta?.align ?? (index <= 1 ? 'left' : 'center')
+  return align === 'left' ? 'text-left' : 'text-center'
+}
+
 export function ResourceTableView<T>({
   table,
   columnCount,
@@ -82,7 +92,7 @@ export function ResourceTableView<T>({
         {row.getVisibleCells().map((cell, index) => (
           <TableCell
             key={cell.id}
-            className={`align-middle ${index <= 1 ? 'text-left' : 'text-center'}`}
+            className={cn('align-middle', alignClass(cell.column, index))}
           >
             {cell.column.columnDef.cell
               ? flexRender(cell.column.columnDef.cell, cell.getContext())
@@ -178,17 +188,20 @@ export function ResourceTableView<T>({
                       {headerGroup.headers.map((header, index) => (
                         <TableHead
                           key={header.id}
-                          className={index <= 1 ? 'text-left' : 'text-center'}
+                          className={alignClass(header.column, index)}
                         >
                           {header.isPlaceholder ? null : header.column.getCanSort() ? (
                             <Button
                               variant="ghost"
                               onClick={header.column.getToggleSortingHandler()}
-                              className={
-                                header.column.getIsSorted()
-                                  ? 'text-primary'
-                                  : ''
-                              }
+                              className={cn(
+                                // Left-aligned labels start where the cell
+                                // text below them does.
+                                'px-2',
+                                alignClass(header.column, index) ===
+                                  'text-left' && '-ml-2',
+                                header.column.getIsSorted() && 'text-primary'
+                              )}
                             >
                               {flexRender(
                                 header.column.columnDef.header,

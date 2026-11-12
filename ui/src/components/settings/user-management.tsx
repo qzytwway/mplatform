@@ -254,7 +254,9 @@ export function UserManagement() {
         header: t('common.fields.status', 'Status'),
         enableSorting: false,
         cell: ({ row: { original: user } }) => (
-          <div className="flex items-center gap-3">{getStatusBadge(user)}</div>
+          <div className="flex items-center justify-center gap-3">
+            {getStatusBadge(user)}
+          </div>
         ),
       },
       {
@@ -312,7 +314,7 @@ export function UserManagement() {
       id: 'actions',
       header: t('common.fields.actions', 'Actions'),
       cell: ({ row }) => (
-        <div className="text-right">
+        <div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
