@@ -200,6 +200,12 @@ helm upgrade mplatform ./mplatform/charts/mplatform \
   --namespace mplatform-system -f mplatform-values.yaml
 ```
 
+chart 默认使用 `latest` 镜像，并在每次启动 Pod 时重新拉取。`helm upgrade` 只在配置有变化时才会重建 Pod，只想更新到最新镜像时，重启 Deployment 即可：
+
+```bash
+kubectl rollout restart deployment/mplatform --namespace mplatform-system
+```
+
 更多可配置项（镜像、资源、Ingress、配置文件托管、RBAC 等）见 [charts/mplatform/values.yaml](./charts/mplatform/values.yaml)。
 
 > [!NOTE]
