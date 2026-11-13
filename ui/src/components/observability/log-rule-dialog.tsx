@@ -30,6 +30,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
+import { RequiredMark } from './required-mark'
+
 // The windows the backend accepts; vmalert checks a rule once per window.
 const WINDOWS = ['1m', '5m', '15m', '30m', '1h']
 const SEVERITIES = ['critical', 'warning', 'info']
@@ -100,6 +102,7 @@ export function LogRuleDialog({ rule, initial, onClose }: LogRuleDialogProps) {
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="log-rule-name">
                 {t('observability.alerts.ruleEditor.name')}
+                <RequiredMark />
               </Label>
               <Input
                 id="log-rule-name"
@@ -115,6 +118,7 @@ export function LogRuleDialog({ rule, initial, onClose }: LogRuleDialogProps) {
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="log-rule-keyword">
                 {t('observability.alerts.logRule.keyword')}
+                <RequiredMark />
               </Label>
               <Input
                 id="log-rule-keyword"
@@ -188,6 +192,7 @@ export function LogRuleDialog({ rule, initial, onClose }: LogRuleDialogProps) {
             <div className="space-y-2">
               <Label htmlFor="log-rule-window">
                 {t('observability.alerts.logRule.window')}
+                <RequiredMark />
               </Label>
               <Select
                 value={form.window}
@@ -208,6 +213,7 @@ export function LogRuleDialog({ rule, initial, onClose }: LogRuleDialogProps) {
             <div className="space-y-2">
               <Label htmlFor="log-rule-threshold">
                 {t('observability.alerts.logRule.threshold')}
+                <RequiredMark />
               </Label>
               <Input
                 id="log-rule-threshold"
