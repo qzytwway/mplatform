@@ -229,24 +229,27 @@ kubectl rollout restart deployment/mplatform --namespace mplatform-system
 
 ## 部署后：准备模型服务所需组件
 
-模型服务依赖的组件都在平台界面上一键安装，它们的 chart 从应用商店的本地仓库读取。代码仓库和平台镜像都不包含这些 chart 包，安装前先在“应用商店”上传对应的 chart 包（`.tgz`），或者把包复制到 `CHART_DIR` 目录：
+模型服务依赖的组件都在平台界面上一键安装，它们的 chart 从应用商店的本地仓库（`local`，对应 `CHART_DIR` 目录）读取。下表这些已验证版本的 chart 包都放在代码仓库的 [chart-packages](chart-packages/THIRD_PARTY_NOTICES.md) 目录里，各自的来源、许可证和校验和也列在那里：
+
+- 从源码运行（`make dev`、`./mplatform`）时，`CHART_DIR` 默认就是这个目录，不用再准备。
+- 用 Docker 或 Helm 部署时，平台镜像里不含 chart 包，先在“应用商店”上传这些包（`.tgz`），或者把它们复制到 `CHART_DIR` 目录。
 
 | 组件 | 用途 | chart | 已验证版本 |
 | --- | --- | --- | --- |
 | LeaderWorkerSet | 多机、PD 分离推理服务 | `lws` | v1.0.0 |
-| GPU Operator | 整卡 GPU 的驱动和设备插件 | `gpu-operator`，必须用 `make gpu-operator-chart` 构建 | v26.7.2-mplatform.1 |
+| GPU Operator | 整卡 GPU 的驱动和设备插件 | `gpu-operator`（定制版） | v26.7.2-mplatform.1 |
 | HAMi | vGPU 切分 | `hami` | 2.11.0 |
 | Higress | 推理服务网关 | `higress-core` | 2.2.6 |
 | kube-prometheus-stack | 指标、监控面板与告警 | `kube-prometheus-stack` | 93.1.1 |
 | VictoriaLogs + Vector | 日志采集、检索与日志告警 | `victoria-logs-single`、`vector` | 0.13.12、0.61.0 |
 
-平台按名称读取 chart，本地仓库里同名的 chart 有多个版本时用最新的一个。其他版本也能安装，但没有和平台一起验证过，安装界面会标出“未验证版本”。GPU Operator 用官方 chart 也能装上，但 Prometheus 采集不到 GPU 指标，GPU 面板会是空的，所以要用 `make gpu-operator-chart` 构建的定制版，详见 [charts/addons/gpu-operator](charts/addons/gpu-operator/README.md)。
+平台按名称读取 chart，本地仓库里同名的 chart 有多个版本时用最新的一个。其他版本也能安装，但没有和平台一起验证过，安装界面会标出“未验证版本”。GPU Operator 用官方 chart 也能装上，但 Prometheus 采集不到 GPU 指标，GPU 面板会是空的，所以要用定制版：仓库里已经放了一份，换版本时用 `make gpu-operator-chart` 重新构建，详见 [charts/addons/gpu-operator](charts/addons/gpu-operator/README.md)。
 
 然后进入“模型服务”，按顺序安装 GPU 组件和 LeaderWorkerSet、登记模型、创建推理服务；需要对外提供接口时再安装网关并发布服务。
 
 ### 离线环境
 
-1. 在能联网的机器上准备上表的 chart 包，上传到应用商店或复制到 `CHART_DIR`。
+1. 把代码仓库 `chart-packages` 目录里的 chart 包上传到应用商店，或复制到 `CHART_DIR`。
 2. 上传后，各组件的安装卡片会列出它需要的全部镜像：“设置”里的“监控”“日志”，以及“模型服务”里的 GPU 资源、推理服务和网关页面。这份清单是平台用安装时的参数渲染 chart 得出的，换了 chart 版本也会跟着变。
 3. 把这些镜像同步到内网镜像仓库，名称只保留最后一段，例如 `quay.io/prometheus/node-exporter:v1.12.1-distroless` 对应 `<仓库地址>/node-exporter:v1.12.1-distroless`。
 4. 在“集群管理”里给集群设置镜像仓库地址。平台安装组件时会把所有镜像改写到这个地址下，包括 Helm hook 和 Operator 运行时才拉取的镜像。

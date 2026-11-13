@@ -48,8 +48,17 @@ mplatform
 
 /data/plugins/
 
-# Local app store chart packages (CHART_DIR)
-chart-packages/
+# Local app store chart packages (CHART_DIR). The chart versions the
+# platform is verified with are committed; uploaded charts are not.
+chart-packages/*
+!chart-packages/THIRD_PARTY_NOTICES.md
+!chart-packages/gpu-operator-v26.7.2-mplatform.1.tgz
+!chart-packages/hami-2.11.0.tgz
+!chart-packages/higress-core-2.2.6.tgz
+!chart-packages/kube-prometheus-stack-93.1.1.tgz
+!chart-packages/lws-1.0.0.tgz
+!chart-packages/vector-0.61.0.tgz
+!chart-packages/victoria-logs-single-0.13.12.tgz
 
 # graphify knowledge graph output
 graphify-out/
