@@ -13,6 +13,7 @@ import { useCluster } from '@/hooks/use-cluster'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ChartRequirement } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 export function LWSCard() {
@@ -76,21 +77,10 @@ export function LWSCard() {
             <p className="text-muted-foreground">
               {t('modelServing.lws.chartHint')}
             </p>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="font-mono">{chart?.name}</span>
-              {chart?.version ? (
-                <>
-                  <Badge variant="outline">{chart.version}</Badge>
-                  <span className="font-mono text-muted-foreground">
-                    {chart.image}
-                  </span>
-                </>
-              ) : (
-                <Badge variant="destructive">
-                  {t('modelServing.lws.chartMissing')}
-                </Badge>
-              )}
-            </div>
+            <ChartRequirement
+              chart={chart}
+              missingLabel={t('modelServing.lws.chartMissing')}
+            />
           </div>
           <Button
             onClick={() => void handleInstall()}

@@ -1,13 +1,11 @@
 package modelserving
 
 import (
-	"errors"
+	"context"
 	"net/http"
-	"slices"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qzytwway/mplatform/pkg/helmutil"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 )
 
 // The GPU Operator is installed the way its documentation does: release
@@ -17,22 +15,7 @@ const (
 	gpuOperatorChartName   = "gpu-operator"
 	gpuOperatorReleaseName = "gpu-operator"
 	gpuOperatorNamespace   = "gpu-operator"
-	nfdChartName           = "node-feature-discovery"
 )
-
-// gpuOperatorImageValues are the values of the images the chart and its
-// ClusterPolicy deploy, each with repository, image and version fields.
-var gpuOperatorImageValues = [][]string{
-	{"operator"},
-	{"validator"},
-	{"driver"},
-	{"driver", "manager"},
-	{"toolkit"},
-	{"devicePlugin"},
-	{"gfd"},
-	{"dcgmExporter"},
-	{"migManager"},
-}
 
 type installGPUOperatorRequest struct {
 	// DriverPreinstalled leaves the driver to the hosts, for operating
@@ -40,51 +23,16 @@ type installGPUOperatorRequest struct {
 	DriverPreinstalled bool `json:"driverPreinstalled"`
 }
 
-func gpuOperatorChartStatus() (chartStatus, error) {
-	status := chartStatus{Name: gpuOperatorChartName}
-	loadedChart, err := helmutil.LoadLocalChart(gpuOperatorChartName)
-	if errors.Is(err, helmutil.ErrLocalChartNotFound) {
-		return status, nil
-	} else if err != nil {
-		return status, err
-	}
-	status.Version = loadedChart.Metadata.Version
-	for _, fields := range gpuOperatorImageValues {
-		component, _, _ := unstructured.NestedFieldNoCopy(loadedChart.Values, fields...)
-		values, _ := component.(map[string]any)
-		if enabled, found, _ := unstructured.NestedBool(values, "enabled"); found && !enabled {
-			continue
-		}
-		repository, _, _ := unstructured.NestedString(values, "repository")
-		image, _, _ := unstructured.NestedString(values, "image")
-		version, _, _ := unstructured.NestedString(values, "version")
-		if repository == "" || image == "" {
-			continue
-		}
-		if version == "" {
-			version = loadedChart.Metadata.AppVersion
-		}
-		if reference := repository + "/" + image + ":" + version; !slices.Contains(status.Images, reference) {
-			status.Images = append(status.Images, reference)
-		}
-	}
-	for _, dependency := range loadedChart.Dependencies() {
-		if dependency.Name() != nfdChartName {
-			continue
-		}
-		repository, _, _ := unstructured.NestedString(dependency.Values, "image", "repository")
-		tag, _, _ := unstructured.NestedString(dependency.Values, "image", "tag")
-		if tag == "" {
-			tag = dependency.Metadata.AppVersion
-		}
-		if repository != "" {
-			status.Images = append(status.Images, repository+":"+tag)
-		}
-	}
-	if len(status.Images) > 0 {
-		status.Image = status.Images[0]
-	}
-	return status, nil
+func gpuOperatorValues(driverPreinstalled bool) map[string]any {
+	return map[string]any{"driver": map[string]any{"enabled": !driverPreinstalled}}
+}
+
+// gpuOperatorChartStatus lists the images with the driver container, which
+// hosts with a preinstalled driver do not pull.
+func gpuOperatorChartStatus(ctx context.Context, kubeVersion string) (chartStatus, error) {
+	return componentChartStatus(ctx, gpuOperatorChartName, gpuOperatorReleaseName, gpuOperatorNamespace, testedGPUOperatorVersion, kubeVersion, func(*chart.Chart) map[string]any {
+		return gpuOperatorValues(false)
+	})
 }
 
 func (h *Handler) InstallGPUOperator(c *gin.Context) {
@@ -102,8 +50,7 @@ func (h *Handler) InstallGPUOperator(c *gin.Context) {
 	if !ok {
 		return
 	}
-	values := map[string]any{"driver": map[string]any{"enabled": !req.DriverPreinstalled}}
-	installComponent(c, cs, loadedChart, gpuOperatorReleaseName, gpuOperatorNamespace, values, "GPU Operator installed")
+	installComponent(c, cs, loadedChart, gpuOperatorReleaseName, gpuOperatorNamespace, gpuOperatorValues(req.DriverPreinstalled), "GPU Operator installed")
 }
 
 func (h *Handler) UninstallGPUOperator(c *gin.Context) {

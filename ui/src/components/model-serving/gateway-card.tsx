@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ChartRequirement } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 export function GatewayCard({ status }: { status: GatewayStatus }) {
@@ -262,27 +263,13 @@ function GatewayRequirements({ status }: { status: GatewayStatus }) {
       <p className="text-muted-foreground">
         {t('modelServing.gateway.chartsHint')}
       </p>
-      <ul className="space-y-1 text-xs">
+      <ul className="space-y-2 text-xs">
         {status.charts.map((chart) => (
-          <li key={chart.name} className="flex flex-wrap items-center gap-2">
-            <span className="font-mono">{chart.name}</span>
-            {chart.version ? (
-              <>
-                <Badge variant="outline">{chart.version}</Badge>
-                {(chart.images ?? [chart.image]).map((image) => (
-                  <span
-                    key={image}
-                    className="font-mono break-all text-muted-foreground"
-                  >
-                    {image}
-                  </span>
-                ))}
-              </>
-            ) : (
-              <Badge variant="destructive">
-                {t('modelServing.gateway.chartMissing')}
-              </Badge>
-            )}
+          <li key={chart.name}>
+            <ChartRequirement
+              chart={chart}
+              missingLabel={t('modelServing.gateway.chartMissing')}
+            />
           </li>
         ))}
         {status.plugins.map((plugin) => (

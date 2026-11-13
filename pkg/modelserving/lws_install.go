@@ -1,6 +1,7 @@
 package modelserving
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -8,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 )
 
 // LeaderWorkerSet is installed the way its documentation does: release lws of
@@ -20,32 +21,53 @@ const (
 	lwsActionTimeout = 5 * time.Minute
 )
 
+// The chart versions the platform is verified with; the README lists them
+// too.
+const (
+	testedLWSVersion         = "v1.0.0"
+	testedGPUOperatorVersion = "v26.7.2-mplatform.1"
+	testedHAMiVersion        = "2.11.0"
+	testedGatewayVersion     = "2.2.6"
+)
+
 // chartStatus reports whether a chart model serving installs is in the local
-// chart repository, and the images an offline registry must provide for it
-// before the cluster image registry rewrite is applied. Images is only set
-// for charts that need more than one.
+// chart repository, the version the platform is verified with, and the images
+// an offline registry must provide for it before the cluster image registry
+// rewrite is applied, or why they cannot be listed.
 type chartStatus struct {
-	Name    string   `json:"name"`
-	Version string   `json:"version,omitempty"`
-	Image   string   `json:"image,omitempty"`
-	Images  []string `json:"images,omitempty"`
+	Name          string   `json:"name"`
+	Version       string   `json:"version,omitempty"`
+	TestedVersion string   `json:"testedVersion,omitempty"`
+	Images        []string `json:"images,omitempty"`
+	Error         string   `json:"error,omitempty"`
 }
 
-func lwsChartStatus() (chartStatus, error) {
-	status := chartStatus{Name: lwsChartName}
-	loadedChart, err := helmutil.LoadLocalChart(lwsChartName)
+// componentChartStatus lists the images a chart deploys in a cluster of
+// kubeVersion, rendered with the values the platform installs it with.
+func componentChartStatus(ctx context.Context, name, release, namespace, testedVersion, kubeVersion string, values func(*chart.Chart) map[string]any) (chartStatus, error) {
+	status := chartStatus{Name: name, TestedVersion: testedVersion}
+	loadedChart, err := helmutil.LoadLocalChart(name)
 	if errors.Is(err, helmutil.ErrLocalChartNotFound) {
 		return status, nil
 	} else if err != nil {
 		return status, err
 	}
 	status.Version = loadedChart.Metadata.Version
-	repository, _, _ := unstructured.NestedString(loadedChart.Values, "image", "manager", "repository")
-	tag, _, _ := unstructured.NestedString(loadedChart.Values, "image", "manager", "tag")
-	if repository != "" && tag != "" {
-		status.Image = repository + ":" + tag
+	status.Images, err = helmutil.ChartImages(ctx, loadedChart, values(loadedChart), helmutil.ChartImagesOptions{ReleaseName: release, Namespace: namespace, KubeVersion: kubeVersion})
+	if err != nil {
+		status.Error = err.Error()
 	}
 	return status, nil
+}
+
+// lwsValues adds the validating webhook of DisaggregatedSet, whose CRD and
+// controller always ship with the chart.
+func lwsValues(*chart.Chart) map[string]any {
+	return map[string]any{"enableDisaggregatedSet": true}
+}
+
+func lwsChartStatus(ctx context.Context, kubeVersion string) (chartStatus, error) {
+	return componentChartStatus(ctx, lwsChartName, lwsReleaseName, lwsNamespace, testedLWSVersion, kubeVersion, lwsValues)
 }
 
 func (h *Handler) GetStatus(c *gin.Context) {
@@ -74,7 +96,7 @@ func (h *Handler) GetStatus(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	chart, err := lwsChartStatus()
+	chart, err := lwsChartStatus(c.Request.Context(), cs.Version)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -108,10 +130,7 @@ func (h *Handler) InstallLWS(c *gin.Context) {
 		c.JSON(installErrorStatus(err), gin.H{"error": err.Error()})
 		return
 	}
-	// The CRD and controller of DisaggregatedSet always ship with the chart;
-	// this adds its validating webhook.
-	values := map[string]any{"enableDisaggregatedSet": true}
-	err = helmutil.InstallPlatformRelease(ctx, cfg, cs.Name, operatorID, loadedChart, values, helmutil.InstallReleaseOptions{
+	err = helmutil.InstallPlatformRelease(ctx, cfg, cs.Name, operatorID, loadedChart, lwsValues(loadedChart), helmutil.InstallReleaseOptions{
 		ReleaseName:     lwsReleaseName,
 		Namespace:       lwsNamespace,
 		Timeout:         lwsActionTimeout,

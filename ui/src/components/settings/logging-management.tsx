@@ -8,9 +8,8 @@ import {
   uninstallLogging,
   useLoggingStatus,
   type ClusterLoggingStatus,
-  type LoggingChart,
-  type LoggingImage,
 } from '@/lib/api/logging'
+import type { ComponentChart, ComponentImage } from '@/lib/api/shared'
 import { translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +25,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  ChartRequirement,
+  ImageRequirement,
+} from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 export function LoggingManagement() {
@@ -159,36 +162,25 @@ function RequiredCharts({
   charts,
   images,
 }: {
-  charts: LoggingChart[]
-  images: LoggingImage[]
+  charts: ComponentChart[]
+  images: ComponentImage[]
 }) {
   const { t } = useTranslation()
   return (
     <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
       <p className="text-muted-foreground">{t('logging.chartsHint')}</p>
-      <ul className="space-y-1 text-xs">
+      <ul className="space-y-2">
         {charts.map((chart) => (
-          <li key={chart.name} className="flex flex-wrap items-center gap-2">
-            <span className="font-mono">{chart.name}</span>
-            {chart.version ? (
-              <>
-                <Badge variant="outline">{chart.version}</Badge>
-                <span className="font-mono text-muted-foreground">
-                  {chart.image}
-                </span>
-              </>
-            ) : (
-              <Badge variant="destructive">{t('logging.chartMissing')}</Badge>
-            )}
+          <li key={chart.name}>
+            <ChartRequirement
+              chart={chart}
+              missingLabel={t('logging.chartMissing')}
+            />
           </li>
         ))}
         {images.map((item) => (
-          <li key={item.name} className="flex flex-wrap items-center gap-2">
-            <span className="font-mono">{item.name}</span>
-            <Badge variant="outline">{t('logging.logAlertsImage')}</Badge>
-            <span className="font-mono text-muted-foreground">
-              {item.image}
-            </span>
+          <li key={item.name}>
+            <ImageRequirement item={item} label={t('logging.logAlertsImage')} />
           </li>
         ))}
       </ul>

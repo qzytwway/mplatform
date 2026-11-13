@@ -31,13 +31,19 @@ func forwarderURL(namespace string) string {
 	return fmt.Sprintf("http://%s.%s.svc:%d", forwarderName, namespace, forwarderPort)
 }
 
+// clusterAgentImage is the image the forwarder runs, before the cluster's
+// image registry is applied.
+func clusterAgentImage() string {
+	if setting, err := model.GetGeneralSetting(); err == nil && setting != nil && setting.ClusterAgentImage != "" {
+		return setting.ClusterAgentImage
+	}
+	return model.DefaultGeneralClusterAgentImageValue()
+}
+
 // forwarderImage is the cluster agent image, under the cluster's image
 // registry when it has one.
 func forwarderImage(clusterName string) (string, error) {
-	image := model.DefaultGeneralClusterAgentImageValue()
-	if setting, err := model.GetGeneralSetting(); err == nil && setting != nil && setting.ClusterAgentImage != "" {
-		image = setting.ClusterAgentImage
-	}
+	image := clusterAgentImage()
 	registry, err := helmutil.ClusterImageRegistry(clusterName)
 	if err != nil {
 		return "", err

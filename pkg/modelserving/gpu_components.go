@@ -62,14 +62,14 @@ func (h *Handler) GetGPUComponents(c *gin.Context) {
 	}
 	gpuOperator, err := installedComponent(cs, gpuOperatorNamespace, gpuOperatorReleaseName)
 	if err == nil {
-		gpuOperator.Chart, err = gpuOperatorChartStatus()
+		gpuOperator.Chart, err = gpuOperatorChartStatus(c.Request.Context(), cs.Version)
 	}
 	hami := gpuComponent{}
 	if err == nil {
 		hami, err = installedComponent(cs, hamiNamespace, hamiReleaseName)
 	}
 	if err == nil {
-		hami.Chart, err = hamiChartStatus(cs.Version)
+		hami.Chart, err = hamiChartStatus(c.Request.Context(), cs.Version)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
