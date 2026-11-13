@@ -27,10 +27,6 @@ import (
 // to the cluster's Alertmanager. It writes the alert state to Prometheus, so
 // log alerts are in its ALERTS series like any other.
 const (
-	// VMAlertImage is the image an offline registry must provide for log
-	// alerts, before the cluster image registry rewrite is applied.
-	VMAlertImage = "victoriametrics/vmalert:v1.155.0"
-
 	vmalertName     = "mplatform-vmalert"
 	vmalertPort     = 8880
 	vmalertRulesDir = "/etc/vmalert"
@@ -83,7 +79,7 @@ func ensureLogAlerter(ctx context.Context, cs *cluster.ClientSet) error {
 		return err
 	}
 
-	image := VMAlertImage
+	image := logging.VMAlertImage
 	registry, err := helmutil.ClusterImageRegistry(cs.Name)
 	if err != nil {
 		return err

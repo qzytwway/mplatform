@@ -2186,6 +2186,7 @@
     "unavailable": "不可用",
     "chartsHint": "日志组件的 Chart 从应用商店的本地仓库（local）读取。离线环境还需要准备下列镜像，各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。",
     "chartMissing": "未上传",
+    "logAlertsImage": "日志告警",
     "upgradeHint": "上传新版本 Chart 不会自动升级已安装的日志组件。",
     "actions": {
       "install": "安装",
