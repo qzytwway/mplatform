@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ChartRequirement } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 export function GPUComponentCards() {
@@ -175,28 +176,10 @@ function ComponentCard({
           <p className="text-muted-foreground">
             {t('modelServing.gpuComponents.chartHint')}
           </p>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-mono">{chart.name}</span>
-            {chart.version ? (
-              <Badge variant="outline">{chart.version}</Badge>
-            ) : (
-              <Badge variant="destructive">
-                {t('modelServing.gpuComponents.chartMissing')}
-              </Badge>
-            )}
-          </div>
-          {chart.version && (
-            <ul className="space-y-1 text-xs">
-              {(chart.images ?? []).map((image) => (
-                <li
-                  key={image}
-                  className="font-mono break-all text-muted-foreground"
-                >
-                  {image}
-                </li>
-              ))}
-            </ul>
-          )}
+          <ChartRequirement
+            chart={chart}
+            missingLabel={t('modelServing.gpuComponents.chartMissing')}
+          />
         </div>
         {children}
         {blocker && <p className="text-sm text-muted-foreground">{blocker}</p>}

@@ -24,6 +24,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  ChartRequirement,
+  ImageRequirement,
+} from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 export function MonitoringManagement() {
@@ -78,19 +82,20 @@ export function MonitoringManagement() {
           ))}
         </ul>
         <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
-          <p className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="font-mono">{data.chart.name}</span>
-            {data.chart.version ? (
-              <Badge variant="outline">{data.chart.version}</Badge>
-            ) : (
-              <Badge variant="destructive">
-                {t('monitoringSettings.chartMissing')}
-              </Badge>
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground">
             {t('monitoringSettings.chartHint')}
           </p>
+          <ChartRequirement
+            chart={data.chart}
+            missingLabel={t('monitoringSettings.chartMissing')}
+          />
+          {data.images.map((item) => (
+            <ImageRequirement
+              key={item.name}
+              item={item}
+              label={t('monitoringSettings.forwarderImage')}
+            />
+          ))}
         </div>
       </CardContent>
       {installing && (

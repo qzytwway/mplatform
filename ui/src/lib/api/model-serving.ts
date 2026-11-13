@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useCluster } from '@/hooks/use-cluster'
 
 import { apiClient } from '../api-client'
+import type { ComponentChart } from './shared'
 
 export type ModelType = 'chat' | 'embedding'
 export type ModelSourceType = 'local' | 's3'
@@ -161,11 +162,7 @@ export interface ModelServingStatus {
   lws: boolean
   disaggregatedSet: boolean
   installed: boolean
-  chart: {
-    name: string
-    version?: string
-    image?: string
-  }
+  chart: ComponentChart
 }
 
 export interface CreateInferenceServiceRequest {
@@ -274,12 +271,7 @@ export interface GPUComponent {
   installed: boolean
   // The chart version of the installed release; chart is the local chart.
   version?: string
-  chart: {
-    name: string
-    version?: string
-    image?: string
-    images?: string[]
-  }
+  chart: ComponentChart
 }
 
 export interface GPUComponents {

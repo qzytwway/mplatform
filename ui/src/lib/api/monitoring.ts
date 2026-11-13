@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { apiClient } from '../api-client'
+import type { ComponentChart, ComponentImage } from './shared'
 
 export interface MonitoringClusterStatus {
   name: string
@@ -10,7 +11,8 @@ export interface MonitoringClusterStatus {
 }
 
 export interface MonitoringStatus {
-  chart: { name: string; version?: string }
+  chart: ComponentChart
+  images: ComponentImage[]
   clusters: MonitoringClusterStatus[]
 }
 

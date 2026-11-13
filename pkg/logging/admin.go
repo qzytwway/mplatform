@@ -72,7 +72,7 @@ type clusterStatus struct {
 }
 
 func (h *Handler) GetStatus(c *gin.Context) {
-	charts, err := chartStatuses()
+	charts, err := chartStatuses(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

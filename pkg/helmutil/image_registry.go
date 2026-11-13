@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/distribution/reference"
@@ -73,7 +74,34 @@ type imageRegistryPostRenderer struct {
 	imageRegistry string
 }
 
+// Run also moves the images of ClusterPolicy components that are turned off,
+// so they are pulled from the registry if they are turned on later.
 func (r imageRegistryPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, error) {
+	return visitManifestImages(renderedManifests, false, func(image string) string {
+		return RewriteImageRegistry(image, r.imageRegistry)
+	})
+}
+
+// imageCollector records the images imageRegistryPostRenderer moves, except
+// those of ClusterPolicy components that are turned off and deploy nothing,
+// and leaves the manifests unchanged.
+type imageCollector struct {
+	images []string
+}
+
+func (c *imageCollector) Run(renderedManifests *bytes.Buffer) (*bytes.Buffer, error) {
+	return visitManifestImages(renderedManifests, true, func(image string) string {
+		if !slices.Contains(c.images, image) {
+			c.images = append(c.images, image)
+		}
+		return image
+	})
+}
+
+// visitManifestImages replaces every image the manifests deploy with what
+// visit returns for it, skipping ClusterPolicy components that are turned off
+// when skipDisabled is set.
+func visitManifestImages(renderedManifests *bytes.Buffer, skipDisabled bool, visit func(image string) string) (*bytes.Buffer, error) {
 	decoder := yaml.NewDecoder(renderedManifests)
 	out := &bytes.Buffer{}
 	encoder := yaml.NewEncoder(out)
@@ -86,9 +114,9 @@ func (r imageRegistryPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.
 			}
 			return nil, fmt.Errorf("failed to parse rendered manifests: %w", err)
 		}
-		r.rewriteImages(&document)
-		r.rewriteMonitoringImage(&document)
-		r.rewriteClusterPolicy(&document)
+		visitContainerImages(&document, visit)
+		visitMonitoringImage(&document, visit)
+		visitClusterPolicy(&document, skipDisabled, visit)
 		if err := encoder.Encode(&document); err != nil {
 			return nil, fmt.Errorf("failed to write rendered manifests: %w", err)
 		}
@@ -99,31 +127,31 @@ func (r imageRegistryPostRenderer) Run(renderedManifests *bytes.Buffer) (*bytes.
 	return out, nil
 }
 
-func (r imageRegistryPostRenderer) rewriteImages(node *yaml.Node) {
+func visitContainerImages(node *yaml.Node, visit func(string) string) {
 	if node.Kind == yaml.MappingNode {
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			key, value := node.Content[i], node.Content[i+1]
 			if containerListKeys[key.Value] && value.Kind == yaml.SequenceNode {
 				for _, container := range value.Content {
-					r.rewriteContainerImage(container)
+					visitContainer(container, visit)
 				}
 			}
 		}
 	}
 	for _, child := range node.Content {
-		r.rewriteImages(child)
+		visitContainerImages(child, visit)
 	}
 }
 
-func (r imageRegistryPostRenderer) rewriteContainerImage(container *yaml.Node) {
+func visitContainer(container *yaml.Node, visit func(string) string) {
 	if image := mappingValue(container, "image"); image != nil && image.Kind == yaml.ScalarNode {
-		image.Value = RewriteImageRegistry(image.Value, r.imageRegistry)
+		image.Value = visit(image.Value)
 	}
 	if env := mappingValue(container, "env"); env != nil && env.Kind == yaml.SequenceNode {
 		for _, variable := range env.Content {
 			name, value := mappingValue(variable, "name"), mappingValue(variable, "value")
 			if name != nil && value != nil && value.Kind == yaml.ScalarNode && imageEnvNames[name.Value] {
-				value.Value = RewriteImageRegistry(value.Value, r.imageRegistry)
+				value.Value = visit(value.Value)
 			}
 		}
 	}
@@ -134,13 +162,13 @@ func (r imageRegistryPostRenderer) rewriteContainerImage(container *yaml.Node) {
 	for _, arg := range args.Content {
 		for _, prefix := range imageArgPrefixes {
 			if image, ok := strings.CutPrefix(arg.Value, prefix); ok && arg.Kind == yaml.ScalarNode {
-				arg.Value = prefix + RewriteImageRegistry(image, r.imageRegistry)
+				arg.Value = prefix + visit(image)
 			}
 		}
 	}
 }
 
-func (r imageRegistryPostRenderer) rewriteMonitoringImage(document *yaml.Node) {
+func visitMonitoringImage(document *yaml.Node, visit func(string) string) {
 	if document.Kind != yaml.DocumentNode || len(document.Content) == 0 {
 		return
 	}
@@ -150,11 +178,11 @@ func (r imageRegistryPostRenderer) rewriteMonitoringImage(document *yaml.Node) {
 		return
 	}
 	if image := mappingValue(mappingValue(resource, "spec"), "image"); image != nil && image.Kind == yaml.ScalarNode {
-		image.Value = RewriteImageRegistry(image.Value, r.imageRegistry)
+		image.Value = visit(image.Value)
 	}
 }
 
-func (r imageRegistryPostRenderer) rewriteClusterPolicy(document *yaml.Node) {
+func visitClusterPolicy(document *yaml.Node, skipDisabled bool, visit func(string) string) {
 	if document.Kind != yaml.DocumentNode || len(document.Content) == 0 {
 		return
 	}
@@ -163,22 +191,36 @@ func (r imageRegistryPostRenderer) rewriteClusterPolicy(document *yaml.Node) {
 	if apiVersion == nil || kind == nil || apiVersion.Value != clusterPolicyAPIVersion || kind.Value != clusterPolicyKind {
 		return
 	}
-	r.rewriteRepositories(mappingValue(resource, "spec"))
+	visitRepositories(mappingValue(resource, "spec"), skipDisabled, visit)
 }
 
-// rewriteRepositories moves every repository and image pair under node, such
-// as spec.driver and spec.driver.manager, under imageRegistry.
-func (r imageRegistryPostRenderer) rewriteRepositories(node *yaml.Node) {
+// visitRepositories visits every repository, image and version under node,
+// such as spec.driver and spec.driver.manager, as one image reference. A
+// component turned off with enabled: false deploys nothing, and is skipped
+// when skipDisabled is set.
+func visitRepositories(node *yaml.Node, skipDisabled bool, visit func(string) string) {
 	if node == nil {
+		return
+	}
+	if enabled := mappingValue(node, "enabled"); skipDisabled && enabled != nil && enabled.Value == "false" {
 		return
 	}
 	repository, image := mappingValue(node, "repository"), mappingValue(node, "image")
 	if repository != nil && image != nil && repository.Kind == yaml.ScalarNode && image.Kind == yaml.ScalarNode && repository.Value != "" {
-		rewritten := RewriteImageRegistry(repository.Value+"/"+image.Value, r.imageRegistry)
-		repository.Value, image.Value = path.Dir(rewritten), path.Base(rewritten)
+		name := repository.Value + "/" + image.Value
+		// The operator pulls name:version, or name@version for a digest.
+		suffix := ""
+		if version := mappingValue(node, "version"); version != nil && version.Kind == yaml.ScalarNode && version.Value != "" {
+			suffix = ":" + version.Value
+			if strings.HasPrefix(version.Value, "sha256:") {
+				suffix = "@" + version.Value
+			}
+		}
+		visited := strings.TrimSuffix(visit(name+suffix), suffix)
+		repository.Value, image.Value = path.Dir(visited), path.Base(visited)
 	}
 	for _, child := range node.Content {
-		r.rewriteRepositories(child)
+		visitRepositories(child, skipDisabled, visit)
 	}
 }
 

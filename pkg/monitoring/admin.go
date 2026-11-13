@@ -24,9 +24,12 @@ import (
 // documentation uses, without Grafana: the platform renders the chart's
 // dashboards itself.
 const (
-	chartName   = "kube-prometheus-stack"
-	releaseName = "kube-prometheus-stack"
-	Namespace   = "monitoring"
+	chartName = "kube-prometheus-stack"
+	// testedChartVersion is the chart version the platform is verified with;
+	// the README lists it too.
+	testedChartVersion = "93.1.1"
+	releaseName        = "kube-prometheus-stack"
+	Namespace          = "monitoring"
 
 	// The admission webhook certificates are created by hook Jobs, which the
 	// install waits for.
@@ -59,9 +62,22 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g.DELETE("/clusters/:cluster", h.Uninstall)
 }
 
+// chartStatus reports the chart in the local chart repository, the version
+// the platform is verified with, and the images it deploys before the cluster
+// image registry rewrite is applied, or why they cannot be listed.
 type chartStatus struct {
-	Name    string `json:"name"`
-	Version string `json:"version,omitempty"`
+	Name          string   `json:"name"`
+	Version       string   `json:"version,omitempty"`
+	TestedVersion string   `json:"testedVersion,omitempty"`
+	Images        []string `json:"images,omitempty"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// imageStatus is an image the platform deploys next to the chart, which an
+// offline registry must also provide.
+type imageStatus struct {
+	Name  string `json:"name"`
+	Image string `json:"image"`
 }
 
 // clusterStatus reports whether the platform's release is in a cluster and
@@ -81,14 +97,23 @@ type installRequest struct {
 }
 
 func (h *Handler) GetStatus(c *gin.Context) {
-	chart := chartStatus{Name: chartName}
+	chart := chartStatus{Name: chartName, TestedVersion: testedChartVersion}
 	loadedChart, err := helmutil.LoadLocalChart(chartName)
 	if err != nil && !errors.Is(err, helmutil.ErrLocalChartNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	} else if err == nil {
 		chart.Version = loadedChart.Metadata.Version
+		values, err := installValues(installRequest{})
+		if err == nil {
+			chart.Images, err = helmutil.ChartImages(c.Request.Context(), loadedChart, values, helmutil.ChartImagesOptions{ReleaseName: releaseName, Namespace: Namespace})
+		}
+		if err != nil {
+			chart.Error = err.Error()
+		}
 	}
+	// The forwarder sends to Feishu and Bark channels.
+	images := []imageStatus{{Name: forwarderName, Image: clusterAgentImage()}}
 	clusters, err := model.ListClusters()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -114,7 +139,7 @@ func (h *Handler) GetStatus(c *gin.Context) {
 		}
 		statuses = append(statuses, status)
 	}
-	c.JSON(http.StatusOK, gin.H{"chart": chart, "clusters": statuses})
+	c.JSON(http.StatusOK, gin.H{"chart": chart, "images": images, "clusters": statuses})
 }
 
 func releaseExists(cs *cluster.ClientSet) (bool, error) {

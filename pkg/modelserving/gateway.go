@@ -1,16 +1,16 @@
 package modelserving
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/klog/v2"
 )
 
@@ -30,34 +30,12 @@ func toGatewayAddress(gateway *model.ModelGateway) *gatewayAddress {
 	}
 }
 
-// gatewayChartStatus lists the images of the gateway, controller and pilot,
-// all of which the chart pulls from <hub>/higress at its app version, and
-// that of its Redis. hub overrides the chart's own when set.
-func gatewayChartStatus(hub string) (chartStatus, error) {
-	status := chartStatus{Name: gatewayChartName}
-	loadedChart, err := helmutil.LoadLocalChart(gatewayChartName)
-	if errors.Is(err, helmutil.ErrLocalChartNotFound) {
-		return status, nil
-	} else if err != nil {
-		return status, err
-	}
-	status.Version = loadedChart.Metadata.Version
-	if hub == "" {
-		hub, _, _ = unstructured.NestedString(loadedChart.Values, "global", "hub")
-	}
-	if hub == "" {
-		return status, nil
-	}
-	for _, image := range []string{"gateway", "higress", "pilot"} {
-		status.Images = append(status.Images, hub+"/higress/"+image+":"+loadedChart.Metadata.AppVersion)
-	}
-	status.Image = status.Images[0]
-	redisImage, _, _ := unstructured.NestedString(loadedChart.Values, "redis", "redis", "image")
-	redisTag, _, _ := unstructured.NestedString(loadedChart.Values, "redis", "redis", "tag")
-	if redisImage != "" && redisTag != "" {
-		status.Images = append(status.Images, hub+"/higress/"+redisImage+":"+redisTag)
-	}
-	return status, nil
+// gatewayChartStatus lists the images the chart pulls from hub, its own hub
+// when empty. Only the hub of the gateway's settings changes its images.
+func gatewayChartStatus(ctx context.Context, hub, kubeVersion string) (chartStatus, error) {
+	return componentChartStatus(ctx, gatewayChartName, gatewayReleaseName, gatewayNamespace, testedGatewayVersion, kubeVersion, func(*chart.Chart) map[string]any {
+		return gatewayValues(&model.ModelGateway{Hub: hub}, nil, "")
+	})
 }
 
 func (h *Handler) GetGateway(c *gin.Context) {
@@ -83,7 +61,7 @@ func (h *Handler) GetGateway(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	chart, err := gatewayChartStatus(hub)
+	chart, err := gatewayChartStatus(c.Request.Context(), hub, cs.Version)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -2177,6 +2177,11 @@
       "renderFailed": "此面板无法显示"
     }
   },
+  "chartRequirement": {
+    "untested": "未验证版本（已验证 {{version}}）",
+    "untestedHint": "平台用这个版本之外的 Chart 也能安装，但没有验证过它的配置项和镜像，安装后请检查各组件是否正常。",
+    "imagesError": "无法列出镜像：{{error}}"
+  },
   "logging": {
     "title": "日志",
     "description": "在集群中安装日志组件：VictoriaLogs 存储本集群的容器日志，每个节点上的 Vector 负责采集。日志留在各自的集群里，MPlatform 通过集群的 Kubernetes API 查询。",
@@ -2229,7 +2234,8 @@
     "unavailable": "不可用",
     "connectedTo": "Prometheus：{{url}}",
     "chartMissing": "未上传",
-    "chartHint": "Chart 和指标页的仪表盘都从应用商店的本地仓库（local）读取。各集群按自己的镜像仓库地址拉取镜像。上传新版本 Chart 不会自动升级已安装的 release。",
+    "chartHint": "Chart 和指标页的仪表盘都从应用商店的本地仓库（local）读取。离线环境还需要准备下列镜像，各集群会按自己的镜像仓库地址，从 <地址>/<镜像名>:<tag> 拉取。上传新版本 Chart 不会自动升级已安装的 release。",
+    "forwarderImage": "飞书、Bark 通知",
     "actions": {
       "install": "安装",
       "installing": "安装中...",

@@ -4,13 +4,7 @@ import { useCluster } from '@/hooks/use-cluster'
 
 import { apiClient } from '../api-client'
 import { clusterPath } from './model-serving'
-
-export interface GatewayChart {
-  name: string
-  version?: string
-  image?: string
-  images?: string[]
-}
+import type { ComponentChart } from './shared'
 
 export interface GatewayStatus {
   installed: boolean
@@ -22,7 +16,7 @@ export interface GatewayStatus {
     address: string
     hub?: string
   } | null
-  charts: GatewayChart[]
+  charts: ComponentChart[]
   plugins: { name: string; url: string }[]
 }
 

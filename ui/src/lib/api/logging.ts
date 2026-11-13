@@ -4,6 +4,7 @@ import { useCluster } from '@/hooks/use-cluster'
 
 import { apiClient } from '../api-client'
 import { withCurrentClusterPath } from '../current-cluster'
+import type { ComponentChart, ComponentImage } from './shared'
 
 export interface ClusterLoggingStatus {
   name: string
@@ -12,22 +13,10 @@ export interface ClusterLoggingStatus {
   error?: string
 }
 
-export interface LoggingChart {
-  name: string
-  version?: string
-  image?: string
-}
-
-// An image the logging stack deploys without a chart, such as vmalert for log
-// alerts.
-export interface LoggingImage {
-  name: string
-  image: string
-}
-
 export interface LoggingStatus {
-  charts: LoggingChart[]
-  images: LoggingImage[]
+  charts: ComponentChart[]
+  // Deployed without a chart, such as vmalert for log alerts.
+  images: ComponentImage[]
   clusters: ClusterLoggingStatus[]
 }
 

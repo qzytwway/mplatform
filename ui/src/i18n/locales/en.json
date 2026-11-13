@@ -2177,6 +2177,11 @@
       "renderFailed": "This panel could not be displayed"
     }
   },
+  "chartRequirement": {
+    "untested": "Untested (verified with {{version}})",
+    "untestedHint": "Other chart versions still install, but their values and images are not verified with the platform; check the components once installed.",
+    "imagesError": "Cannot list the images: {{error}}"
+  },
   "logging": {
     "title": "Logging",
     "description": "Install logging into a cluster: VictoriaLogs stores the cluster's container logs, and a Vector agent on every node collects them. Logs stay in their own cluster, and MPlatform queries them through the cluster's Kubernetes API.",
@@ -2229,7 +2234,8 @@
     "unavailable": "Unavailable",
     "connectedTo": "Prometheus: {{url}}",
     "chartMissing": "Not uploaded",
-    "chartHint": "The chart and the Metrics page dashboards are read from the app store's local repository. Each cluster pulls the images through its image registry setting. Uploading a newer chart does not upgrade installed releases.",
+    "chartHint": "The chart and the Metrics page dashboards are read from the app store's local repository. Offline clusters also need the images below; each cluster pulls them from <registry>/<image>:<tag> using its image registry setting. Uploading a newer chart does not upgrade installed releases.",
+    "forwarderImage": "Feishu and Bark notifications",
     "actions": {
       "install": "Install",
       "installing": "Installing...",
@@ -2552,7 +2558,7 @@
     "lws": {
       "title": "LeaderWorkerSet",
       "description": "Inference services run on LeaderWorkerSet (LWS). Install it into this cluster before creating services.",
-      "chartHint": "The chart is read from the local chart directory. Offline clusters also need the image below; the cluster pulls it from <registry>/<image>:<tag> using its image registry setting.",
+      "chartHint": "The chart is read from the local chart directory. Offline clusters also need the images below; the cluster pulls them from <registry>/<image>:<tag> using its image registry setting.",
       "chartMissing": "Not in the local chart directory",
       "crdPresent": "This cluster already has the LeaderWorkerSet resource definitions, but not a release installed by this platform. If LWS runs here by other means, there is nothing to install.",
       "install": "Install",
