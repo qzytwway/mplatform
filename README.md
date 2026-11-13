@@ -252,7 +252,7 @@ kubectl rollout restart deployment/mplatform --namespace mplatform-system
 1. 把代码仓库 `chart-packages` 目录里的 chart 包上传到应用商店，或复制到 `CHART_DIR`。
 2. 上传后，各组件的安装卡片会列出它需要的全部镜像：“设置”里的“监控”“日志”，以及“模型服务”里的 GPU 资源、推理服务和网关页面。这份清单是平台用安装时的参数渲染 chart 得出的，换了 chart 版本也会跟着变。
 3. 把这些镜像同步到内网镜像仓库，名称只保留最后一段，例如 `quay.io/prometheus/node-exporter:v1.12.1-distroless` 对应 `<仓库地址>/node-exporter:v1.12.1-distroless`。
-4. 在“集群管理”里给集群设置镜像仓库地址。平台安装组件时会把所有镜像改写到这个地址下，包括 Helm hook 和 Operator 运行时才拉取的镜像。
+4. 纳管集群时，“组件镜像来源”选“从内网镜像仓库拉取”并填写仓库地址；已纳管的集群在“设置 › 集群”里点该集群的“⋯ › 编辑”修改，平台创建集群时填写的镜像仓库也会用作这个地址。平台安装组件时会把所有镜像改写到这个地址下，包括 Helm hook 和 Operator 运行时才拉取的镜像。集群节点要能直接从这个仓库拉取镜像，平台不会给 Pod 配置拉取凭证。
 5. 平台自己的镜像也要同步：平台镜像（`ghcr.io/qzytwway/mplatform`，集群代理和飞书、Bark 告警转发器也用它）和日志告警用的 vmalert，后两者分别列在“监控”和“日志”的设置卡片里。
 
 镜像清单宁多不漏，以下镜像在平台的默认用法下不会被拉取，可以不同步：

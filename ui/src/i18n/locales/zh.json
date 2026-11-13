@@ -1036,7 +1036,13 @@
       "isDefault": "设为默认",
       "alertmanagerUrl": "Alertmanager 地址",
       "imageRegistry": "镜像仓库地址",
-      "imageRegistryHint": "在此集群安装或升级 Chart 时，容器镜像改从该地址拉取，只保留镜像名和标签（如 docker.io/bitnami/redis:7 改为 <地址>/redis:7）。留空则不改写。",
+      "imageRegistryHint": "在此集群安装或升级 Chart 时，容器镜像改从该地址拉取，只保留镜像名和标签（如 docker.io/bitnami/redis:7 改为 <地址>/redis:7）。集群节点要能直接从这个仓库拉取镜像。",
+      "imageSource": "组件镜像来源",
+      "imageSourcePublic": "从公网拉取",
+      "imageSourceRegistry": "从内网镜像仓库拉取",
+      "imageSourceHint": "选择平台在这个集群安装组件（监控、日志、GPU、网关等）时从哪里拉取镜像。离线环境请选择内网镜像仓库。",
+      "imageSourcePublicHint": "镜像从 Chart 原本的地址拉取，例如 quay.io、registry.k8s.io，集群节点需要能访问公网。",
+      "imageSourceRequired": "请选择组件镜像来源。",
       "discoveredUrl": "已自动发现：{{url}}，留空即使用该地址。",
       "autoDiscoverHint": "留空则自动发现集群内的服务，例如安装 kube-prometheus-stack 后会自动连接。"
     }
@@ -1261,7 +1267,7 @@
       "binaryMirror": "二进制下载源",
       "binaryMirrorHint": "留空则从官方源下载。镜像源需保持原有的目录结构：<镜像源>/<原始域名>/<原始路径>，例如 https://mirror.example.com/dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubeadm。",
       "imageRepository": "镜像仓库",
-      "imageRepositoryHint": "Kubernetes 和 Calico 的镜像从这里拉取。留空则使用 registry.k8s.io。",
+      "imageRepositoryHint": "Kubernetes 和 Calico 的镜像从这里拉取，平台之后在这个集群安装监控、日志、GPU 等组件时也从这里拉取镜像（可在“设置 › 集群”里修改）。留空则使用 registry.k8s.io，组件镜像从公网拉取。",
       "registryMirrors": "镜像加速",
       "registryMirrorsHint": "containerd 拉取这些仓库的镜像时走加速地址，例如 docker.io → https://mirror.example.com。",
       "registry": "仓库",
@@ -2176,6 +2182,11 @@
       "unsupported": "不支持 {{type}} 类型的面板",
       "renderFailed": "此面板无法显示"
     }
+  },
+  "imageSource": {
+    "registry": "这个集群的组件镜像从内网镜像仓库拉取：",
+    "public": "这个集群的组件镜像从公网拉取",
+    "change": "修改"
   },
   "chartRequirement": {
     "untested": "未验证版本（已验证 {{version}}）",

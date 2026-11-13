@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ChartRequirement } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { ImageSourceNote } from '@/components/image-source-note'
 
 export function GatewayCard({ status }: { status: GatewayStatus }) {
   const { t } = useTranslation()
@@ -258,8 +259,10 @@ export function GatewayCard({ status }: { status: GatewayStatus }) {
 
 function GatewayRequirements({ status }: { status: GatewayStatus }) {
   const { t } = useTranslation()
+  const { currentCluster } = useCluster()
   return (
     <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
+      {currentCluster && <ImageSourceNote cluster={currentCluster} />}
       <p className="text-muted-foreground">
         {t('modelServing.gateway.chartsHint')}
       </p>

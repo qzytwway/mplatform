@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ChartRequirement } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { ImageSourceNote } from '@/components/image-source-note'
 
 export function GPUComponentCards() {
   const { t } = useTranslation()
@@ -91,6 +92,7 @@ function ComponentCard({
 }: ComponentCardProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { currentCluster } = useCluster()
   const [isInstalling, setIsInstalling] = useState(false)
   const [confirmingUninstall, setConfirmingUninstall] = useState(false)
   const [isUninstalling, setIsUninstalling] = useState(false)
@@ -180,6 +182,7 @@ function ComponentCard({
             chart={chart}
             missingLabel={t('modelServing.gpuComponents.chartMissing')}
           />
+          {currentCluster && <ImageSourceNote cluster={currentCluster} />}
         </div>
         {children}
         {blocker && <p className="text-sm text-muted-foreground">{blocker}</p>}

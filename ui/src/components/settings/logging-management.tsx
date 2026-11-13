@@ -30,6 +30,7 @@ import {
   ImageRequirement,
 } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { ImageSourceNote } from '@/components/image-source-note'
 
 export function LoggingManagement() {
   const { t } = useTranslation()
@@ -137,6 +138,7 @@ function ClusterRow({
         {item.error && (
           <p className="truncate text-xs text-muted-foreground">{item.error}</p>
         )}
+        {!complete && <ImageSourceNote cluster={item.name} />}
       </div>
       <div className="flex shrink-0 gap-2">
         {partial && (
