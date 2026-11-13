@@ -2205,7 +2205,7 @@
     "messages": {
       "installed": "已在 {{cluster}} 中安装日志组件",
       "uninstalled": "已从 {{cluster}} 卸载日志组件",
-      "uninstallNote": "会删除 VictoriaLogs 和 Vector，日志数据卷会保留，需要手动删除。"
+      "uninstallNote": "会删除 VictoriaLogs、Vector，以及全部日志告警规则和执行它们的 vmalert。日志数据卷会保留，需要手动删除。"
     },
     "search": {
       "container": "容器",

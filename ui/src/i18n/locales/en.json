@@ -2205,7 +2205,7 @@
     "messages": {
       "installed": "Logging installed in {{cluster}}",
       "uninstalled": "Logging uninstalled from {{cluster}}",
-      "uninstallNote": "VictoriaLogs and Vector are removed. The log data volume is kept and must be deleted manually."
+      "uninstallNote": "VictoriaLogs, Vector, every log alert rule and the vmalert that evaluates them are removed. The log data volume is kept and must be deleted manually."
     },
     "search": {
       "container": "Container",

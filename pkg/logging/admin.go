@@ -23,6 +23,10 @@ import (
 )
 
 const (
+	// The label of what the platform deploys in the logging namespace without
+	// Helm, such as vmalert for log alerts.
+	platformObjectsSelector = "app.kubernetes.io/managed-by=mplatform"
+
 	helmActionTimeout  = 5 * time.Minute
 	defaultStorageSize = "20Gi"
 	defaultRetention   = "7d"
@@ -211,8 +215,9 @@ func parseInstallRequest(req installRequest) (storageOptions, error) {
 	return opts, nil
 }
 
-// Uninstall removes Vector first, so it stops sending before the storage
-// goes away. The VictoriaLogs data volume is kept.
+// Uninstall removes vmalert and the log alert rules, then Vector, so nothing
+// queries or sends to the storage when it goes away. The VictoriaLogs data
+// volume is kept.
 func (h *Handler) Uninstall(c *gin.Context) {
 	cs, err := h.cm.GetClientSet(c.Param("cluster"))
 	if err != nil {
@@ -224,8 +229,12 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	removed, err := removePlatformObjects(c.Request.Context(), cs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	operatorID := c.MustGet("user").(model.User).ID
-	removed := 0
 	for _, name := range []string{vectorRelease, victoriaLogsRelease} {
 		exists, err := helmutil.ReleaseExists(cfg, name)
 		if err != nil {
@@ -246,6 +255,50 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "logging uninstalled"})
+}
+
+// removePlatformObjects deletes what the platform deploys in the logging
+// namespace besides the Helm releases, which it labels as its own: vmalert
+// for log alerts and the log alert rules. It returns how many it deleted.
+func removePlatformObjects(ctx context.Context, cs *cluster.ClientSet) (int, error) {
+	opts := metav1.ListOptions{LabelSelector: platformObjectsSelector}
+	clientset := cs.K8sClient.ClientSet
+	removed := 0
+
+	deployments, err := clientset.AppsV1().Deployments(Namespace).List(ctx, opts)
+	if err != nil {
+		return removed, fmt.Errorf("failed to list the log alert deployments: %w", err)
+	}
+	for _, item := range deployments.Items {
+		err := clientset.AppsV1().Deployments(Namespace).Delete(ctx, item.Name, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return removed, fmt.Errorf("failed to delete deployment %s: %w", item.Name, err)
+		}
+		removed++
+	}
+	services, err := clientset.CoreV1().Services(Namespace).List(ctx, opts)
+	if err != nil {
+		return removed, fmt.Errorf("failed to list the log alert services: %w", err)
+	}
+	for _, item := range services.Items {
+		err := clientset.CoreV1().Services(Namespace).Delete(ctx, item.Name, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return removed, fmt.Errorf("failed to delete service %s: %w", item.Name, err)
+		}
+		removed++
+	}
+	configMaps, err := clientset.CoreV1().ConfigMaps(Namespace).List(ctx, opts)
+	if err != nil {
+		return removed, fmt.Errorf("failed to list the log alert rules: %w", err)
+	}
+	for _, item := range configMaps.Items {
+		err := clientset.CoreV1().ConfigMaps(Namespace).Delete(ctx, item.Name, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return removed, fmt.Errorf("failed to delete configmap %s: %w", item.Name, err)
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 // ensureNamespace creates the logging namespace with the privileged Pod
