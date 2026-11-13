@@ -11,7 +11,20 @@ import (
 const (
 	victoriaLogsChartName = "victoria-logs-single"
 	vectorChartName       = "vector"
+
+	// VMAlertImage runs the vmalert that evaluates log alert rules, which the
+	// platform deploys without a chart when the first rule is saved.
+	VMAlertImage = "victoriametrics/vmalert:v1.155.0"
 )
+
+// imageStatus is an image the logging stack deploys without a chart, which
+// an offline registry must also provide.
+type imageStatus struct {
+	Name  string `json:"name"`
+	Image string `json:"image"`
+}
+
+var chartlessImages = []imageStatus{{Name: "vmalert", Image: VMAlertImage}}
 
 // chartStatus reports whether a chart the logging stack needs is in the local
 // chart repository, and the image an offline registry must provide for it

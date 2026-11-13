@@ -91,7 +91,7 @@ func (h *Handler) GetStatus(c *gin.Context) {
 		}
 		statuses = append(statuses, status)
 	}
-	c.JSON(http.StatusOK, gin.H{"charts": charts, "clusters": statuses})
+	c.JSON(http.StatusOK, gin.H{"charts": charts, "images": chartlessImages, "clusters": statuses})
 }
 
 func releasesInstalled(cs *cluster.ClientSet) (storage, collecting bool, err error) {

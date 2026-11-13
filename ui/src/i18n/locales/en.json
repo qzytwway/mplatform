@@ -2186,6 +2186,7 @@
     "unavailable": "Unavailable",
     "chartsHint": "Logging charts are read from the app store's local repository. Offline clusters also need the images below; each cluster pulls them from <registry>/<image>:<tag> using its image registry setting.",
     "chartMissing": "Not uploaded",
+    "logAlertsImage": "Log alerts",
     "upgradeHint": "Uploading a newer chart does not upgrade components that are already installed.",
     "actions": {
       "install": "Install",

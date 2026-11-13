@@ -18,8 +18,16 @@ export interface LoggingChart {
   image?: string
 }
 
+// An image the logging stack deploys without a chart, such as vmalert for log
+// alerts.
+export interface LoggingImage {
+  name: string
+  image: string
+}
+
 export interface LoggingStatus {
   charts: LoggingChart[]
+  images: LoggingImage[]
   clusters: ClusterLoggingStatus[]
 }
 

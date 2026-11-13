@@ -9,6 +9,7 @@ import {
   useLoggingStatus,
   type ClusterLoggingStatus,
   type LoggingChart,
+  type LoggingImage,
 } from '@/lib/api/logging'
 import { translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -80,7 +81,7 @@ export function LoggingManagement() {
             />
           ))}
         </ul>
-        <RequiredCharts charts={data.charts} />
+        <RequiredCharts charts={data.charts} images={data.images} />
       </CardContent>
       {installing && (
         <InstallDialog
@@ -154,7 +155,13 @@ function ClusterRow({
   )
 }
 
-function RequiredCharts({ charts }: { charts: LoggingChart[] }) {
+function RequiredCharts({
+  charts,
+  images,
+}: {
+  charts: LoggingChart[]
+  images: LoggingImage[]
+}) {
   const { t } = useTranslation()
   return (
     <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-sm">
@@ -173,6 +180,15 @@ function RequiredCharts({ charts }: { charts: LoggingChart[] }) {
             ) : (
               <Badge variant="destructive">{t('logging.chartMissing')}</Badge>
             )}
+          </li>
+        ))}
+        {images.map((item) => (
+          <li key={item.name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono">{item.name}</span>
+            <Badge variant="outline">{t('logging.logAlertsImage')}</Badge>
+            <span className="font-mono text-muted-foreground">
+              {item.image}
+            </span>
           </li>
         ))}
       </ul>
