@@ -23,6 +23,10 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+
+// Where the cluster pulls the images of the components the platform installs.
+type ImageSource = 'public' | 'registry'
 
 interface ClusterDialogProps {
   open: boolean
@@ -75,10 +79,24 @@ function ClusterDialogContent({
   const isEditMode = !!cluster
 
   const [formData, setFormData] = useState(() => createClusterFormData(cluster))
+  // A new cluster has to choose where its component images come from; an
+  // existing one pulls from the public registries unless it has a registry.
+  const [imageSource, setImageSource] = useState<ImageSource | ''>(() =>
+    cluster ? (cluster.imageRegistry ? 'registry' : 'public') : ''
+  )
+  const [imageSourceMissing, setImageSourceMissing] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(formData)
+    if (!imageSource) {
+      setImageSourceMissing(true)
+      return
+    }
+    onSubmit({
+      ...formData,
+      imageRegistry:
+        imageSource === 'registry' ? formData.imageRegistry.trim() : '',
+    })
   }
 
   const handleChange = (field: string, value: string | boolean) => {
@@ -178,6 +196,58 @@ function ClusterDialogContent({
           />
         </div>
 
+        <div className="space-y-2">
+          <Label id="image-source-label">
+            {t('clusterManagement.dialog.imageSource')} *
+          </Label>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={imageSource}
+            onValueChange={(value) => {
+              if (!value) return
+              setImageSource(value as ImageSource)
+              setImageSourceMissing(false)
+            }}
+            aria-labelledby="image-source-label"
+            className="w-full"
+          >
+            <ToggleGroupItem value="public" className="flex-1">
+              {t('clusterManagement.dialog.imageSourcePublic')}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="registry" className="flex-1">
+              {t('clusterManagement.dialog.imageSourceRegistry')}
+            </ToggleGroupItem>
+          </ToggleGroup>
+          {imageSource === 'registry' && (
+            <Input
+              id="image-registry"
+              value={formData.imageRegistry}
+              onChange={(e) => handleChange('imageRegistry', e.target.value)}
+              placeholder="harbor.example.com/mirror"
+              aria-label={t('clusterManagement.dialog.imageRegistry')}
+              aria-describedby="image-registry-hint"
+              required
+            />
+          )}
+          {imageSourceMissing ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t('clusterManagement.dialog.imageSourceRequired')}
+            </p>
+          ) : (
+            <p
+              id="image-registry-hint"
+              className="text-sm text-muted-foreground"
+            >
+              {imageSource === 'registry'
+                ? t('clusterManagement.dialog.imageRegistryHint')
+                : imageSource === 'public'
+                  ? t('clusterManagement.dialog.imageSourcePublicHint')
+                  : t('clusterManagement.dialog.imageSourceHint')}
+            </p>
+          )}
+        </div>
+
         {!formData.inCluster && !formData.clusterAgent && (
           <div className="space-y-2">
             <Label htmlFor="cluster-config">
@@ -250,22 +320,6 @@ function ClusterDialogContent({
                   url: cluster.discoveredAlertmanagerURL,
                 })
               : t('clusterManagement.dialog.autoDiscoverHint')}
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="image-registry">
-            {t('clusterManagement.dialog.imageRegistry')}
-          </Label>
-          <Input
-            id="image-registry"
-            value={formData.imageRegistry}
-            onChange={(e) => handleChange('imageRegistry', e.target.value)}
-            placeholder="harbor.example.com/mirror"
-            aria-describedby="image-registry-hint"
-          />
-          <p id="image-registry-hint" className="text-sm text-muted-foreground">
-            {t('clusterManagement.dialog.imageRegistryHint')}
           </p>
         </div>
 

@@ -29,6 +29,7 @@ import {
   ImageRequirement,
 } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { ImageSourceNote } from '@/components/image-source-note'
 
 export function MonitoringManagement() {
   const { t } = useTranslation()
@@ -153,6 +154,7 @@ function ClusterRow({
             {t('monitoringSettings.connectedTo', { url: item.prometheusURL })}
           </p>
         ) : null}
+        {!item.installed && <ImageSourceNote cluster={item.name} />}
       </div>
       {item.installed ? (
         <Button variant="outline" size="sm" onClick={onUninstall}>

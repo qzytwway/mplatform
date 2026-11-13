@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartRequirement } from '@/components/chart-requirement'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { ImageSourceNote } from '@/components/image-source-note'
 
 export function LWSCard() {
   const { t } = useTranslation()
@@ -81,6 +82,7 @@ export function LWSCard() {
               chart={chart}
               missingLabel={t('modelServing.lws.chartMissing')}
             />
+            <ImageSourceNote cluster={currentCluster} />
           </div>
           <Button
             onClick={() => void handleInstall()}

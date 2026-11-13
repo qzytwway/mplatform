@@ -210,6 +210,10 @@ func runRegisterStep(ctx context.Context, r *run) error {
 		Config:      model.SecretString(kubeconfig),
 		IsDefault:   r.spec.IsDefault,
 		Enable:      true,
+		// A cluster that pulls Kubernetes from a private registry pulls the
+		// components the platform installs from it too, the same way: the
+		// image name and tag under the registry path.
+		ImageRegistry: r.spec.Sources.ImageRepository,
 	}
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
 		if c.IsDefault {
