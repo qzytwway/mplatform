@@ -1830,6 +1830,23 @@
         "created": "Silence created",
         "failed": "Could not create the silence"
       },
+      "logRule": {
+        "title": {
+          "create": "New log alert rule",
+          "edit": "Edit log alert rule"
+        },
+        "description": "Alerts on each container whose logs contain the keyword often enough. It needs logging and an Alertmanager in the cluster; the first log rule deploys vmalert to evaluate the rules.",
+        "keyword": "Keyword",
+        "keywordHint": "A phrase to match in log messages, such as OutOfMemoryError. Matching is case-sensitive and by whole words.",
+        "namespace": "Namespace",
+        "podPrefix": "Pod name prefix",
+        "container": "Container",
+        "any": "Any",
+        "window": "Time window",
+        "threshold": "Matching logs at least",
+        "condition": "Fires when a container logs the keyword at least {{threshold}} times within {{window}}. Rules are checked once per window.",
+        "saved": "Saved. vmalert loads the rule within a minute."
+      },
       "templates": {
         "open": "From template",
         "title": "Create a rule from a template",
@@ -1931,11 +1948,14 @@
         "group": "Group",
         "empty": "No alerting rules",
         "create": "New rule",
+        "createMetric": "Metric rule",
+        "createLog": "Log rule",
         "source": {
           "builtin": "Built-in",
           "custom": "Custom",
           "modified": "Modified",
-          "other": "Other"
+          "other": "Other",
+          "logs": "Logs"
         },
         "actions": {
           "edit": "Edit",
@@ -1952,7 +1972,7 @@
           "working": "Working...",
           "delete": {
             "title": "Delete rule {{name}}?",
-            "description": "Prometheus stops evaluating it within a couple of minutes.",
+            "description": "The rule stops being evaluated within a couple of minutes.",
             "done": "Rule {{name}} deleted"
           },
           "restore": {
@@ -2195,7 +2215,9 @@
       "total": "{{count}} matching logs",
       "count": "Logs",
       "empty": "No logs match in this time range.",
-      "latest": "Latest {{count}} logs"
+      "latest": "Latest {{count}} logs",
+      "createAlert": "Create alert",
+      "createAlertHint": "Search with a keyword first to alert on it"
     }
   },
   "monitoringSettings": {

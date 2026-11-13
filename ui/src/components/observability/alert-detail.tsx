@@ -49,7 +49,14 @@ export function AlertDetail({ item, silences, canSilence }: AlertDetailProps) {
     MIN_STEP_SECONDS,
     Math.ceil((end - start) / CHART_POINTS)
   )
-  const result = usePrometheusRangeQuery(rule.query, { start, end, step })
+  // A log rule's query is LogsQL, which Prometheus cannot chart.
+  const isLogRule = rule.source === 'logs'
+  const result = usePrometheusRangeQuery(rule.query, {
+    start,
+    end,
+    step,
+    enabled: !isLogRule,
+  })
   const series = useMemo(() => {
     const all = toTimeSeries(result.data)
     // Keep the series behind this alert instance when the rule fires for several.
@@ -100,14 +107,16 @@ export function AlertDetail({ item, silences, canSilence }: AlertDetailProps) {
               {t('observability.alerts.silence.action')}
             </Button>
           )}
-          <Button size="sm" variant="outline" asChild>
-            <Link
-              to={`/observability/metrics?mode=query&query=${encodeURIComponent(rule.query)}`}
-            >
-              <LineChart />
-              {t('observability.alerts.detail.openInMetrics')}
-            </Link>
-          </Button>
+          {!isLogRule && (
+            <Button size="sm" variant="outline" asChild>
+              <Link
+                to={`/observability/metrics?mode=query&query=${encodeURIComponent(rule.query)}`}
+              >
+                <LineChart />
+                {t('observability.alerts.detail.openInMetrics')}
+              </Link>
+            </Button>
+          )}
           {resourceLink && (
             <Button size="sm" variant="outline" asChild>
               <Link to={resourceLink}>
@@ -209,36 +218,38 @@ export function AlertDetail({ item, silences, canSilence }: AlertDetailProps) {
           </pre>
         </section>
 
-        <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">
-            {t('observability.alerts.detail.history')}
-          </h3>
-          {result.isLoading ? (
-            <Skeleton className="h-[200px] w-full" />
-          ) : result.error ? (
-            <p className="text-sm text-destructive">{result.error.message}</p>
-          ) : series.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {t('observability.metrics.noData')}
-            </p>
-          ) : (
-            <TimeSeriesChart
-              series={series}
-              formatValue={(v) => formatValue(v)}
-              height={200}
-              markers={[
-                {
-                  time: activeAt * 1000,
-                  label: t('observability.alerts.detail.triggered'),
-                  color:
-                    group === 'critical'
-                      ? 'var(--destructive)'
-                      : 'var(--warning)',
-                },
-              ]}
-            />
-          )}
-        </section>
+        {!isLogRule && (
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-medium">
+              {t('observability.alerts.detail.history')}
+            </h3>
+            {result.isLoading ? (
+              <Skeleton className="h-[200px] w-full" />
+            ) : result.error ? (
+              <p className="text-sm text-destructive">{result.error.message}</p>
+            ) : series.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {t('observability.metrics.noData')}
+              </p>
+            ) : (
+              <TimeSeriesChart
+                series={series}
+                formatValue={(v) => formatValue(v)}
+                height={200}
+                markers={[
+                  {
+                    time: activeAt * 1000,
+                    label: t('observability.alerts.detail.triggered'),
+                    color:
+                      group === 'critical'
+                        ? 'var(--destructive)'
+                        : 'var(--warning)',
+                  },
+                ]}
+              />
+            )}
+          </section>
+        )}
       </div>
 
       {canSilence && silenceOpen && (

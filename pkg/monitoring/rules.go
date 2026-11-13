@@ -366,7 +366,7 @@ func canWriteRules(c *gin.Context, verb common.Verb) bool {
 func ruleErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, errNoPrometheus), errors.Is(err, errNoRuleSelector), errors.Is(err, errNotHelmManaged),
-		errors.Is(err, errAlertmanagerDisabled), errors.Is(err, errNotificationsUnmanaged):
+		errors.Is(err, errAlertmanagerDisabled), errors.Is(err, errNotificationsUnmanaged), errors.Is(err, errLoggingNotInstalled):
 		return http.StatusConflict
 	case errors.Is(err, errNotPlatform):
 		return http.StatusForbidden

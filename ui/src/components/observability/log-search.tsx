@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { BellPlus, ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 
@@ -26,6 +26,7 @@ import { ContainerSelector } from '@/components/selector/container-selector'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 import { PodSelector } from '@/components/selector/pod-selector'
 
+import { LogRuleDialog } from './log-rule-dialog'
 import { TimeWindowControls } from './time-window-controls'
 import { useTimeWindow } from './use-time-window'
 
@@ -51,6 +52,7 @@ export function LogSearch() {
   const timeWindow = useTimeWindow('1h')
   const [draft, setDraft] = useState<LogFilters>(EMPTY_FILTERS)
   const [applied, setApplied] = useState<LogFilters>(EMPTY_FILTERS)
+  const [alertOpen, setAlertOpen] = useState(false)
 
   const params: LogQueryParams = useMemo(
     () => ({ ...applied, start: timeWindow.start, end: timeWindow.end }),
@@ -140,12 +142,37 @@ export function LogSearch() {
         </Button>
         <TimeWindowControls timeWindow={timeWindow} />
       </form>
+      {alertOpen && (
+        <LogRuleDialog
+          initial={{
+            keyword: applied.keyword,
+            namespace: applied.namespace === '_all' ? '' : applied.namespace,
+            podPrefix: applied.pod,
+            container: applied.container,
+          }}
+          onClose={() => setAlertOpen(false)}
+        />
+      )}
 
       <div className="rounded-xl border p-4">
-        <div className="mb-2 text-sm text-muted-foreground">
+        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
           {hitsQuery.data
             ? t('logging.search.total', { count: hitsQuery.data.total })
             : ' '}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            disabled={!applied.keyword}
+            title={
+              applied.keyword ? undefined : t('logging.search.createAlertHint')
+            }
+            onClick={() => setAlertOpen(true)}
+          >
+            <BellPlus />
+            {t('logging.search.createAlert')}
+          </Button>
         </div>
         {hitsQuery.isLoading ? (
           <Skeleton className="h-36 w-full" />

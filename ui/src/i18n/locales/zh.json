@@ -1830,6 +1830,23 @@
         "created": "静默已创建",
         "failed": "静默创建失败"
       },
+      "logRule": {
+        "title": {
+          "create": "新建日志告警规则",
+          "edit": "编辑日志告警规则"
+        },
+        "description": "某个容器的日志里关键词出现得足够频繁时触发告警。集群需要已安装日志组件和 Alertmanager；保存第一条日志规则时会部署 vmalert 来执行规则。",
+        "keyword": "关键词",
+        "keywordHint": "要在日志内容中匹配的短语，例如 OutOfMemoryError。区分大小写，按完整单词匹配。",
+        "namespace": "命名空间",
+        "podPrefix": "Pod 名称前缀",
+        "container": "容器",
+        "any": "不限",
+        "window": "时间窗口",
+        "threshold": "匹配日志至少",
+        "condition": "某个容器在 {{window}} 内输出该关键词至少 {{threshold}} 次时触发。规则每个时间窗口检查一次。",
+        "saved": "已保存，vmalert 会在一分钟内加载这条规则。"
+      },
       "templates": {
         "open": "从模板新建",
         "title": "从模板新建规则",
@@ -1931,11 +1948,14 @@
         "group": "分组",
         "empty": "没有告警规则",
         "create": "新建规则",
+        "createMetric": "指标规则",
+        "createLog": "日志规则",
         "source": {
           "builtin": "内置",
           "custom": "自定义",
           "modified": "已修改",
-          "other": "其他"
+          "other": "其他",
+          "logs": "日志"
         },
         "actions": {
           "edit": "编辑",
@@ -1952,7 +1972,7 @@
           "working": "处理中...",
           "delete": {
             "title": "删除规则 {{name}}？",
-            "description": "Prometheus 会在一两分钟内停止计算这条规则。",
+            "description": "这条规则会在一两分钟内停止计算。",
             "done": "已删除规则 {{name}}"
           },
           "restore": {
@@ -2195,7 +2215,9 @@
       "total": "共 {{count}} 条匹配日志",
       "count": "日志数",
       "empty": "该时间范围内没有匹配的日志。",
-      "latest": "最新 {{count}} 条"
+      "latest": "最新 {{count}} 条",
+      "createAlert": "创建告警",
+      "createAlertHint": "先用关键词搜索一次，再基于这次搜索创建告警"
     }
   },
   "monitoringSettings": {

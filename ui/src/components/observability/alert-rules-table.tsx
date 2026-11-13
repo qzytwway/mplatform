@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import {
+  ChevronDown,
+  FileText,
   LayoutTemplate,
+  LineChart,
   Pencil,
   Plus,
   Power,
@@ -13,6 +16,12 @@ import { AlertRule, AlertState } from '@/lib/api/alerts'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -39,6 +48,7 @@ const STATE_STYLES: Record<AlertState, string> = {
 
 export interface RuleActions {
   onCreate: () => void
+  onCreateLog: () => void
   onCreateFromTemplate: () => void
   onEdit: (rule: AlertRule) => void
   onDelete: (rule: AlertRule) => void
@@ -170,10 +180,25 @@ export function AlertRulesTable({
           <LayoutTemplate />
           {t('observability.alerts.templates.open')}
         </Button>
-        <Button onClick={actions.onCreate}>
-          <Plus />
-          {t('observability.alerts.rules.create')}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button>
+              <Plus />
+              {t('observability.alerts.rules.create')}
+              <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={actions.onCreate}>
+              <LineChart />
+              {t('observability.alerts.rules.createMetric')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={actions.onCreateLog}>
+              <FileText />
+              {t('observability.alerts.rules.createLog')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="overflow-hidden rounded-xl border bg-card">
         <Table>

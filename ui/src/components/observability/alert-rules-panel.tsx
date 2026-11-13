@@ -5,9 +5,11 @@ import { toast } from 'sonner'
 
 import {
   deleteAlertRule,
+  deleteLogAlertRule,
   setBuiltinRuleEnabled,
   type AlertRule,
   type AlertRuleRequest,
+  type LogRule,
 } from '@/lib/api/alerts'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -24,6 +26,7 @@ import { AlertRuleDialog, type RuleEditorMode } from './alert-rule-dialog'
 import { AlertRuleTemplateDialog } from './alert-rule-template-dialog'
 import { AlertRulesTable } from './alert-rules-table'
 import { isMutingUnavailable } from './alert-utils'
+import { LogRuleDialog } from './log-rule-dialog'
 
 // delete: a custom rule; restore: delete a modified built-in rule, which
 // brings the built-in one back; disable and enable: a built-in alert.
@@ -43,6 +46,8 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
     rule?: AlertRule
     initial?: AlertRuleRequest
   } | null>(null)
+  // A log rule to edit, or null for a new one.
+  const [logEditor, setLogEditor] = useState<{ rule?: LogRule } | null>(null)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const ruleNames = useMemo(
     () => new Set(rules.map((rule) => rule.name)),
@@ -55,7 +60,9 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
     if (!confirm) return
     setIsWorking(true)
     try {
-      if (confirm.kind === 'delete' || confirm.kind === 'restore') {
+      if (confirm.rule?.source === 'logs') {
+        await deleteLogAlertRule(confirm.rule.name)
+      } else if (confirm.kind === 'delete' || confirm.kind === 'restore') {
         await deleteAlertRule(confirm.rule!)
       } else {
         await setBuiltinRuleEnabled(confirm.alert, confirm.kind === 'enable')
@@ -84,12 +91,15 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
         rules={rules}
         actions={{
           onCreate: () => setEditor({ mode: 'create' }),
+          onCreateLog: () => setLogEditor({}),
           onCreateFromTemplate: () => setTemplatesOpen(true),
           onEdit: (rule) =>
-            setEditor({
-              mode: rule.source === 'builtin' ? 'override' : 'edit',
-              rule,
-            }),
+            rule.source === 'logs'
+              ? setLogEditor({ rule: rule.logRule })
+              : setEditor({
+                  mode: rule.source === 'builtin' ? 'override' : 'edit',
+                  rule,
+                }),
           onDelete: (rule) =>
             setConfirm({
               kind: rule.overrides ? 'restore' : 'delete',
@@ -118,6 +128,12 @@ export function AlertRulesPanel({ rules }: { rules: AlertRule[] }) {
           rule={editor.rule}
           initial={editor.initial}
           onClose={() => setEditor(null)}
+        />
+      )}
+      {logEditor && (
+        <LogRuleDialog
+          rule={logEditor.rule}
+          onClose={() => setLogEditor(null)}
         />
       )}
       <Dialog

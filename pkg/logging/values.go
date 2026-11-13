@@ -12,9 +12,9 @@ const (
 	victoriaLogsPort    = 9428
 
 	clusterField   = "cluster"
-	namespaceField = "kubernetes.pod_namespace"
-	podField       = "kubernetes.pod_name"
-	containerField = "kubernetes.container_name"
+	NamespaceField = "kubernetes.pod_namespace"
+	PodField       = "kubernetes.pod_name"
+	ContainerField = "kubernetes.container_name"
 )
 
 type storageOptions struct {
@@ -27,9 +27,9 @@ type collectorOptions struct {
 	ClusterName string
 }
 
-// victoriaLogsServiceURL is the in-cluster address of a cluster's
-// VictoriaLogs, which the platform reaches through the Kubernetes API proxy.
-func victoriaLogsServiceURL() string {
+// ServiceURL is the in-cluster address of a cluster's VictoriaLogs, which the
+// platform reaches through the Kubernetes API proxy.
+func ServiceURL() string {
 	return fmt.Sprintf("http://%s.%s.svc:%d", victoriaLogsRelease, Namespace, victoriaLogsPort)
 }
 
@@ -74,7 +74,7 @@ func vectorValues(opts collectorOptions) map[string]any {
 				"vlogs": map[string]any{
 					"type":        "elasticsearch",
 					"inputs":      []any{"parser"},
-					"endpoints":   []any{victoriaLogsServiceURL() + "/insert/elasticsearch/"},
+					"endpoints":   []any{ServiceURL() + "/insert/elasticsearch/"},
 					"mode":        "bulk",
 					"api_version": "v8",
 					"compression": "gzip",
@@ -85,7 +85,7 @@ func vectorValues(opts collectorOptions) map[string]any {
 							"ProjectID":        "0",
 							"VL-Time-Field":    "timestamp",
 							"VL-Msg-Field":     "message,msg,_msg,log.msg,log.message,log",
-							"VL-Stream-Fields": strings.Join([]string{clusterField, namespaceField, podField, containerField}, ","),
+							"VL-Stream-Fields": strings.Join([]string{clusterField, NamespaceField, PodField, ContainerField}, ","),
 							"VL-Extra-Fields":  clusterField + "=" + opts.ClusterName,
 						},
 					},
