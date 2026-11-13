@@ -33,6 +33,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 
 import { isMutingUnavailable } from './alert-utils'
+import { RequiredMark } from './required-mark'
 
 // create: a new custom rule; edit: change a custom rule; override: change a
 // built-in rule by replacing it with a custom copy.
@@ -141,6 +142,7 @@ export function AlertRuleDialog({
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="rule-name">
                 {t('observability.alerts.ruleEditor.name')}
+                <RequiredMark />
               </Label>
               <Input
                 id="rule-name"
@@ -158,6 +160,7 @@ export function AlertRuleDialog({
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="rule-expr">
                   {t('observability.alerts.ruleEditor.expr')}
+                  <RequiredMark />
                 </Label>
                 <Button
                   type="button"
