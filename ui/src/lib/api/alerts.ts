@@ -17,8 +17,24 @@ export interface AlertInstance {
 }
 
 // builtin: shipped with the cluster's kube-prometheus-stack; custom: created
-// in MPlatform; other: from any other PrometheusRule.
-export type RuleSource = 'builtin' | 'custom' | 'other'
+// in MPlatform; other: from any other PrometheusRule; logs: a log rule
+// vmalert evaluates against the cluster's logs.
+export type RuleSource = 'builtin' | 'custom' | 'other' | 'logs'
+
+// A log rule fires for each container whose logs contain the keyword at
+// least threshold times within the window.
+export interface LogRule {
+  name: string
+  keyword: string
+  namespace: string
+  podPrefix: string
+  container: string
+  window: string
+  threshold: number
+  severity: string
+  summary: string
+  description: string
+}
 
 export interface AlertRule {
   group: string
@@ -41,6 +57,7 @@ export interface AlertRule {
   // A built-in rule muted in Alertmanager: Prometheus still evaluates it,
   // but its alerts are not notified.
   disabled?: boolean
+  logRule?: LogRule
 }
 
 export interface AlertRuleRequest {
@@ -137,6 +154,29 @@ export function deleteAlertRule(rule: AlertRule) {
     withCurrentClusterPath(
       `/prometheus/alert-rules/${encodeURIComponent(rule.ruleNamespace!)}/${encodeURIComponent(rule.ruleName!)}`
     )
+  )
+}
+
+export function createLogAlertRule(rule: LogRule) {
+  return apiClient.post<{ name: string }>(
+    withCurrentClusterPath('/logging/alert-rules'),
+    rule
+  )
+}
+
+export function updateLogAlertRule(
+  name: string,
+  rule: LogRule
+): Promise<{ message: string }> {
+  return apiClient.put(
+    withCurrentClusterPath(`/logging/alert-rules/${encodeURIComponent(name)}`),
+    rule
+  )
+}
+
+export function deleteLogAlertRule(name: string) {
+  return apiClient.delete<{ message: string }>(
+    withCurrentClusterPath(`/logging/alert-rules/${encodeURIComponent(name)}`)
   )
 }
 

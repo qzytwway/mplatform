@@ -59,6 +59,8 @@ type alertRule struct {
 	// Disabled is a built-in rule turned off in the platform: Prometheus
 	// still evaluates it, and its alerts are not sent.
 	Disabled bool `json:"disabled"`
+	// LogRule is the platform's definition of a log rule, to edit it.
+	LogRule *monitoring.LogRule `json:"logRule,omitempty"`
 }
 
 func labelSetToMap(labels prommodel.LabelSet) map[string]string {
@@ -113,16 +115,6 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 			if !ok {
 				continue
 			}
-			alerts := make([]alertInstance, 0, len(rule.Alerts))
-			for _, alert := range rule.Alerts {
-				alerts = append(alerts, alertInstance{
-					Labels:      labelSetToMap(alert.Labels),
-					Annotations: labelSetToMap(alert.Annotations),
-					State:       string(alert.State),
-					ActiveAt:    alert.ActiveAt,
-					Value:       alert.Value,
-				})
-			}
 			rules = append(rules, alertRule{
 				Group:         group.Name,
 				File:          group.File,
@@ -134,7 +126,7 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 				State:         rule.State,
 				Health:        string(rule.Health),
 				LastError:     rule.LastError,
-				Alerts:        alerts,
+				Alerts:        toAlertInstances(rule.Alerts),
 				Source:        source.Source,
 				RuleNamespace: source.Namespace,
 				RuleName:      source.Name,
@@ -144,7 +136,70 @@ func (h *Handler) GetAlertRules(c *gin.Context) {
 			})
 		}
 	}
+	rules = append(rules, logAlertRules(ctx, cs)...)
 	c.JSON(http.StatusOK, rules)
+}
+
+func toAlertInstances(alerts []*v1.Alert) []alertInstance {
+	result := make([]alertInstance, 0, len(alerts))
+	for _, alert := range alerts {
+		result = append(result, alertInstance{
+			Labels:      labelSetToMap(alert.Labels),
+			Annotations: labelSetToMap(alert.Annotations),
+			State:       string(alert.State),
+			ActiveAt:    alert.ActiveAt,
+			Value:       alert.Value,
+		})
+	}
+	return result
+}
+
+// logAlertRules lists the cluster's log rules with the state vmalert reports
+// for them. They are left out when they cannot be read, and their state is
+// unknown until vmalert has loaded them.
+func logAlertRules(ctx context.Context, cs *cluster.ClientSet) []alertRule {
+	logRules, err := monitoring.LoadLogRules(ctx, cs)
+	if err != nil {
+		klog.V(2).Infof("Failed to look up the log alert rules of cluster %s: %v", cs.Name, err)
+		return nil
+	}
+	if len(logRules) == 0 {
+		return nil
+	}
+	states, err := monitoring.LogRuleStates(ctx, cs)
+	if err != nil {
+		klog.V(2).Infof("Failed to get the log alert state of cluster %s: %v", cs.Name, err)
+	}
+	rules := make([]alertRule, 0, len(logRules))
+	for _, spec := range logRules {
+		rule := alertRule{
+			Group:       monitoring.RuleSourceLogs,
+			Name:        spec.Name,
+			Query:       spec.LogsQL(),
+			Labels:      map[string]string{"severity": spec.Severity},
+			Annotations: map[string]string{"summary": spec.Summary, "description": spec.Description},
+			State:       "unknown",
+			Health:      "unknown",
+			Alerts:      []alertInstance{},
+			Source:      monitoring.RuleSourceLogs,
+			LogRule:     &spec,
+		}
+		if state, ok := states[spec.Name]; ok {
+			// vmalert has states of its own, such as nomatch, for a rule
+			// that is not firing.
+			switch {
+			case state.State == "firing" || state.State == "pending":
+				rule.State = state.State
+			case state.Health == v1.RuleHealthGood:
+				rule.State = "inactive"
+			}
+			rule.Health = string(state.Health)
+			rule.LastError = state.LastError
+			rule.Alerts = toAlertInstances(state.Alerts)
+		}
+		rules = append(rules, rule)
+	}
+	return rules
 }
 
 // alertmanagerClient enforces the cluster-wide alertmanager grant for verb and

@@ -56,8 +56,14 @@ type logQuery struct {
 	end          time.Time
 }
 
+// StorageInstalled reports whether the cluster has VictoriaLogs to query.
+func StorageInstalled(cs *cluster.ClientSet) (bool, error) {
+	storage, _, err := releasesInstalled(cs)
+	return storage, err
+}
+
 func (h *Handler) QueryStatus(c *gin.Context) {
-	storage, _, err := releasesInstalled(c.MustGet("cluster").(*cluster.ClientSet))
+	storage, err := StorageInstalled(c.MustGet("cluster").(*cluster.ClientSet))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -182,7 +188,7 @@ func parseLogQuery(c *gin.Context) (q *logQuery, ok bool) {
 			c.JSON(http.StatusForbidden, gin.H{"error": rbac.NoAccess(user.Key(), string(common.VerbLog), string(common.Pods), namespace, cs.Name)})
 			return nil, false
 		}
-		filters[namespaceField] = []string{namespace}
+		filters[NamespaceField] = []string{namespace}
 	case !rbac.CanAccessAllNamespaces(user, string(common.Pods), string(common.VerbLog), cs.Name):
 		namespaces, err := readableNamespaces(c.Request.Context(), cs, user)
 		if err != nil {
@@ -192,10 +198,10 @@ func parseLogQuery(c *gin.Context) (q *logQuery, ok bool) {
 		if len(namespaces) == 0 {
 			return nil, true
 		}
-		filters[namespaceField] = namespaces
+		filters[NamespaceField] = namespaces
 	}
 	if container := strings.TrimSpace(c.Query("container")); container != "" {
-		filters[containerField] = container
+		filters[ContainerField] = container
 	}
 	extraFilters, err := json.Marshal(filters)
 	if err != nil {
@@ -230,7 +236,7 @@ func readableNamespaces(ctx context.Context, cs *cluster.ClientSet, user model.U
 func buildLogsQL(keyword, podPrefix string) string {
 	var filters []string
 	if podPrefix != "" {
-		filters = append(filters, podField+":="+strconv.Quote(podPrefix)+"*")
+		filters = append(filters, PodField+":="+strconv.Quote(podPrefix)+"*")
 	}
 	if keyword != "" {
 		filters = append(filters, strconv.Quote(keyword))
@@ -258,7 +264,7 @@ func (q *logQuery) params() url.Values {
 func victoriaLogsGet(c *gin.Context, path string, params url.Values) (*http.Response, error) {
 	cs := c.MustGet("cluster").(*cluster.ClientSet)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), queryTimeout)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, victoriaLogsServiceURL()+path+"?"+params.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ServiceURL()+path+"?"+params.Encode(), nil)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -283,7 +289,7 @@ func clusterProxyTransport(cs *cluster.ClientSet) http.RoundTripper {
 	defer transportMu.Unlock()
 	cached, ok := transports[cs.Name]
 	if !ok || cached.cs != cs {
-		cached = clusterTransport{cs: cs, rt: cluster.ServiceTransport(cs, "VictoriaLogs", victoriaLogsServiceURL())}
+		cached = clusterTransport{cs: cs, rt: cluster.ServiceTransport(cs, "VictoriaLogs", ServiceURL())}
 		transports[cs.Name] = cached
 	}
 	return cached.rt
