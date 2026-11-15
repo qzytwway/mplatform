@@ -3,6 +3,7 @@ package modelserving
 import (
 	"cmp"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -49,6 +50,15 @@ type serviceRequest struct {
 	NodeSelector      map[string]string   `json:"nodeSelector"`
 	Tolerations       []corev1.Toleration `json:"tolerations"`
 	PriorityClassName string              `json:"priorityClassName"`
+	// Engine settings named alike for both runtimes, which runtimeArgs turns
+	// into each one's flags. Zero or empty leaves the engine's default, and
+	// extraArgs come later and override them. A tool call parser also turns
+	// tool calling on.
+	ContextLength      int64   `json:"contextLength"`
+	MaxRunningRequests int32   `json:"maxRunningRequests"`
+	GPUMemoryFraction  float64 `json:"gpuMemoryFraction"`
+	ToolCallParser     string  `json:"toolCallParser"`
+	ReasoningParser    string  `json:"reasoningParser"`
 }
 
 type envVar struct {
@@ -137,6 +147,12 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 		NodeSelector:      body.NodeSelector,
 		Tolerations:       body.Tolerations,
 		PriorityClassName: strings.TrimSpace(body.PriorityClassName),
+
+		ContextLength:      body.ContextLength,
+		MaxRunningRequests: body.MaxRunningRequests,
+		GPUMemoryFraction:  body.GPUMemoryFraction,
+		ToolCallParser:     strings.TrimSpace(body.ToolCallParser),
+		ReasoningParser:    strings.TrimSpace(body.ReasoningParser),
 	}
 	// A Service is created under the same name, which must start with a letter.
 	// LeaderWorkerSet and DisaggregatedSet append role, revision and index
@@ -171,7 +187,30 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	if req.PriorityClassName != "" && len(validation.IsDNS1123Subdomain(req.PriorityClassName)) > 0 {
 		return req, fmt.Errorf("priorityClassName must be a valid PriorityClass name")
 	}
+	if err := validateEngine(&req); err != nil {
+		return req, err
+	}
 	return parseServiceMode(req)
+}
+
+// parserName matches the parser names both runtimes register, such as
+// qwen3_coder, deepseek-r1 and gpt-oss.
+var parserName = regexp.MustCompile(`^[A-Za-z0-9_.-]*$`)
+
+func validateEngine(req *serviceRequest) error {
+	switch {
+	case req.ContextLength < 0:
+		return fmt.Errorf("contextLength must not be negative")
+	case req.MaxRunningRequests < 0:
+		return fmt.Errorf("maxRunningRequests must not be negative")
+	case req.GPUMemoryFraction < 0 || req.GPUMemoryFraction > 1:
+		return fmt.Errorf("gpuMemoryFraction must be between 0 and 1")
+	case !parserName.MatchString(req.ToolCallParser):
+		return fmt.Errorf("toolCallParser must be a parser name")
+	case !parserName.MatchString(req.ReasoningParser):
+		return fmt.Errorf("reasoningParser must be a parser name")
+	}
+	return nil
 }
 
 // parseServiceMode validates the fields each mode uses and clears the ones it
@@ -489,10 +528,14 @@ func validateVGPU(req *serviceRequest) error {
 	return nil
 }
 
-// validateModelMode rejects models the requested mode cannot serve.
+// validateModelMode rejects models the requested mode or parsers cannot
+// serve: embedding models neither call tools nor reason.
 func validateModelMode(req *serviceRequest, served *model.ServedModel) error {
 	if req.Mode != modeSingle && served.Type != modelTypeChat {
 		return fmt.Errorf("%s mode only supports %s models", req.Mode, modelTypeChat)
+	}
+	if served.Type == modelTypeEmbedding && (req.ToolCallParser != "" || req.ReasoningParser != "") {
+		return fmt.Errorf("toolCallParser and reasoningParser do not apply to %s models", modelTypeEmbedding)
 	}
 	return nil
 }

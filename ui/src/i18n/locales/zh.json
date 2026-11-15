@@ -2385,13 +2385,32 @@
       "envHint": "每行一个 KEY=VALUE，加到所有推理容器，例如 NCCL_IB_GID_INDEX、NCCL_SOCKET_IFNAME。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
       "sections": {
         "network": "网络",
+        "engine": "推理引擎",
         "advanced": "高级配置"
       },
+      "engine": {
+        "engineDefault": "引擎默认",
+        "contextLength": "上下文长度",
+        "contextLengthHint": "单个请求（输入加输出）最多的 token 数。留空使用模型配置里的最大长度，单卡显存可能放不下，引擎会启动失败。参考：对话 8192～32768，长文档 32768～131072；起不来就调小。",
+        "maxRunningRequests": "最大并发请求数",
+        "maxRunningRequestsHint": "引擎同时批处理的请求数上限。留空由引擎按显卡自动设定，一般不用改；显存不足或单个请求太慢时调小，例如 32～128。",
+        "gpuMemoryFraction": "显存占用比例",
+        "gpuMemoryFractionHint": "引擎可使用的显存比例（0～1），模型权重之外的部分作为 KV 缓存，决定能撑多长的上下文和多少并发。留空用引擎默认值：vLLM 约 0.9，SGLang 按显存自动计算。同一张卡上还有其他进程时调低，例如 0.8。",
+        "parallelism": "并行方式",
+        "parallelismHint": "按 GPU 数自动设定：张量并行（TP）把每一层切到多张卡上，流水线并行（PP）把不同的层放到不同节点。需要其他切分方式时在额外参数里覆盖。",
+        "toolCallParser": "工具调用解析器",
+        "toolCallParserHint": "让模型按 OpenAI 格式返回函数调用（function calling）。要选和模型匹配的解析器；vLLM 会同时加上 --enable-auto-tool-choice。留空不启用。列表是常用值，镜像支持的其他名字也可以直接填写。",
+        "reasoningParser": "推理解析器",
+        "reasoningParserHint": "把推理模型的思考过程单独放在 reasoning_content 字段返回。要选和模型匹配的解析器，留空不启用。",
+        "parserOff": "不启用",
+        "parserAuto": "按模型自动识别"
+      },
       "preview": {
-        "action": "预览",
         "rendering": "渲染中...",
-        "title": "预览推理服务",
-        "description": "按当前配置创建时会生成的内容。点击「创建」之前不会创建任何资源。",
+        "title": "确认推理服务",
+        "description": "按当前配置创建时会生成的内容。点击「确认创建」之前不会创建任何资源。",
+        "back": "返回修改",
+        "confirm": "确认创建",
         "args": "启动参数",
         "yaml": "YAML",
         "empty": "没有资源"

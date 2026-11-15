@@ -1,9 +1,4 @@
-import {
-  useState,
-  type FormEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -46,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { HintLabel } from '@/components/form-layout'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
+import { ServiceEngineFields } from './service-engine-fields'
 import {
   ANY_NODE,
   DEFAULT_TRANSFER_BACKENDS,
@@ -135,12 +131,14 @@ export function ServiceConfigForm({
     set({ mode: next, image: imageFor(runtime, next) })
 
   // vLLM PD runs each replica on one node, so switching to it drops groups
-  // of several nodes.
+  // of several nodes. The runtimes name their parsers differently.
   const handleRuntimeChange = (value: string) => {
     const next = value as InferenceRuntime
     set({
       runtime: next,
       image: imageFor(next, mode),
+      toolCallParser: '',
+      reasoningParser: '',
       modeValues: {
         ...modeValues,
         transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
@@ -159,32 +157,18 @@ export function ServiceConfigForm({
         mode: 'single',
         image: imageFor(runtime, 'single'),
       }),
+      // Their fields are hidden; the backend rejects them.
+      ...(modelTypeOf(id) === 'embedding' && {
+        toolCallParser: '',
+        reasoningParser: '',
+      }),
     })
 
   const servicesPath = '/model-serving/services'
   const detailPath = `${servicesPath}/${values.namespace}/${values.name}`
   const incomplete = !values.modelId || !values.namespace || vllmImagesDiffer
 
-  // The browser checks the fields first, as it does before submitting.
-  const handlePreview = async (event: MouseEvent<HTMLButtonElement>) => {
-    if (!currentCluster || !event.currentTarget.form?.reportValidity()) return
-    setIsPreviewing(true)
-    try {
-      setPreview(
-        await previewInferenceService(
-          currentCluster,
-          requestFromFormValues(values)
-        )
-      )
-    } catch (err) {
-      toast.error(translateError(err, t))
-    } finally {
-      setIsPreviewing(false)
-    }
-  }
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const save = async () => {
     if (!currentCluster) return
     setIsSubmitting(true)
     try {
@@ -209,6 +193,30 @@ export function ServiceConfigForm({
       toast.error(translateError(err, t))
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // A new service is shown before it is created, and the preview dialog
+  // confirms it.
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!currentCluster) return
+    if (editing) {
+      await save()
+      return
+    }
+    setIsPreviewing(true)
+    try {
+      setPreview(
+        await previewInferenceService(
+          currentCluster,
+          requestFromFormValues(values)
+        )
+      )
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsPreviewing(false)
     }
   }
 
@@ -519,6 +527,19 @@ export function ServiceConfigForm({
               </div>
             </FormGroup>
           )}
+          <FormGroup title={t('modelServing.services.sections.engine')}>
+            <div className="grid grid-cols-4 gap-4">
+              <ServiceEngineFields
+                runtime={runtime}
+                mode={mode}
+                modelType={modelType}
+                gpuCount={values.gpuCount}
+                modeValues={modeValues}
+                values={values}
+                onValuesChange={set}
+              />
+            </div>
+          </FormGroup>
           <Collapsible
             open={advancedOpen}
             onOpenChange={setAdvancedOpen}
@@ -591,33 +612,27 @@ export function ServiceConfigForm({
             {t('common.actions.cancel')}
           </Link>
         </Button>
-        {!editing && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handlePreview}
-            disabled={isPreviewing || isSubmitting || incomplete}
-          >
-            {isPreviewing
-              ? t('modelServing.services.preview.rendering')
-              : t('modelServing.services.preview.action')}
-          </Button>
-        )}
-        <Button type="submit" disabled={isSubmitting || incomplete}>
+        <Button
+          type="submit"
+          disabled={isSubmitting || isPreviewing || incomplete}
+        >
           {editing
             ? isSubmitting
               ? t('common.actions.saving')
               : t('common.actions.save')
-            : isSubmitting
-              ? t('common.messages.creating')
+            : isPreviewing
+              ? t('modelServing.services.preview.rendering')
               : t('common.actions.create')}
         </Button>
       </div>
-      {/* Rendered outside the form element, so nothing in it submits. */}
+      {/* Rendered outside the form element, so its buttons do not submit
+          it; confirming creates the service. */}
       <ServicePreviewDialog
         preview={preview}
         mode={mode}
         onClose={() => setPreview(null)}
+        onConfirm={save}
+        isConfirming={isSubmitting}
       />
     </form>
   )

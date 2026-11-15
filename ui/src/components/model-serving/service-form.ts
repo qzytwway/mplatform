@@ -72,6 +72,11 @@ export interface ServiceFormValues {
   extraArgs: string
   env: string
   scheduling: SchedulingValues
+  contextLength: string
+  maxRunningRequests: string
+  gpuMemoryFraction: string
+  toolCallParser: string
+  reasoningParser: string
 }
 
 export const DEFAULT_PD_ROLE: PDRoleValues = {
@@ -125,6 +130,11 @@ export function defaultFormValues(): ServiceFormValues {
     extraArgs: '',
     env: '',
     scheduling: { nodeSelector: '', tolerations: '', priorityClassName: '' },
+    contextLength: '',
+    maxRunningRequests: '',
+    gpuMemoryFraction: '',
+    toolCallParser: '',
+    reasoningParser: '',
   }
 }
 
@@ -258,6 +268,8 @@ export function requestFromFormValues(
   values: ServiceFormValues
 ): CreateInferenceServiceRequest {
   const { mode, modeValues, scheduling } = values
+  const toolCallParser = values.toolCallParser.trim()
+  const reasoningParser = values.reasoningParser.trim()
   return {
     name: values.name.trim(),
     namespace: values.namespace,
@@ -305,6 +317,18 @@ export function requestFromFormValues(
         cores: Number(values.vgpuCores),
       },
     }),
+    // Empty fields keep the engine's defaults.
+    ...(values.contextLength && {
+      contextLength: Number(values.contextLength),
+    }),
+    ...(values.maxRunningRequests && {
+      maxRunningRequests: Number(values.maxRunningRequests),
+    }),
+    ...(values.gpuMemoryFraction && {
+      gpuMemoryFraction: Number(values.gpuMemoryFraction),
+    }),
+    ...(toolCallParser && { toolCallParser }),
+    ...(reasoningParser && { reasoningParser }),
   }
 }
 
@@ -358,5 +382,14 @@ export function formValuesFromRequest(
       tolerations: formatTolerations(request.tolerations),
       priorityClassName: request.priorityClassName ?? '',
     },
+    contextLength: request.contextLength ? String(request.contextLength) : '',
+    maxRunningRequests: request.maxRunningRequests
+      ? String(request.maxRunningRequests)
+      : '',
+    gpuMemoryFraction: request.gpuMemoryFraction
+      ? String(request.gpuMemoryFraction)
+      : '',
+    toolCallParser: request.toolCallParser ?? '',
+    reasoningParser: request.reasoningParser ?? '',
   }
 }

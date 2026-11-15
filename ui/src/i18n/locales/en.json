@@ -2385,13 +2385,32 @@
       "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "sections": {
         "network": "Network",
+        "engine": "Engine",
         "advanced": "Advanced"
       },
+      "engine": {
+        "engineDefault": "Engine default",
+        "contextLength": "Context length",
+        "contextLengthHint": "The most tokens one request can hold, prompt and output together. Empty uses the model's maximum, which may not fit in GPU memory on one card, and the engine then fails to start. Reference: 8192 to 32768 for chat, 32768 to 131072 for long documents; lower it if the service does not start.",
+        "maxRunningRequests": "Max concurrent requests",
+        "maxRunningRequestsHint": "How many requests the engine batches together. Empty lets the engine choose from the GPU, which usually needs no change. Lower it, for example to 32 to 128, if memory runs out or single requests are too slow.",
+        "gpuMemoryFraction": "GPU memory fraction",
+        "gpuMemoryFractionHint": "The share of GPU memory the engine may use, from 0 to 1; what the weights leave becomes KV cache for context and concurrency. Empty uses the engine's default, about 0.9 for vLLM and chosen from memory for SGLang. Lower it, for example to 0.8, when other processes share the GPU.",
+        "parallelism": "Parallelism",
+        "parallelismHint": "Set from the GPU counts: tensor parallelism (TP) splits each layer across GPUs, and pipeline parallelism (PP) places layers on different nodes. Override them in extra arguments to split the model another way.",
+        "toolCallParser": "Tool call parser",
+        "toolCallParserHint": "Returns the model's function calls in the OpenAI format. Pick the parser that matches the model; with vLLM, --enable-auto-tool-choice is added too. Empty leaves tool calling off. The list shows common parsers; type others the image supports.",
+        "reasoningParser": "Reasoning parser",
+        "reasoningParserHint": "Returns a reasoning model's thinking separately, in reasoning_content. Pick the parser that matches the model; empty leaves it off.",
+        "parserOff": "Off",
+        "parserAuto": "Detect from the model"
+      },
       "preview": {
-        "action": "Preview",
         "rendering": "Rendering...",
-        "title": "Preview inference service",
-        "description": "What creating this service would make. Nothing is created until you click Create.",
+        "title": "Confirm inference service",
+        "description": "What creating this service will make. Nothing is created until you confirm.",
+        "back": "Back to edit",
+        "confirm": "Confirm and create",
         "args": "Startup arguments",
         "yaml": "YAML",
         "empty": "No resources"

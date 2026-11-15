@@ -8,8 +8,13 @@ import type { CreateInferenceServiceRequest } from '@/lib/api/model-serving'
 import { ServiceConfigForm } from './service-config-form'
 import { defaultFormValues, formValuesFromRequest } from './service-form'
 
-const { createInferenceService, updateInferenceService } = vi.hoisted(() => ({
+const {
+  createInferenceService,
+  previewInferenceService,
+  updateInferenceService,
+} = vi.hoisted(() => ({
   createInferenceService: vi.fn(),
+  previewInferenceService: vi.fn(),
   updateInferenceService: vi.fn(),
 }))
 
@@ -30,6 +35,7 @@ vi.mock('@/components/selector/namespace-selector', () => ({
 }))
 vi.mock('@/lib/api/model-serving', () => ({
   createInferenceService,
+  previewInferenceService,
   updateInferenceService,
   useServedModels: () => ({
     data: { items: [{ id: 1, name: 'qwen', type: 'chat' }] },
@@ -67,6 +73,10 @@ describe('ServiceConfigForm when creating', () => {
     Element.prototype.hasPointerCapture = vi.fn(() => false)
     Element.prototype.releasePointerCapture = vi.fn()
     createInferenceService.mockResolvedValue({})
+    previewInferenceService.mockResolvedValue({
+      resources: [],
+      deployment: { roles: [], rdma: 'none' },
+    })
     render(
       <MemoryRouter>
         <ServiceConfigForm initial={defaultFormValues()} />
@@ -166,6 +176,13 @@ describe('ServiceConfigForm when creating', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'common.actions.create' })
     )
+    // Creating shows the preview first; only confirming it creates.
+    const confirm = await screen.findByRole('button', {
+      name: 'modelServing.services.preview.confirm',
+    })
+    expect(previewInferenceService).toHaveBeenCalledOnce()
+    expect(createInferenceService).not.toHaveBeenCalled()
+    fireEvent.click(confirm)
 
     await waitFor(() => expect(createInferenceService).toHaveBeenCalledOnce())
     const [cluster, request] = createInferenceService.mock.calls[0]
