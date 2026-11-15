@@ -1,9 +1,4 @@
-import {
-  useState,
-  type FormEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -173,26 +168,7 @@ export function ServiceConfigForm({
   const detailPath = `${servicesPath}/${values.namespace}/${values.name}`
   const incomplete = !values.modelId || !values.namespace || vllmImagesDiffer
 
-  // The browser checks the fields first, as it does before submitting.
-  const handlePreview = async (event: MouseEvent<HTMLButtonElement>) => {
-    if (!currentCluster || !event.currentTarget.form?.reportValidity()) return
-    setIsPreviewing(true)
-    try {
-      setPreview(
-        await previewInferenceService(
-          currentCluster,
-          requestFromFormValues(values)
-        )
-      )
-    } catch (err) {
-      toast.error(translateError(err, t))
-    } finally {
-      setIsPreviewing(false)
-    }
-  }
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const save = async () => {
     if (!currentCluster) return
     setIsSubmitting(true)
     try {
@@ -217,6 +193,30 @@ export function ServiceConfigForm({
       toast.error(translateError(err, t))
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // A new service is shown before it is created, and the preview dialog
+  // confirms it.
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!currentCluster) return
+    if (editing) {
+      await save()
+      return
+    }
+    setIsPreviewing(true)
+    try {
+      setPreview(
+        await previewInferenceService(
+          currentCluster,
+          requestFromFormValues(values)
+        )
+      )
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsPreviewing(false)
     }
   }
 
@@ -612,33 +612,27 @@ export function ServiceConfigForm({
             {t('common.actions.cancel')}
           </Link>
         </Button>
-        {!editing && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handlePreview}
-            disabled={isPreviewing || isSubmitting || incomplete}
-          >
-            {isPreviewing
-              ? t('modelServing.services.preview.rendering')
-              : t('modelServing.services.preview.action')}
-          </Button>
-        )}
-        <Button type="submit" disabled={isSubmitting || incomplete}>
+        <Button
+          type="submit"
+          disabled={isSubmitting || isPreviewing || incomplete}
+        >
           {editing
             ? isSubmitting
               ? t('common.actions.saving')
               : t('common.actions.save')
-            : isSubmitting
-              ? t('common.messages.creating')
+            : isPreviewing
+              ? t('modelServing.services.preview.rendering')
               : t('common.actions.create')}
         </Button>
       </div>
-      {/* Rendered outside the form element, so nothing in it submits. */}
+      {/* Rendered outside the form element, so its buttons do not submit
+          it; confirming creates the service. */}
       <ServicePreviewDialog
         preview={preview}
         mode={mode}
         onClose={() => setPreview(null)}
+        onConfirm={save}
+        isConfirming={isSubmitting}
       />
     </form>
   )

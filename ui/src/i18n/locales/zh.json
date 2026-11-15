@@ -2406,10 +2406,11 @@
         "parserAuto": "按模型自动识别"
       },
       "preview": {
-        "action": "预览",
         "rendering": "渲染中...",
-        "title": "预览推理服务",
-        "description": "按当前配置创建时会生成的内容。点击「创建」之前不会创建任何资源。",
+        "title": "确认推理服务",
+        "description": "按当前配置创建时会生成的内容。点击「确认创建」之前不会创建任何资源。",
+        "back": "返回修改",
+        "confirm": "确认创建",
         "args": "启动参数",
         "yaml": "YAML",
         "empty": "没有资源"

@@ -2406,10 +2406,11 @@
         "parserAuto": "Detect from the model"
       },
       "preview": {
-        "action": "Preview",
         "rendering": "Rendering...",
-        "title": "Preview inference service",
-        "description": "What creating this service would make. Nothing is created until you click Create.",
+        "title": "Confirm inference service",
+        "description": "What creating this service will make. Nothing is created until you confirm.",
+        "back": "Back to edit",
+        "confirm": "Confirm and create",
         "args": "Startup arguments",
         "yaml": "YAML",
         "empty": "No resources"

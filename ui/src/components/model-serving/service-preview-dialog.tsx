@@ -4,10 +4,12 @@ import type {
   DeploymentMode,
   InferenceServicePreview,
 } from '@/lib/api/model-serving'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -18,14 +20,19 @@ import { ServiceDeploymentCard } from './service-deployment-card'
 
 // ServicePreviewDialog shows what creating a service would make: how each
 // role starts, as the service detail shows it, and the YAML of every object.
+// Nothing is created until it is confirmed.
 export function ServicePreviewDialog({
   preview,
   mode,
   onClose,
+  onConfirm,
+  isConfirming,
 }: {
   preview: InferenceServicePreview | null
   mode: DeploymentMode
   onClose: () => void
+  onConfirm: () => void
+  isConfirming: boolean
 }) {
   const { t } = useTranslation()
 
@@ -61,6 +68,21 @@ export function ServicePreviewDialog({
             </TabsContent>
           </Tabs>
         )}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={isConfirming}
+          >
+            {t('modelServing.services.preview.back')}
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={isConfirming}>
+            {isConfirming
+              ? t('common.messages.creating')
+              : t('modelServing.services.preview.confirm')}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
