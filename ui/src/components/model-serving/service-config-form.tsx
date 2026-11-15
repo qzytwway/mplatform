@@ -46,6 +46,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { HintLabel } from '@/components/form-layout'
 import { NamespaceSelector } from '@/components/selector/namespace-selector'
 
+import { ServiceEngineFields } from './service-engine-fields'
 import {
   ANY_NODE,
   DEFAULT_TRANSFER_BACKENDS,
@@ -135,12 +136,14 @@ export function ServiceConfigForm({
     set({ mode: next, image: imageFor(runtime, next) })
 
   // vLLM PD runs each replica on one node, so switching to it drops groups
-  // of several nodes.
+  // of several nodes. The runtimes name their parsers differently.
   const handleRuntimeChange = (value: string) => {
     const next = value as InferenceRuntime
     set({
       runtime: next,
       image: imageFor(next, mode),
+      toolCallParser: '',
+      reasoningParser: '',
       modeValues: {
         ...modeValues,
         transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
@@ -158,6 +161,11 @@ export function ServiceConfigForm({
       ...(modeBlocker(mode, modelTypeOf(id), status) && {
         mode: 'single',
         image: imageFor(runtime, 'single'),
+      }),
+      // Their fields are hidden; the backend rejects them.
+      ...(modelTypeOf(id) === 'embedding' && {
+        toolCallParser: '',
+        reasoningParser: '',
       }),
     })
 
@@ -519,6 +527,19 @@ export function ServiceConfigForm({
               </div>
             </FormGroup>
           )}
+          <FormGroup title={t('modelServing.services.sections.engine')}>
+            <div className="grid grid-cols-4 gap-4">
+              <ServiceEngineFields
+                runtime={runtime}
+                mode={mode}
+                modelType={modelType}
+                gpuCount={values.gpuCount}
+                modeValues={modeValues}
+                values={values}
+                onValuesChange={set}
+              />
+            </div>
+          </FormGroup>
           <Collapsible
             open={advancedOpen}
             onOpenChange={setAdvancedOpen}

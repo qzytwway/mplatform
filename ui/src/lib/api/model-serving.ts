@@ -196,6 +196,13 @@ export interface CreateInferenceServiceRequest {
   nodeSelector?: Record<string, string>
   tolerations?: Toleration[]
   priorityClassName?: string
+  // Engine settings the backend passes under each runtime's flags; unset or
+  // zero keeps the engine's default. A tool call parser turns tool calling on.
+  contextLength?: number
+  maxRunningRequests?: number
+  gpuMemoryFraction?: number
+  toolCallParser?: string
+  reasoningParser?: string
 }
 
 export type TaintEffect = 'NoSchedule' | 'PreferNoSchedule' | 'NoExecute'

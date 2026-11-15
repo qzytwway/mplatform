@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"strconv"
 
 	"github.com/qzytwway/mplatform/pkg/model"
 	corev1 "k8s.io/api/core/v1"
@@ -311,6 +312,7 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 	case req.GPUCount > 1:
 		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount))
 	}
+	args = append(args, engineArgs(req)...)
 	if pdRole != "" {
 		args = append(args, disaggregationArgs(req.Runtime, req.PD, pdRole)...)
 	}
@@ -321,6 +323,36 @@ func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, 
 		return append(args, "--is-embedding")
 	}
 	return append(args, "--runner", "pooling")
+}
+
+// engineArgs passes the engine settings of req under each runtime's flags.
+// Every node of a group gets them, as it gets extraArgs. vLLM only parses
+// tool calls when told to choose tools automatically.
+func engineArgs(req *serviceRequest) []string {
+	contextFlag, requestsFlag, memoryFlag := "--max-model-len", "--max-num-seqs", "--gpu-memory-utilization"
+	if req.Runtime == runtimeSGLang {
+		contextFlag, requestsFlag, memoryFlag = "--context-length", "--max-running-requests", "--mem-fraction-static"
+	}
+	var args []string
+	if req.ContextLength > 0 {
+		args = append(args, contextFlag, fmt.Sprint(req.ContextLength))
+	}
+	if req.MaxRunningRequests > 0 {
+		args = append(args, requestsFlag, fmt.Sprint(req.MaxRunningRequests))
+	}
+	if req.GPUMemoryFraction > 0 {
+		args = append(args, memoryFlag, strconv.FormatFloat(req.GPUMemoryFraction, 'f', -1, 64))
+	}
+	if req.ToolCallParser != "" {
+		if req.Runtime == runtimeVLLM {
+			args = append(args, "--enable-auto-tool-choice")
+		}
+		args = append(args, "--tool-call-parser", req.ToolCallParser)
+	}
+	if req.ReasoningParser != "" {
+		args = append(args, "--reasoning-parser", req.ReasoningParser)
+	}
+	return args
 }
 
 // disaggregationArgs makes a pd role's server prefill or decode and pick the

@@ -30,6 +30,21 @@ export function pdRoleImagesDiffer(
   return roleImage('prefill') !== roleImage('decode')
 }
 
+// The tensor and pipeline parallel sizes the backend gives a group of
+// groupSize nodes with gpuCount GPUs each, as runtimeArgs in
+// pkg/modelserving/workload.go sets them: vLLM splits layers across nodes,
+// SGLang splits tensors across every GPU of the group.
+export function parallelism(
+  runtime: InferenceRuntime,
+  gpuCount: number,
+  groupSize: number
+): { tp: number; pp: number } {
+  const gpus = Math.max(gpuCount, 1)
+  const nodes = Math.max(groupSize, 1)
+  if (runtime === 'vllm' && nodes > 1) return { tp: gpus, pp: nodes }
+  return { tp: gpus * nodes, pp: 1 }
+}
+
 // Returns the i18n key explaining why a mode cannot be selected.
 export function modeBlocker(
   mode: DeploymentMode,
