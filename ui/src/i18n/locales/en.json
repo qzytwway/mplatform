@@ -2387,6 +2387,15 @@
         "network": "Network",
         "advanced": "Advanced"
       },
+      "preview": {
+        "action": "Preview",
+        "rendering": "Rendering...",
+        "title": "Preview inference service",
+        "description": "What creating this service would make. Nothing is created until you click Create.",
+        "args": "Startup arguments",
+        "yaml": "YAML",
+        "empty": "No resources"
+      },
       "scaleTitle": "Scale inference service",
       "scaleDescription": "Set the number of replicas. Each replica needs its own GPUs.",
       "scaleDescriptionPD": "Set the prefill, decode and router replicas.",

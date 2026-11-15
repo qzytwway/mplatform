@@ -407,6 +407,23 @@ export function createInferenceService(
   )
 }
 
+// What creating a service from request would make: the YAML of each object,
+// with storage credentials masked, and how each role is deployed.
+export interface InferenceServicePreview {
+  resources: { path: string; content: string }[]
+  deployment: DeploymentConfig
+}
+
+export function previewInferenceService(
+  cluster: string,
+  request: CreateInferenceServiceRequest
+) {
+  return apiClient.post<InferenceServicePreview>(
+    clusterPath(cluster, '/services/preview'),
+    request
+  )
+}
+
 // The request a service was created or last edited with, with its current
 // replicas, which the edit form starts from.
 export function getInferenceServiceRequest(
