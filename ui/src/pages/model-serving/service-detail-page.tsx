@@ -171,7 +171,7 @@ export function ServiceDetailPage() {
             <DetailItem label={t('modelServing.services.gpuCount')}>
               {formatGPUSpec(service, t)}
             </DetailItem>
-            <DetailItem label={t('modelServing.services.groupSize')}>
+            <DetailItem label={t('modelServing.services.nodesPerReplica')}>
               {service.mode === 'pd'
                 ? service.roles
                     .filter((role) => role.groupSize)
@@ -234,11 +234,7 @@ export function ServiceDetailPage() {
                 <TableRow>
                   <TableHead>{t('common.fields.role')}</TableHead>
                   <TableHead>{t('common.fields.ready')}</TableHead>
-                  <TableHead>
-                    {service.mode === 'multi'
-                      ? t('modelServing.services.groups')
-                      : t('common.fields.replicas')}
-                  </TableHead>
+                  <TableHead>{t('common.fields.replicas')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

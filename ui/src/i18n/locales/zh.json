@@ -2278,22 +2278,22 @@
     },
     "services": {
       "title": "推理服务",
-      "create": "创建服务",
+      "create": "创建推理服务",
       "createTitle": "创建推理服务",
       "createDescription": "在当前集群中部署 LeaderWorkerSet 工作负载和 ClusterIP Service，提供 OpenAI 兼容接口。",
       "resourceType": "推理服务",
       "empty": "暂无推理服务",
-      "emptyHint": "创建服务，将已登记的模型部署到当前集群。",
+      "emptyHint": "创建推理服务，将已登记的模型部署到当前集群。",
       "model": "模型",
       "selectModel": "选择模型",
       "noModels": "尚未登记模型，请先在模型仓库中添加。",
-      "runtime": "运行时",
+      "runtime": "推理引擎",
       "gpuCount": "每 Pod GPU 数",
       "endpoint": "访问地址",
       "anyNode": "任意节点",
       "nodeHint": "可选。节点本地模型需要运行在存有模型目录的节点上。",
       "extraArgs": "额外参数",
-      "extraArgsHint": "追加到运行时启动命令末尾，以空格分隔。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
+      "extraArgsHint": "追加到引擎启动命令末尾，以空格分隔。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
       "mode": "模式",
       "modes": {
         "single": "单机",
@@ -2309,17 +2309,15 @@
         "pdNotInstalled": "未安装 DisaggregatedSet",
         "chatOnly": "需要对话模型"
       },
-      "groups": "组数",
-      "group": "组",
-      "groupSize": "组大小 (每组节点数)",
+      "group": "副本",
       "prefillReplicas": "Prefill 副本数",
       "decodeReplicas": "Decode 副本数",
       "routerImage": "路由镜像",
       "routerMissing": "路由不存在，无法在此伸缩。",
       "pdNameHint": "PD 服务名最多 {{max}} 个字符。",
       "nameHint": "不能与同命名空间已有服务名加“-数字”重名，例如已有 qwen 时不能叫 qwen-0。",
-      "sharedSubdomainTitle": "该服务无法就绪",
-      "sharedSubdomainDescription": "该服务创建于修复之前，其 LeaderWorkerSet 与对外 Service 同名，导致无法就绪。请删除后重建，或执行以下命令（会滚动重建整组）：",
+      "sharedSubdomainTitle": "该推理服务无法就绪",
+      "sharedSubdomainDescription": "该推理服务创建于修复之前，其 LeaderWorkerSet 与对外 Service 同名，导致无法就绪。请删除后重建，或执行以下命令（会滚动重建所有副本）：",
       "routerImageHints": {
         "sglang": "留空则使用服务镜像，使路由与其转发的推理引擎版本一致。镜像需包含 sglang_router。",
         "vllm": "留空则使用 {{image}}；vLLM 镜像不含路由。镜像需包含 vllm-router。"
@@ -2385,7 +2383,7 @@
       "envHint": "每行一个 KEY=VALUE，加到所有推理容器，例如 NCCL_IB_GID_INDEX、NCCL_SOCKET_IFNAME。环境变量和参数会以明文保存在工作负载中，不适合存放密钥。",
       "sections": {
         "network": "网络",
-        "engine": "推理引擎",
+        "engine": "引擎参数",
         "advanced": "高级配置"
       },
       "engine": {
@@ -2429,10 +2427,10 @@
       "messages": {
         "created": "推理服务已创建",
         "deleted": "推理服务已删除",
-        "deleteNote": "将删除该服务的工作负载、路由、Service 和存储凭证 Secret。",
+        "deleteNote": "将删除该推理服务的工作负载、路由、Service 和存储凭证 Secret。",
         "scaled": "推理服务已伸缩",
-        "published": "服务已发布到网关",
-        "unpublished": "服务已取消发布",
+        "published": "推理服务已发布到网关",
+        "unpublished": "推理服务已取消发布",
         "updated": "已保存，Pod 正在按新配置滚动重建"
       },
       "gpuType": "GPU 类型",
@@ -2459,9 +2457,9 @@
       "priorityClassHint": "集群资源不足时，高优先级的 Pod 可以抢占低优先级的 Pod。路由也会使用同一个优先级。vGPU 的 Pod 由 HAMi 调度，可能无法抢占。",
       "editTitle": "修改推理服务",
       "editDescription": "修改服务的部署配置，Pod 会按新配置重建。",
-      "editWarning": "保存后会逐组重建 Pod；只有 1 个副本的服务在新 Pod 就绪前会中断服务。直接在工作负载 YAML 里做的改动会被覆盖。",
+      "editWarning": "保存后会逐个副本重建 Pod；只有 1 个副本的服务在新 Pod 就绪前会中断服务。直接在工作负载 YAML 里做的改动会被覆盖。",
       "editPDWarning": "滚动更新期间，新旧版本的 Prefill 和 Decode 会同时提供服务。vLLM 不能在不同版本之间传输 KV，更新完成前请求可能失败。",
-      "editLockedHint": "名称、命名空间、模型、运行时和部署模式不能修改；需要改这些请新建服务。",
+      "editLockedHint": "名称、命名空间、模型、推理引擎和部署模式不能修改；需要改这些请新建服务。",
       "editReplicasHint": "副本数通过“伸缩”调整，修改时保持不变。",
       "notEditable": "该服务创建于支持修改之前，不能修改；如需修改请删除后重建。"
     },
@@ -2474,12 +2472,12 @@
       "editTitle": "编辑模型",
       "resourceType": "模型",
       "empty": "尚未登记模型",
-      "nameHint": "同时作为对外的模型名称。可使用字母、数字、点、下划线和连字符。",
+      "nameHint": "调用方按此名称请求该模型。可使用字母、数字、点、下划线和连字符。",
       "source": "来源",
       "path": "路径",
       "localPathHint": "模型在节点上的绝对目录。",
       "s3PathHint": "模型在存储桶内的 key 前缀。",
-      "storageRequired": "尚未配置对象存储，配置后才能为对象存储中的模型创建服务。",
+      "storageRequired": "尚未配置对象存储，配置后才能为对象存储中的模型创建推理服务。",
       "sections": {
         "basic": "基本信息",
         "source": "模型来源"
@@ -2510,7 +2508,7 @@
       "messages": {
         "saved": "对象存储已保存",
         "deleted": "对象存储配置已删除",
-        "deleteNote": "已有服务继续运行，但无法再为对象存储中的模型创建新服务。"
+        "deleteNote": "已有推理服务继续运行，但无法再为对象存储中的模型创建新的推理服务。"
       }
     },
     "gpus": {
@@ -2628,7 +2626,7 @@
       "address": "访问地址",
       "addressHint": "已发布的推理服务通过该地址对外提供，请求需要携带调用方的 API Key。",
       "sync": "重新同步",
-      "syncHint": "将所有调用方和已发布的模型重新应用到网关。当某次修改提示同步失败时使用。",
+      "syncHint": "将所有调用方和已发布的推理服务重新应用到网关。当某次修改提示同步失败时使用。",
       "upgrade": "升级网关",
       "upgrading": "升级中...",
       "upgradeHint": "限速、总额度和用量统计需要的组件在当前网关中尚未安装。原地升级网关后即可使用。",
@@ -2641,7 +2639,7 @@
       },
       "usage": {
         "title": "调用示例",
-        "description": "将 <API_KEY> 替换为调用方的 Key，<MODEL> 替换为已发布服务的模型名称。",
+        "description": "将 <API_KEY> 替换为调用方的 Key，<MODEL> 替换为已发布推理服务的模型名称。",
         "chat": "对话",
         "embeddings": "向量 (Embedding)"
       }
@@ -2653,7 +2651,7 @@
       "createTitle": "添加调用方",
       "editTitle": "编辑调用方",
       "resourceType": "调用方",
-      "empty": "暂无调用方。在有调用方被授权之前，已发布的模型会拒绝所有请求。",
+      "empty": "暂无调用方。在有调用方被授权访问其模型之前，已发布的推理服务会拒绝所有请求。",
       "notInstalledHint": "尚未安装网关。调用方会先保存，安装网关后生效。",
       "nameHint": "可使用小写字母、数字和连字符，创建后不可修改。",
       "models": "可访问模型",
@@ -2723,7 +2721,7 @@
       "noData": "暂无数据",
       "modelRanking": "模型 Token 排行",
       "viewUsage": "查看用量",
-      "viewServices": "全部服务",
+      "viewServices": "全部推理服务",
       "callerLimits": "调用方限流",
       "callerLimitsHint": "最近一分钟 Token 与每分钟上限",
       "nearLimit": "接近上限",
@@ -2766,7 +2764,7 @@
         "checkFailed": "{{name}} 加载失败，相关检查未执行",
         "critical": "严重",
         "warning": "警告",
-        "viewService": "查看服务",
+        "viewService": "查看推理服务",
         "editLimit": "调整限流",
         "viewAlerts": "查看告警"
       }

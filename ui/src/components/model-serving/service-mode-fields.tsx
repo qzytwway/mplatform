@@ -192,9 +192,7 @@ export function ServiceModeFields({
           {!editing && (
             <div className="space-y-2">
               <Label htmlFor="inference-replicas">
-                {mode === 'multi'
-                  ? t('modelServing.services.groups')
-                  : t('common.fields.replicas')}
+                {t('common.fields.replicas')}
               </Label>
               <Input
                 id="inference-replicas"
@@ -209,7 +207,7 @@ export function ServiceModeFields({
           {mode === 'multi' && (
             <div className="space-y-2">
               <Label htmlFor="inference-group-size">
-                {t('modelServing.services.groupSize')}
+                {t('modelServing.services.nodesPerReplica')}
               </Label>
               <Input
                 id="inference-group-size"

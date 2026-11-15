@@ -2278,22 +2278,22 @@
     },
     "services": {
       "title": "Inference Services",
-      "create": "Create Service",
+      "create": "Create Inference Service",
       "createTitle": "Create inference service",
       "createDescription": "Deploys a LeaderWorkerSet workload and a ClusterIP Service in the current cluster that serve an OpenAI-compatible API.",
       "resourceType": "Inference Service",
       "empty": "No inference services",
-      "emptyHint": "Create a service to deploy a registered model in this cluster.",
+      "emptyHint": "Create an inference service to deploy a registered model in this cluster.",
       "model": "Model",
       "selectModel": "Select a model",
       "noModels": "No models registered. Add one in the model registry first.",
-      "runtime": "Runtime",
+      "runtime": "Engine",
       "gpuCount": "GPUs per pod",
       "endpoint": "Endpoint",
       "anyNode": "Any node",
       "nodeHint": "Optional. Node-local models must run on a node that has the model directory.",
       "extraArgs": "Extra arguments",
-      "extraArgsHint": "Appended to the runtime start command, separated by spaces. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
+      "extraArgsHint": "Appended to the engine start command, separated by spaces. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "mode": "Mode",
       "modes": {
         "single": "Single node",
@@ -2309,17 +2309,15 @@
         "pdNotInstalled": "DisaggregatedSet is not installed",
         "chatOnly": "requires a chat model"
       },
-      "groups": "Groups",
-      "group": "Group",
-      "groupSize": "Group size (nodes per group)",
+      "group": "Replica",
       "prefillReplicas": "Prefill replicas",
       "decodeReplicas": "Decode replicas",
       "routerImage": "Router image",
       "routerMissing": "The router is missing, so it cannot be scaled here.",
       "pdNameHint": "PD service names are at most {{max}} characters.",
       "nameHint": "Must not be another service's name in this namespace plus a hyphen and a number, such as qwen-0 when qwen exists.",
-      "sharedSubdomainTitle": "This service cannot become ready",
-      "sharedSubdomainDescription": "It was created before a fix: its LeaderWorkerSet has the same name as its Service, so it never becomes ready. Delete and recreate the service, or run the command below, which recreates every group in a rolling update.",
+      "sharedSubdomainTitle": "This inference service cannot become ready",
+      "sharedSubdomainDescription": "It was created before a fix: its LeaderWorkerSet has the same name as its Service, so it never becomes ready. Delete and recreate the inference service, or run the command below, which recreates every replica in a rolling update.",
       "routerImageHints": {
         "sglang": "Leave empty to use the service image, so the router matches the engine version it routes to. The image must include sglang_router.",
         "vllm": "Leave empty to use {{image}}; vLLM images do not include a router. The image must include vllm-router."
@@ -2385,7 +2383,7 @@
       "envHint": "One KEY=VALUE per line, added to every inference container, such as NCCL_IB_GID_INDEX or NCCL_SOCKET_IFNAME. Environment variables and arguments are stored in plain text in the workload, so do not put secrets in them.",
       "sections": {
         "network": "Network",
-        "engine": "Engine",
+        "engine": "Engine arguments",
         "advanced": "Advanced"
       },
       "engine": {
@@ -2429,10 +2427,10 @@
       "messages": {
         "created": "Inference service created",
         "deleted": "Inference service deleted",
-        "deleteNote": "The workload, router, Service, and storage credential Secret of this service will be deleted.",
+        "deleteNote": "The workload, router, Service, and storage credential Secret of this inference service will be deleted.",
         "scaled": "Inference service scaled",
-        "published": "Service published to the gateway",
-        "unpublished": "Service unpublished",
+        "published": "Inference service published to the gateway",
+        "unpublished": "Inference service unpublished",
         "updated": "Inference service saved; its pods are being replaced"
       },
       "gpuType": "GPU type",
@@ -2459,9 +2457,9 @@
       "priorityClassHint": "When the cluster is full, pods of a higher priority can preempt pods of a lower one. The router gets the same priority. Pods of vGPUs are scheduled by HAMi and may not preempt others.",
       "editTitle": "Edit inference service",
       "editDescription": "Change how the service is deployed. Its pods are recreated with the new settings.",
-      "editWarning": "Saving recreates the pods group by group; a service with one replica stops serving until its new pods are ready. Changes made directly to the YAML of the workload are overwritten.",
+      "editWarning": "Saving recreates the pods replica by replica; a service with one replica stops serving until its new pods are ready. Changes made directly to the YAML of the workload are overwritten.",
       "editPDWarning": "During the rollout, old and new prefill and decode pods serve side by side. vLLM cannot transfer KV between different versions, so requests may fail until the rollout finishes.",
-      "editLockedHint": "Name, namespace, model, runtime and mode cannot be changed; create another service to change them.",
+      "editLockedHint": "Name, namespace, model, engine and mode cannot be changed; create another service to change them.",
       "editReplicasHint": "Replicas are changed with Scale and are kept as they are.",
       "notEditable": "This service was created before services could be edited; delete and recreate it to change it."
     },
@@ -2474,12 +2472,12 @@
       "editTitle": "Edit model",
       "resourceType": "Model",
       "empty": "No models registered",
-      "nameHint": "Also used as the served model name. Letters, digits, dots, underscores, and hyphens.",
+      "nameHint": "Callers request the model by this name. Letters, digits, dots, underscores, and hyphens.",
       "source": "Source",
       "path": "Path",
       "localPathHint": "Absolute directory of the model on the node.",
       "s3PathHint": "Key prefix of the model inside the bucket.",
-      "storageRequired": "Object storage is not configured. Services cannot be created for object storage models until it is.",
+      "storageRequired": "Object storage is not configured. Inference services cannot be created for object storage models until it is.",
       "sections": {
         "basic": "Basic Information",
         "source": "Model Source"
@@ -2510,7 +2508,7 @@
       "messages": {
         "saved": "Object storage saved",
         "deleted": "Object storage configuration deleted",
-        "deleteNote": "Existing services keep running, but new services for object storage models cannot be created."
+        "deleteNote": "Existing inference services keep running, but new ones for object storage models cannot be created."
       }
     },
     "gpus": {
@@ -2628,7 +2626,7 @@
       "address": "Access address",
       "addressHint": "Published inference services are served at this address. Requests need a caller API key.",
       "sync": "Resync",
-      "syncHint": "Re-applies all callers and published models to the gateway. Use it when a change reported a sync failure.",
+      "syncHint": "Re-applies all callers and published inference services to the gateway. Use it when a change reported a sync failure.",
       "upgrade": "Upgrade",
       "upgrading": "Upgrading...",
       "upgradeHint": "Rate limits, quotas and usage statistics need components this gateway was installed without. Upgrade the gateway in place to turn them on.",
@@ -2641,7 +2639,7 @@
       },
       "usage": {
         "title": "Usage examples",
-        "description": "Replace <API_KEY> with a caller key and <MODEL> with the model name of a published service.",
+        "description": "Replace <API_KEY> with a caller key and <MODEL> with the model name of a published inference service.",
         "chat": "Chat completions",
         "embeddings": "Embeddings"
       }
@@ -2653,7 +2651,7 @@
       "createTitle": "Add caller",
       "editTitle": "Edit caller",
       "resourceType": "Caller",
-      "empty": "No callers. Published models reject every request until a caller is allowed to access them.",
+      "empty": "No callers. Published inference services reject every request until a caller is allowed to access their models.",
       "notInstalledHint": "The gateway is not installed. Callers are saved and take effect once it is installed.",
       "nameHint": "Lowercase letters, digits, and hyphens. Cannot be changed later.",
       "models": "Accessible models",
@@ -2706,7 +2704,7 @@
     },
     "workbench": {
       "title": "Workbench",
-      "servicesReady": "Services ready",
+      "servicesReady": "Inference services ready",
       "allReady": "All ready",
       "notReady": "{{count}} not ready",
       "gpuAllocated": "GPUs allocated",
@@ -2723,7 +2721,7 @@
       "noData": "No data",
       "modelRanking": "Tokens by model",
       "viewUsage": "View usage",
-      "viewServices": "All services",
+      "viewServices": "All inference services",
       "callerLimits": "Caller rate limits",
       "callerLimitsHint": "Tokens in the last minute against the limit",
       "nearLimit": "Near limit",
@@ -2751,12 +2749,12 @@
       "attention": {
         "title": "Needs attention",
         "allGood": "Nothing needs attention",
-        "serviceNotReady": "Service {{name}} is not ready ({{ready}}/{{replicas}} replicas)",
-        "kvCache": "Service {{name}} KV cache is at {{value}}",
-        "queued": "Service {{name}} queued requests: {{count}}",
-        "slowFirstToken": "Service {{name}} P95 time to first token is {{value}}",
+        "serviceNotReady": "Inference service {{name}} is not ready ({{ready}}/{{replicas}} replicas)",
+        "kvCache": "Inference service {{name}} KV cache is at {{value}}",
+        "queued": "Inference service {{name}} queued requests: {{count}}",
+        "slowFirstToken": "Inference service {{name}} P95 time to first token is {{value}}",
         "gpuNodeNotReady": "GPU node {{name}} is not ready",
-        "lwsMissing": "LeaderWorkerSet is not installed, so services cannot be created",
+        "lwsMissing": "LeaderWorkerSet is not installed, so inference services cannot be created",
         "gatewayMissing": "The model gateway is not installed",
         "gatewayUpgrade": "The gateway needs an upgrade for rate limits, quotas and usage statistics",
         "callerQuotaExhausted": "Caller {{name}} has used up its quota",
@@ -2766,7 +2764,7 @@
         "checkFailed": "{{name}} could not be loaded, so the related checks did not run",
         "critical": "Critical",
         "warning": "Warning",
-        "viewService": "View service",
+        "viewService": "View inference service",
         "editLimit": "Edit limit",
         "viewAlerts": "View alerts"
       }
