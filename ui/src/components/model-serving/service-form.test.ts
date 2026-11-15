@@ -1,3 +1,4 @@
+import { SGLANG_ENGINE, VLLM_ENGINE } from '@/test/engines'
 import { describe, expect, it } from 'vitest'
 
 import type { CreateInferenceServiceRequest } from '@/lib/api/model-serving'
@@ -95,9 +96,10 @@ describe('service form values', () => {
     ['single node with vGPUs', single],
     ['pd over rdma', pd],
   ])('round-trips a recorded %s request', (_, request) => {
-    expect(requestFromFormValues(formValuesFromRequest(request))).toEqual(
-      request
-    )
+    const engine = request.runtime === 'vllm' ? VLLM_ENGINE : SGLANG_ENGINE
+    expect(
+      requestFromFormValues(formValuesFromRequest(request, engine))
+    ).toEqual(request)
   })
 
   it('reads the nulls the backend sends for empty fields', () => {
@@ -110,7 +112,7 @@ describe('service form values', () => {
       tolerations: null,
     } as unknown as CreateInferenceServiceRequest
 
-    const values = formValuesFromRequest(recorded)
+    const values = formValuesFromRequest(recorded, VLLM_ENGINE)
 
     expect(values.gpuType).toBe('whole')
     expect(values.extraArgs).toBe('')

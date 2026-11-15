@@ -1,6 +1,6 @@
 import type {
   DeploymentMode,
-  InferenceRuntime,
+  Engine,
   ModelServingStatus,
   ModelType,
 } from '@/lib/api/model-serving'
@@ -14,13 +14,13 @@ export const DEPLOYMENT_MODES: DeploymentMode[] = ['single', 'multi', 'pd']
 export const MAX_PD_NAME_LENGTH = 30
 export const MAX_PD_ROLE_REPLICAS = 100
 
-export const RUNTIME_LABELS: Record<InferenceRuntime, string> = {
-  vllm: 'vLLM',
-  sglang: 'SGLang',
+// The name people know an Engine by, or its id until the catalog loads.
+export function engineLabel(engines: Engine[] | undefined, name: string) {
+  return engines?.find((engine) => engine.name === name)?.label ?? name
 }
 
 // Whether prefill and decode run different images, given the service image
-// that roles without their own use. vLLM rejects it.
+// that roles without their own use. Engines that need one image reject it.
 export function pdRoleImagesDiffer(
   values: Pick<ServiceModeValues, 'prefill' | 'decode'>,
   serviceImage: string
@@ -31,17 +31,16 @@ export function pdRoleImagesDiffer(
 }
 
 // The tensor and pipeline parallel sizes the backend gives a group of
-// groupSize nodes with gpuCount GPUs each, as runtimeArgs in
-// pkg/modelserving/workload.go sets them: vLLM splits layers across nodes,
-// SGLang splits tensors across every GPU of the group.
+// groupSize nodes with gpuCount GPUs each: an Engine either pipelines layers
+// across the nodes or splits tensors across every GPU of the group.
 export function parallelism(
-  runtime: InferenceRuntime,
+  engine: Engine,
   gpuCount: number,
   groupSize: number
 ): { tp: number; pp: number } {
   const gpus = Math.max(gpuCount, 1)
   const nodes = Math.max(groupSize, 1)
-  if (runtime === 'vllm' && nodes > 1) return { tp: gpus, pp: nodes }
+  if (engine.pipelineAcrossNodes && nodes > 1) return { tp: gpus, pp: nodes }
   return { tp: gpus * nodes, pp: 1 }
 }
 

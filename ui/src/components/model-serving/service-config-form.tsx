@@ -14,6 +14,7 @@ import {
   useModelServingStatus,
   useServedModels,
   type DeploymentMode,
+  type Engine,
   type GPUMode,
   type InferenceRuntime,
   type InferenceServicePreview,
@@ -44,7 +45,6 @@ import { NamespaceSelector } from '@/components/selector/namespace-selector'
 import { ServiceEngineFields } from './service-engine-fields'
 import {
   ANY_NODE,
-  DEFAULT_TRANSFER_BACKENDS,
   defaultImage,
   requestFromFormValues,
   type ServiceFormValues,
@@ -64,13 +64,16 @@ const MAX_NAME_LENGTH = 40
 
 interface ServiceConfigFormProps {
   initial: ServiceFormValues
-  // Editing keeps the name, namespace, model, runtime and mode, and leaves
+  // The Engine catalog, whose rules the form follows.
+  engines: Engine[]
+  // Editing keeps the name, namespace, model, Engine and mode, and leaves
   // replicas to scaling.
   editing?: boolean
 }
 
 export function ServiceConfigForm({
   initial,
+  engines,
   editing = false,
 }: ServiceConfigFormProps) {
   const { t } = useTranslation()
@@ -99,14 +102,17 @@ export function ServiceConfigForm({
   const set = (patch: Partial<ServiceFormValues>) =>
     setValues((current) => ({ ...current, ...patch }))
   const { mode, runtime, image, gpuType, modeValues } = values
+  const engineOf = (name: InferenceRuntime) =>
+    engines.find((item) => item.name === name) ?? engines[0]
+  const engine = engineOf(runtime)
 
   const modelTypeOf = (id: string): ModelType | undefined =>
     models?.items.find((model) => String(model.id) === id)?.type
   const modelType = modelTypeOf(values.modelId)
   const hamiInstalled = !!gpuComponents?.hami.installed
   // The backend rejects it; the PD fields say why.
-  const vllmImagesDiffer =
-    mode === 'pd' && runtime === 'vllm' && pdRoleImagesDiffer(modeValues, image)
+  const roleImagesDiffer =
+    mode === 'pd' && engine.pdSameImage && pdRoleImagesDiffer(modeValues, image)
   const modeNodes = gpuNodes?.items.filter((node) => node.mode === gpuType)
   const gpuCountLabel =
     gpuType === 'vgpu'
@@ -121,28 +127,31 @@ export function ServiceConfigForm({
       ...(value === 'vgpu' && Number(values.gpuCount) < 1 && { gpuCount: '1' }),
     })
 
-  // The image follows the default of the runtime and mode until it is edited.
-  const imageFor = (nextRuntime: InferenceRuntime, nextMode: DeploymentMode) =>
-    image === defaultImage(runtime, mode)
-      ? defaultImage(nextRuntime, nextMode)
+  // The image follows the default of the Engine and mode until it is edited.
+  const imageFor = (nextEngine: Engine, nextMode: DeploymentMode) =>
+    image === defaultImage(engine, mode)
+      ? defaultImage(nextEngine, nextMode)
       : image
 
   const handleModeChange = (next: DeploymentMode) =>
-    set({ mode: next, image: imageFor(runtime, next) })
+    set({ mode: next, image: imageFor(engine, next) })
 
-  // vLLM PD runs each replica on one node, so switching to it drops groups
-  // of several nodes. The runtimes name their parsers differently.
+  // Some Engines run each PD replica on one node, so switching to one drops
+  // groups of several nodes. Engines name their parsers differently.
   const handleRuntimeChange = (value: string) => {
-    const next = value as InferenceRuntime
+    const next = engineOf(value as InferenceRuntime)
     set({
-      runtime: next,
+      runtime: next.name,
       image: imageFor(next, mode),
       toolCallParser: '',
       reasoningParser: '',
       modeValues: {
         ...modeValues,
-        transferBackend: DEFAULT_TRANSFER_BACKENDS[next],
-        ...(next === 'vllm' && {
+        transferBackend:
+          values.networkValues.rdma === 'none'
+            ? next.defaultTransfer
+            : next.defaultRDMATransfer,
+        ...(next.pdSingleNode && {
           prefill: { ...modeValues.prefill, groupSize: '1' },
           decode: { ...modeValues.decode, groupSize: '1' },
         }),
@@ -155,7 +164,7 @@ export function ServiceConfigForm({
       modelId: id,
       ...(modeBlocker(mode, modelTypeOf(id), status) && {
         mode: 'single',
-        image: imageFor(runtime, 'single'),
+        image: imageFor(engine, 'single'),
       }),
       // Their fields are hidden; the backend rejects them.
       ...(modelTypeOf(id) === 'embedding' && {
@@ -166,7 +175,7 @@ export function ServiceConfigForm({
 
   const servicesPath = '/model-serving/services'
   const detailPath = `${servicesPath}/${values.namespace}/${values.name}`
-  const incomplete = !values.modelId || !values.namespace || vllmImagesDiffer
+  const incomplete = !values.modelId || !values.namespace || roleImagesDiffer
 
   const save = async () => {
     if (!currentCluster) return
@@ -317,8 +326,11 @@ export function ServiceConfigForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="vllm">vLLM</SelectItem>
-                  <SelectItem value="sglang">SGLang</SelectItem>
+                  {engines.map((item) => (
+                    <SelectItem key={item.name} value={item.name}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -341,7 +353,7 @@ export function ServiceConfigForm({
                 multi: modeBlocker('multi', modelType, status),
                 pd: modeBlocker('pd', modelType, status),
               }}
-              runtime={runtime}
+              engine={engine}
               values={modeValues}
               onValuesChange={(next) => set({ modeValues: next })}
               gpuCountLabel={gpuCountLabel}
@@ -530,7 +542,7 @@ export function ServiceConfigForm({
           <FormGroup title={t('modelServing.services.sections.engine')}>
             <div className="grid grid-cols-4 gap-4">
               <ServiceEngineFields
-                runtime={runtime}
+                engine={engine}
                 mode={mode}
                 modelType={modelType}
                 gpuCount={values.gpuCount}

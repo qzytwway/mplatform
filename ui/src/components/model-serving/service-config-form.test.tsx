@@ -1,4 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
+import { ENGINES, SGLANG_ENGINE, VLLM_ENGINE } from '@/test/engines'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -52,7 +53,7 @@ vi.mock('@/lib/api/model-serving', () => ({
   useGPUComponents: () => ({ data: { hami: { installed: false } } }),
 }))
 
-const VLLM_PD_IMAGE = 'vllm/vllm-openai:v0.33.0'
+const VLLM_PD_IMAGE = VLLM_ENGINE.pdImage
 
 // Opens a Radix Select from the keyboard, which jsdom supports, and picks
 // an option.
@@ -79,7 +80,10 @@ describe('ServiceConfigForm when creating', () => {
     })
     render(
       <MemoryRouter>
-        <ServiceConfigForm initial={defaultFormValues()} />
+        <ServiceConfigForm
+          initial={defaultFormValues(VLLM_ENGINE)}
+          engines={ENGINES}
+        />
       </MemoryRouter>
     )
   })
@@ -258,7 +262,8 @@ describe('ServiceConfigForm when editing', () => {
     render(
       <MemoryRouter>
         <ServiceConfigForm
-          initial={formValuesFromRequest(recordedPD)}
+          initial={formValuesFromRequest(recordedPD, SGLANG_ENGINE)}
+          engines={ENGINES}
           editing
         />
       </MemoryRouter>

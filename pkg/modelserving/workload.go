@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 
 	"github.com/qzytwway/mplatform/pkg/model"
@@ -87,11 +88,6 @@ const (
 	regionEnv           = "AWS_DEFAULT_REGION"
 
 	probePeriodSeconds = 10
-	// SGLang answers /health only after a one-token generation, which it
-	// waits up to 20 seconds for and never answers within one second. vLLM
-	// only checks that its engine is alive.
-	sglangHealthTimeoutSeconds = 30
-	vllmHealthTimeoutSeconds   = 5
 	// Loading large model weights can take up to half an hour.
 	startupFailureThreshold  = 180
 	livenessFailureThreshold = 6
@@ -114,7 +110,7 @@ func serviceLabels(name string) map[string]string {
 
 func workloadMeta(req *serviceRequest, served *model.ServedModel) (metav1.ObjectMeta, error) {
 	// A defaulted router image is recorded as unset, so that an edit keeps
-	// following the default, the service image with SGLang.
+	// following the default, which may be the service image.
 	recorded := *req
 	if req.PD != nil && req.PD.RouterImage == defaultRouterImage(req) {
 		pd := *req.PD
@@ -196,8 +192,8 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 	if pdRole != "" {
 		labels[roleLabel] = pdRole
 	}
-	if pdRole == rolePrefill && req.Runtime == runtimeSGLang {
-		annotations[bootstrapAnnotation] = fmt.Sprint(pdBootstrapPort)
+	if pdRole == rolePrefill {
+		maps.Copy(annotations, req.engine().prefillAnnotations)
 	}
 	if len(annotations) == 0 {
 		annotations = nil
@@ -209,10 +205,11 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 }
 
 func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole string, worker bool) corev1.Container {
+	engine := req.engine()
 	container := corev1.Container{
 		Name:            req.Runtime,
 		Image:           req.Image,
-		Command:         runtimeCommand(req.Runtime),
+		Command:         engine.command,
 		Args:            append(runtimeArgs(req, served, pdRole, worker), req.ExtraArgs...),
 		Env:             runtimeEnv(req),
 		Resources:       runtimeResources(req),
@@ -235,13 +232,10 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 	healthProbe := corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(servingPort)},
 	}
-	healthTimeout := int32(vllmHealthTimeoutSeconds)
-	if req.Runtime == runtimeSGLang {
-		healthTimeout = sglangHealthTimeoutSeconds
-	}
+	healthTimeout := engine.healthTimeoutSeconds
 	container.Ports = []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}}
-	if pdRole != "" && req.Runtime == runtimeVLLM {
-		container.Ports = append(container.Ports, corev1.ContainerPort{Name: "nixl", ContainerPort: nixlSideChannelPort})
+	if pdRole != "" {
+		container.Ports = append(container.Ports, engine.pdPorts...)
 	}
 	container.ReadinessProbe = &corev1.Probe{ProbeHandler: healthProbe, PeriodSeconds: probePeriodSeconds, TimeoutSeconds: healthTimeout}
 	container.StartupProbe = &corev1.Probe{
@@ -263,121 +257,54 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 	return container
 }
 
-func runtimeCommand(runtime string) []string {
-	if runtime == runtimeSGLang {
-		return []string{"python3", "-m", "sglang.launch_server"}
-	}
-	return []string{"vllm", "serve"}
-}
-
 // runtimeArgs follows the multi-node examples of the LeaderWorkerSet project:
 // $(LWS_*) are environment variables it injects into every pod of a group.
 func runtimeArgs(req *serviceRequest, served *model.ServedModel, pdRole string, worker bool) []string {
-	modelPath := modelMountRoot + served.Name
-	// vllm serve takes the model as its first positional argument; --model is
-	// deprecated there.
-	args := []string{modelPath, "--served-model-name", served.Name}
-	if req.Runtime == runtimeSGLang {
-		args = append([]string{"--model-path"}, args...)
-	}
+	engine := req.engine()
+	args := append(slices.Clone(engine.modelFlags), modelMountRoot+served.Name, "--served-model-name", served.Name)
 	if !worker {
 		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
-		// vLLM always serves /metrics on its HTTP port; SGLang only when asked.
-		if req.Runtime == runtimeSGLang {
-			args = append(args, "--enable-metrics")
-		}
+		args = append(args, engine.metricsArgs...)
 	}
-	// SGLang nodes past the first serve a health check, on 127.0.0.1:30000
-	// unless told otherwise; in the node network it moves to the port the
-	// worker declares.
-	if worker && req.Runtime == runtimeSGLang && req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
+	// In the node network the health check of a worker moves to the port it
+	// declares.
+	if worker && engine.workersServeHealth && req.RDMA != nil && req.RDMA.Mode == rdmaModeHost {
 		args = append(args, "--host", "0.0.0.0", "--port", fmt.Sprint(servingPort))
 	}
 	// Parallelism defaults to using every GPU of the group, as the examples
 	// do; extraArgs come later on the command line and override it. Groups
 	// of several nodes come from multi mode or a pd role.
-	switch {
-	case req.GroupSize > 1 && req.Runtime == runtimeSGLang:
-		args = append(args, "--tp", fmt.Sprint(req.GPUCount*int64(req.GroupSize)),
-			"--dist-init-addr", fmt.Sprintf("$(LWS_LEADER_ADDRESS):%d", sglangDistInitPort),
-			"--nnodes", "$(LWS_GROUP_SIZE)", "--node-rank", "$(LWS_WORKER_INDEX)")
-	case req.GroupSize > 1:
-		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount), "--pipeline-parallel-size", "$(LWS_GROUP_SIZE)",
-			"--nnodes", "$(LWS_GROUP_SIZE)", "--node-rank", "$(LWS_WORKER_INDEX)", "--master-addr", "$(LWS_LEADER_ADDRESS)")
-		if worker {
-			args = append(args, "--headless")
-		}
-	case req.GPUCount > 1 && req.Runtime == runtimeSGLang:
-		args = append(args, "--tp", fmt.Sprint(req.GPUCount))
-	case req.GPUCount > 1:
-		args = append(args, "--tensor-parallel-size", fmt.Sprint(req.GPUCount))
-	}
+	args = append(args, engine.groupArgs(req.GPUCount, req.GroupSize, worker)...)
 	args = append(args, engineArgs(req)...)
 	if pdRole != "" {
-		args = append(args, disaggregationArgs(req.Runtime, req.PD, pdRole)...)
+		args = append(args, engine.disaggregationArgs(req.PD, pdRole)...)
 	}
-	if served.Type != modelTypeEmbedding {
-		return args
-	}
-	if req.Runtime == runtimeSGLang {
-		return append(args, "--is-embedding")
-	}
-	return append(args, "--runner", "pooling")
-}
-
-// engineArgs passes the engine settings of req under each runtime's flags.
-// Every node of a group gets them, as it gets extraArgs. vLLM only parses
-// tool calls when told to choose tools automatically.
-func engineArgs(req *serviceRequest) []string {
-	contextFlag, requestsFlag, memoryFlag := "--max-model-len", "--max-num-seqs", "--gpu-memory-utilization"
-	if req.Runtime == runtimeSGLang {
-		contextFlag, requestsFlag, memoryFlag = "--context-length", "--max-running-requests", "--mem-fraction-static"
-	}
-	var args []string
-	if req.ContextLength > 0 {
-		args = append(args, contextFlag, fmt.Sprint(req.ContextLength))
-	}
-	if req.MaxRunningRequests > 0 {
-		args = append(args, requestsFlag, fmt.Sprint(req.MaxRunningRequests))
-	}
-	if req.GPUMemoryFraction > 0 {
-		args = append(args, memoryFlag, strconv.FormatFloat(req.GPUMemoryFraction, 'f', -1, 64))
-	}
-	if req.ToolCallParser != "" {
-		if req.Runtime == runtimeVLLM {
-			args = append(args, "--enable-auto-tool-choice")
-		}
-		args = append(args, "--tool-call-parser", req.ToolCallParser)
-	}
-	if req.ReasoningParser != "" {
-		args = append(args, "--reasoning-parser", req.ReasoningParser)
+	if served.Type == modelTypeEmbedding {
+		args = append(args, engine.embeddingArgs...)
 	}
 	return args
 }
 
-// disaggregationArgs makes a pd role's server prefill or decode and pick the
-// KV transfer backend. With SGLang, every node of a prefill group registers
-// with the bootstrap server its leader runs on the given port. vLLM prefill
-// servers produce the KV cache that decode servers pull over NIXL.
-func disaggregationArgs(runtime string, pd *pdRequest, pdRole string) []string {
-	if runtime == runtimeVLLM {
-		kvRole := "kv_consumer"
-		if pdRole == rolePrefill {
-			kvRole = "kv_producer"
-		}
-		return []string{"--kv-transfer-config", fmt.Sprintf(`{"kv_connector":"%s","kv_role":"%s"}`, nixlConnector, kvRole)}
+// engineArgs passes the engine settings of req under each engine's flags.
+// Every node of a group gets them, as it gets extraArgs.
+func engineArgs(req *serviceRequest) []string {
+	engine := req.engine()
+	var args []string
+	if req.ContextLength > 0 {
+		args = append(args, engine.contextFlag, fmt.Sprint(req.ContextLength))
 	}
-	args := []string{"--disaggregation-mode", pdRole}
-	if pdRole == rolePrefill {
-		args = append(args, "--disaggregation-bootstrap-port", fmt.Sprint(pdBootstrapPort))
+	if req.MaxRunningRequests > 0 {
+		args = append(args, engine.requestsFlag, fmt.Sprint(req.MaxRunningRequests))
 	}
-	backend := transferMooncake
-	if pd.TransferBackend == transferNIXL {
-		backend = transferNIXL
+	if req.GPUMemoryFraction > 0 {
+		args = append(args, engine.memoryFlag, strconv.FormatFloat(req.GPUMemoryFraction, 'f', -1, 64))
 	}
-	args = append(args, "--disaggregation-transfer-backend", backend)
-	if pd.IBDevices != "" {
-		args = append(args, "--disaggregation-ib-device", pd.IBDevices)
+	if req.ToolCallParser != "" {
+		args = append(args, engine.toolChoiceArgs...)
+		args = append(args, "--tool-call-parser", req.ToolCallParser)
+	}
+	if req.ReasoningParser != "" {
+		args = append(args, "--reasoning-parser", req.ReasoningParser)
 	}
 	return args
 }
@@ -389,11 +316,8 @@ func runtimeEnv(req *serviceRequest) []corev1.EnvVar {
 	if req.PD != nil && req.PD.TransferBackend == transferMooncakeTCP {
 		env = append(env, corev1.EnvVar{Name: "MOONCAKE_PROTOCOL", Value: "tcp"}, corev1.EnvVar{Name: "MC_FORCE_TCP", Value: "1"})
 	}
-	// Left unset, the address is localhost and decode servers reach themselves.
-	if req.PD != nil && req.Runtime == runtimeVLLM {
-		env = append(env, corev1.EnvVar{Name: nixlSideChannelHostEnv, ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
-		}})
+	if req.PD != nil {
+		env = append(env, req.engine().pdEnv...)
 	}
 	for _, item := range req.Env {
 		env = append(env, corev1.EnvVar{Name: item.Name, Value: item.Value})

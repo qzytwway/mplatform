@@ -24,6 +24,8 @@ const (
 	// at maxPDRoleReplicas: a 101st replica would be rejected on scale-up.
 	maxPDServiceNameLength = 30
 	maxPDRoleReplicas      = 100
+	// Engines fail to start with less of each GPU's memory than this.
+	minGPUMemoryFraction = 0.05
 )
 
 type serviceRequest struct {
@@ -166,8 +168,17 @@ func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	if req.ModelID == 0 {
 		return req, fmt.Errorf("modelId is required")
 	}
-	if req.Runtime != runtimeVLLM && req.Runtime != runtimeSGLang {
-		return req, fmt.Errorf("runtime must be %s or %s", runtimeVLLM, runtimeSGLang)
+	engine, err := engineFor(req.Runtime)
+	if err != nil {
+		return req, err
+	}
+	// A request that names no image runs the engine's default, recorded as
+	// it is now so that later edits keep it.
+	if req.Image == "" {
+		req.Image = engine.DefaultImage
+		if req.Mode == modePD {
+			req.Image = engine.PDImage
+		}
 	}
 	if _, err := reference.ParseNormalizedNamed(req.Image); err != nil {
 		return req, fmt.Errorf("image must be a valid image reference")
@@ -203,8 +214,8 @@ func validateEngine(req *serviceRequest) error {
 		return fmt.Errorf("contextLength must not be negative")
 	case req.MaxRunningRequests < 0:
 		return fmt.Errorf("maxRunningRequests must not be negative")
-	case req.GPUMemoryFraction < 0 || req.GPUMemoryFraction > 1:
-		return fmt.Errorf("gpuMemoryFraction must be between 0 and 1")
+	case req.GPUMemoryFraction < 0 || req.GPUMemoryFraction > 1 || (req.GPUMemoryFraction > 0 && req.GPUMemoryFraction < minGPUMemoryFraction):
+		return fmt.Errorf("gpuMemoryFraction must be 0 or between %v and 1", minGPUMemoryFraction)
 	case !parserName.MatchString(req.ToolCallParser):
 		return fmt.Errorf("toolCallParser must be a parser name")
 	case !parserName.MatchString(req.ReasoningParser):
@@ -277,10 +288,8 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 		RouterReplicas:  req.PD.RouterReplicas,
 		RouterPolicy:    req.PD.RouterPolicy,
 	}
-	if req.Runtime == runtimeVLLM {
-		if err := validateVLLMRoles(req.Image, prefill, decode); err != nil {
-			return req, err
-		}
+	if err := validatePDRoles(req.engine(), req.Image, prefill, decode); err != nil {
+		return req, err
 	}
 	if _, err := reference.ParseNormalizedNamed(pd.RouterImage); err != nil {
 		return req, fmt.Errorf("pd.routerImage must be a valid image reference")
@@ -294,7 +303,7 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	if pd.RouterPolicy != "" && !slices.Contains(routerPolicies, pd.RouterPolicy) {
 		return req, fmt.Errorf("pd.routerPolicy must be one of %s", strings.Join(routerPolicies, ", "))
 	}
-	pd.TransferBackend, err = parseTransferBackend(req.Runtime, pd.TransferBackend, req.RDMA)
+	pd.TransferBackend, err = parseTransferBackend(req.engine(), pd.TransferBackend, req.RDMA)
 	if err != nil {
 		return req, err
 	}
@@ -312,19 +321,9 @@ func parsePDRequest(req serviceRequest) (serviceRequest, error) {
 	return req, nil
 }
 
-// defaultVLLMRouterImage is the vllm-router release the vLLM router runs
-// unless an image is given.
-const defaultVLLMRouterImage = "vllm/vllm-router:v0.1.17"
-
 // defaultRouterImage is the image a pd router runs unless one is given.
-// SGLang images ship sglang_router, and sharing the service image keeps the
-// router at the engine version it routes to. vLLM images do not include
-// vllm-router, which has its own images.
 func defaultRouterImage(req *serviceRequest) string {
-	if req.Runtime == runtimeVLLM {
-		return defaultVLLMRouterImage
-	}
-	return req.Image
+	return cmp.Or(req.engine().DefaultRouterImage, req.Image)
 }
 
 func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
@@ -367,45 +366,43 @@ func parsePDRole(name string, body pdRoleRequest) (pdRoleRequest, error) {
 	return role, validateEnv(field+".env", role.Env)
 }
 
-// validateVLLMRoles keeps vLLM pd roles to what is known to work. Prefill and
-// decode refuse to transfer KV between different vLLM or NIXL connector
-// versions. Groups of several nodes pipeline the model, which the NIXL
-// connector rejects for models with hybrid KV cache layouts and which has not
-// been verified for the others.
-func validateVLLMRoles(image string, prefill, decode pdRoleRequest) error {
+// validatePDRoles keeps pd roles to what is known to work with the engine.
+func validatePDRoles(engine *engine, image string, prefill, decode pdRoleRequest) error {
 	switch {
-	case prefill.GroupSize != 1:
-		return fmt.Errorf("pd.prefill.groupSize must be 1 with the %s runtime", runtimeVLLM)
-	case decode.GroupSize != 1:
-		return fmt.Errorf("pd.decode.groupSize must be 1 with the %s runtime", runtimeVLLM)
-	case cmp.Or(prefill.Image, image) != cmp.Or(decode.Image, image):
-		return fmt.Errorf("pd.prefill and pd.decode must use the same image with the %s runtime", runtimeVLLM)
+	case engine.PDSingleNode && prefill.GroupSize != 1:
+		return fmt.Errorf("pd.prefill.groupSize must be 1 with the %s runtime", engine.Name)
+	case engine.PDSingleNode && decode.GroupSize != 1:
+		return fmt.Errorf("pd.decode.groupSize must be 1 with the %s runtime", engine.Name)
+	case engine.PDSameImage && cmp.Or(prefill.Image, image) != cmp.Or(decode.Image, image):
+		return fmt.Errorf("pd.prefill and pd.decode must use the same image with the %s runtime", engine.Name)
 	}
 	return nil
 }
 
 // parseTransferBackend defaults and checks the KV transfer backend of a pd
-// service, given its parsed rdma. vLLM transfers with NIXL only: vllm-router
-// asks Mooncake prefill servers for their bootstrap details only when it is
-// given their URLs at startup, not for the pods it discovers.
-func parseTransferBackend(runtime, backend string, rdma *rdmaRequest) (string, error) {
-	if runtime == runtimeVLLM {
-		if backend != "" && backend != transferNIXL {
-			return "", fmt.Errorf("pd.transferBackend must be %s with the %s runtime", transferNIXL, runtimeVLLM)
+// service, given its parsed rdma.
+func parseTransferBackend(engine *engine, backend string, rdma *rdmaRequest) (string, error) {
+	if backend == "" {
+		backend = engine.DefaultTransfer
+		if rdma != nil {
+			backend = engine.DefaultRDMATransfer
 		}
-		return transferNIXL, nil
 	}
-	switch backend {
-	case "":
-		backend = transferMooncake
-	case transferMooncake, transferMooncakeTCP, transferNIXL:
-	default:
-		return "", fmt.Errorf("pd.transferBackend must be %s, %s or %s", transferMooncake, transferMooncakeTCP, transferNIXL)
+	if !slices.Contains(engine.TransferBackends, backend) {
+		return "", fmt.Errorf("pd.transferBackend must be %s with the %s runtime", orList(engine.TransferBackends), engine.Name)
 	}
 	if backend == transferMooncake && rdma == nil {
 		return "", fmt.Errorf("pd.transferBackend %s transfers over RDMA; configure rdma or use %s", transferMooncake, transferMooncakeTCP)
 	}
 	return backend, nil
+}
+
+// orList joins items as "a, b or c".
+func orList(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " or " + items[len(items)-1]
 }
 
 func parseRDMARequest(body *rdmaRequest) (*rdmaRequest, error) {

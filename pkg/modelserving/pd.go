@@ -82,17 +82,7 @@ func routerObjects(req *serviceRequest) []client.Object {
 func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment {
 	labels := serviceLabels(req.Name)
 	labels[roleLabel] = roleRouter
-	command := []string{"python3", "-m", "sglang_router.launch_router"}
-	// The SGLang router looks up the tokenizer of the model path its workers
-	// report, a path in their pods that is never a Hugging Face model, and
-	// routes without it. A closed local hub fails that lookup at once, where
-	// it would otherwise reach huggingface.co or, offline, retry until
-	// connections time out.
-	env := []corev1.EnvVar{{Name: "HF_ENDPOINT", Value: "http://127.0.0.1:1"}}
-	if req.Runtime == runtimeVLLM {
-		command = []string{"vllm-router"}
-		env = nil
-	}
+	engine := req.engine()
 	return &appsv1.Deployment{
 		ObjectMeta: meta,
 		Spec: appsv1.DeploymentSpec{
@@ -121,9 +111,9 @@ func buildRouter(req *serviceRequest, meta metav1.ObjectMeta) *appsv1.Deployment
 					Containers: []corev1.Container{{
 						Name:    roleRouter,
 						Image:   req.PD.RouterImage,
-						Command: command,
+						Command: engine.routerCommand,
 						Args:    routerArgs(req),
-						Env:     env,
+						Env:     engine.routerEnv,
 						Ports:   []corev1.ContainerPort{{Name: "http", ContainerPort: servingPort}},
 						// Requests keep the router out of the BestEffort class,
 						// whose pods are evicted first.
@@ -157,11 +147,7 @@ func routerProbe(path string) corev1.ProbeHandler {
 func routerArgs(req *serviceRequest) []string {
 	service := serviceLabel + "=" + req.Name
 	leader := lwsWorkerIndexLabel + "=0"
-	args := []string{"--pd-disaggregation"}
-	if req.Runtime == runtimeVLLM {
-		args = []string{"--vllm-pd-disaggregation", "--kv-connector", transferNIXL}
-	}
-	args = append(args,
+	args := append(slices.Clone(req.engine().routerModeArgs),
 		"--service-discovery",
 		"--service-discovery-namespace", req.Namespace,
 		"--service-discovery-port", fmt.Sprint(servingPort),

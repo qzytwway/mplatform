@@ -1,4 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
+import { SGLANG_ENGINE, VLLM_ENGINE } from '@/test/engines'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -69,7 +70,7 @@ function renderPD(
       blockers={{ single: undefined, multi: undefined, pd: undefined }}
       values={{ ...VALUES, ...patch }}
       onValuesChange={onValuesChange}
-      runtime={runtime}
+      engine={runtime === 'vllm' ? VLLM_ENGINE : SGLANG_ENGINE}
       gpuCountLabel="GPUs per pod"
       service={SERVICE}
       rdmaEnabled={rdmaEnabled}
