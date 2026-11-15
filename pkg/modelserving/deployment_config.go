@@ -2,7 +2,6 @@ package modelserving
 
 import (
 	"cmp"
-	"encoding/json"
 	"slices"
 	"strings"
 
@@ -302,37 +301,14 @@ func isRDMAResource(name string) bool {
 }
 
 // readTransfer reads the KV transfer backend and RDMA devices of a pd role of
-// the given runtime. pd workloads without a runtime annotation predate vLLM
-// pd and run SGLang, which transfers with Mooncake unless told otherwise.
+// the given engine. pd workloads without an engine annotation predate vLLM
+// pd and run SGLang.
 func readTransfer(runtime string, pod podConfig) (backend, ibDevices string) {
-	if runtime == runtimeVLLM {
-		return readVLLMConnector(pod.Args), ""
+	engine, err := engineFor(cmp.Or(runtime, runtimeSGLang))
+	if err != nil {
+		return "", ""
 	}
-	backend = cmp.Or(argValue(pod.Args, "--disaggregation-transfer-backend"), transferMooncake)
-	if backend == "mooncake_tcp" || (backend == transferMooncake && envValue(pod.Env, "MC_FORCE_TCP") == "1") {
-		backend = transferMooncakeTCP
-	}
-	return backend, argValue(pod.Args, "--disaggregation-ib-device")
-}
-
-// readVLLMConnector reads the kv_connector of --kv-transfer-config, given as
-// JSON or as the dotted --kv-transfer-config.kv_connector, which vLLM merges
-// over the JSON. NIXL's connector shows as nixl and others by name; none, or
-// JSON that does not parse, reads as empty.
-func readVLLMConnector(args []string) string {
-	connector := argValue(args, "--kv-transfer-config.kv_connector")
-	if config := argValue(args, "--kv-transfer-config"); connector == "" && config != "" {
-		var transfer struct {
-			Connector string `json:"kv_connector"`
-		}
-		if json.Unmarshal([]byte(config), &transfer) == nil {
-			connector = transfer.Connector
-		}
-	}
-	if connector == nixlConnector {
-		return transferNIXL
-	}
-	return connector
+	return engine.readTransfer(pod)
 }
 
 // argValue returns what the last occurrence of flag sets, as "flag value" or

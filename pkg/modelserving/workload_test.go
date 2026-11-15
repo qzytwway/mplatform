@@ -320,10 +320,9 @@ func TestSchedulingReachesInferencePods(t *testing.T) {
 func assertHealthProbes(t *testing.T, container corev1.Container) {
 	t.Helper()
 	health := &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(servingPort)}
-	timeout := int32(vllmHealthTimeoutSeconds)
-	if container.Name == runtimeSGLang {
-		timeout = sglangHealthTimeoutSeconds
-	}
+	engine, err := engineFor(container.Name)
+	require.NoError(t, err)
+	timeout := engine.healthTimeoutSeconds
 	for name, probe := range map[string]*corev1.Probe{
 		"startup":   container.StartupProbe,
 		"readiness": container.ReadinessProbe,
@@ -747,7 +746,7 @@ func TestVLLMRouter(t *testing.T) {
 		image  string
 		policy []string
 	}{
-		{name: "defaults", edit: func(*serviceRequest) {}, image: defaultVLLMRouterImage},
+		{name: "defaults", edit: func(*serviceRequest) {}, image: vllmEngine.DefaultRouterImage},
 		{
 			name:   "image and policy",
 			edit:   func(r *serviceRequest) { r.PD.RouterImage, r.PD.RouterPolicy = "my/vllm-router:dev", "round_robin" },

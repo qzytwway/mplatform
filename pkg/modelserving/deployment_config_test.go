@@ -620,7 +620,7 @@ func TestReadDeploymentConfigOfBuiltServices(t *testing.T) {
 				}, pod.Env)
 			}
 			routerPod := config.Roles[2].Pods[0]
-			assert.Equal(t, defaultVLLMRouterImage, routerPod.Image)
+			assert.Equal(t, vllmEngine.DefaultRouterImage, routerPod.Image)
 			assert.Equal(t, []string{"vllm-router"}, routerPod.Command)
 		}
 	})

@@ -37,7 +37,7 @@ func pdBody() serviceRequest {
 		Runtime:   runtimeSGLang,
 		Image:     "lmsysorg/sglang:latest",
 		Mode:      modePD,
-		// Mooncake, the default transfer backend, needs RDMA.
+		// Mooncake over RDMA, the default transfer backend with RDMA.
 		RDMA: &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 1},
 		PD: &pdRequest{
 			Prefill:     pdRoleRequest{Replicas: 1, GroupSize: 1, GPUCount: 1},
@@ -70,7 +70,9 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		{"invalid namespace", singleBody(), func(r *serviceRequest) { r.Namespace = "Default" }, "namespace must be a valid namespace name"},
 		{"missing model", singleBody(), func(r *serviceRequest) { r.ModelID = 0 }, "modelId is required"},
 		{"unknown runtime", singleBody(), func(r *serviceRequest) { r.Runtime = "tgi" }, "runtime must be"},
-		{"empty image", singleBody(), func(r *serviceRequest) { r.Image = " " }, "image must be a valid image reference"},
+		{"invalid image", singleBody(), func(r *serviceRequest) { r.Image = "Not An Image" }, "image must be a valid image reference"},
+		{"gpu memory fraction too small", singleBody(), func(r *serviceRequest) { r.GPUMemoryFraction = 0.01 }, "gpuMemoryFraction must be 0 or between 0.05 and 1"},
+		{"gpu memory fraction over one", singleBody(), func(r *serviceRequest) { r.GPUMemoryFraction = 1.5 }, "gpuMemoryFraction must be 0 or between 0.05 and 1"},
 		{"empty extra argument", singleBody(), func(r *serviceRequest) { r.ExtraArgs = []string{"--a", ""} }, "extraArgs must not contain empty arguments"},
 		{"invalid env name", singleBody(), func(r *serviceRequest) { r.Env = []envVar{{Name: "BAD=NAME"}} }, `env name "BAD=NAME" is not a valid`},
 		{"invalid cpu", singleBody(), func(r *serviceRequest) { r.CPU = "lots" }, "cpu must be a positive quantity"},
@@ -94,7 +96,6 @@ func TestParseServiceRequestRejectsInvalidFields(t *testing.T) {
 		}, "rdma.resourceCount must be at least 1"},
 		{"pd without pd", pdBody(), func(r *serviceRequest) { r.PD = nil }, "pd is required in pd mode"},
 		{"pd name too long", pdBody(), func(r *serviceRequest) { r.Name = strings.Repeat("a", maxPDServiceNameLength+1) }, "name must be at most 30 characters in pd mode"},
-		{"mooncake without rdma", pdBody(), func(r *serviceRequest) { r.RDMA = nil }, "pd.transferBackend mooncake transfers over RDMA; configure rdma or use mooncake-tcp"},
 		{"explicit mooncake without rdma", pdBody(), func(r *serviceRequest) { r.RDMA, r.PD.TransferBackend = nil, transferMooncake }, "configure rdma or use mooncake-tcp"},
 		{"prefill without replicas", pdBody(), func(r *serviceRequest) { r.PD.Prefill.Replicas = 0 }, "pd.prefill replicas, groupSize and gpuCount must be at least 1"},
 		{"decode without gpus", pdBody(), func(r *serviceRequest) { r.PD.Decode.GPUCount = 0 }, "pd.decode replicas, groupSize and gpuCount must be at least 1"},
@@ -188,6 +189,25 @@ func TestParseServiceRequestNormalizesModes(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int32(2), req.GroupSize)
 		assert.Equal(t, &rdmaRequest{Mode: rdmaModeDevicePlugin, Resource: "rdma/hca", ResourceCount: 2, Networks: "default/rdma-net"}, req.RDMA)
+	})
+
+	t.Run("an empty image runs the engine's default", func(t *testing.T) {
+		for _, tt := range []struct {
+			body  serviceRequest
+			image string
+		}{
+			{singleBody(), vllmEngine.DefaultImage},
+			{vllmPDBody(), vllmEngine.PDImage},
+			{pdBody(), sglangEngine.PDImage},
+		} {
+			body := tt.body
+			body.Image = " "
+
+			req, err := parseServiceRequest(&body)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.image, req.Image)
+		}
 	})
 
 	t.Run("host rdma drops device plugin fields", func(t *testing.T) {
@@ -289,6 +309,13 @@ func TestParsePDRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "defaults to mooncake over tcp without rdma",
+			edit: func(r *serviceRequest) { r.RDMA = nil },
+			check: func(t *testing.T, pd *pdRequest) {
+				assert.Equal(t, transferMooncakeTCP, pd.TransferBackend)
+			},
+		},
+		{
 			name: "mooncake over tcp needs no rdma",
 			edit: func(r *serviceRequest) { r.RDMA, r.PD.TransferBackend = nil, transferMooncakeTCP },
 			check: func(t *testing.T, pd *pdRequest) {
@@ -339,7 +366,7 @@ func TestParseVLLMPDRequest(t *testing.T) {
 			edit: func(*serviceRequest) {},
 			check: func(t *testing.T, req serviceRequest) {
 				assert.Equal(t, transferNIXL, req.PD.TransferBackend)
-				assert.Equal(t, defaultVLLMRouterImage, req.PD.RouterImage)
+				assert.Equal(t, vllmEngine.DefaultRouterImage, req.PD.RouterImage)
 				assert.Equal(t, int32(1), req.PD.RouterReplicas)
 				assert.Empty(t, req.PD.RouterPolicy)
 				assert.Nil(t, req.RDMA)
