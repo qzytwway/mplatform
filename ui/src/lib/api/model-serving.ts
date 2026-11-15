@@ -219,6 +219,28 @@ export interface Toleration {
 
 export type TransferBackend = 'mooncake' | 'mooncake-tcp' | 'nixl'
 
+// The rules of an Engine the form follows, as the backend applies them.
+export interface Engine {
+  name: InferenceRuntime
+  label: string
+  defaultImage: string
+  // The default image under PD disaggregation.
+  pdImage: string
+  // Empty runs the router from the service image.
+  defaultRouterImage: string
+  transferBackends: TransferBackend[]
+  // The transfer backend without an RDMA network, and with one.
+  defaultTransfer: TransferBackend
+  defaultRDMATransfer: TransferBackend
+  // Each PD replica runs on one node.
+  pdSingleNode: boolean
+  // Prefill and decode must run the same image.
+  pdSameImage: boolean
+  // Groups of several nodes pipeline layers across them rather than split
+  // tensors across every GPU.
+  pipelineAcrossNodes: boolean
+}
+
 // --policy values that sglang_router.launch_router and vllm-router both take.
 export type RouterPolicy =
   'cache_aware' | 'power_of_two' | 'round_robin' | 'random'
@@ -313,6 +335,15 @@ export function useServedModels() {
   return useQuery({
     queryKey: ['model-serving-models'],
     queryFn: () => apiClient.get<{ items: ServedModel[] }>(`${BASE}/models`),
+  })
+}
+
+// The Engines a service can run, which only change with the backend.
+export function useEngines() {
+  return useQuery({
+    queryKey: ['model-serving-engines'],
+    queryFn: () => apiClient.get<{ items: Engine[] }>(`${BASE}/engines`),
+    staleTime: Infinity,
   })
 }
 

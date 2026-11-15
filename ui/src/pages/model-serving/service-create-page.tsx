@@ -2,13 +2,33 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
+import { useEngines } from '@/lib/api/model-serving'
+import { translateError } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ServiceConfigForm } from '@/components/model-serving/service-config-form'
 import { defaultFormValues } from '@/components/model-serving/service-form'
 
 export function ServiceCreatePage() {
   const { t } = useTranslation()
   usePageTitle(t('modelServing.services.createTitle'))
+  // The form starts from the first Engine's defaults.
+  const { data: engines, error } = useEngines()
+
+  const renderForm = () => {
+    if (engines)
+      return (
+        <ServiceConfigForm
+          initial={defaultFormValues(engines.items[0])}
+          engines={engines.items}
+        />
+      )
+    if (error)
+      return (
+        <p className="text-sm text-destructive">{translateError(error, t)}</p>
+      )
+    return <Skeleton className="h-96 w-full max-w-4xl" />
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -27,7 +47,7 @@ export function ServiceCreatePage() {
           {t('modelServing.services.createDescription')}
         </p>
       </div>
-      <ServiceConfigForm initial={defaultFormValues()} />
+      {renderForm()}
     </div>
   )
 }

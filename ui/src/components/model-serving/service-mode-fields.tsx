@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import type {
   DeploymentMode,
+  Engine,
   InferenceRuntime,
   RouterPolicy,
   TransferBackend,
@@ -31,16 +32,6 @@ import {
   MAX_PD_ROLE_REPLICAS,
   pdRoleImagesDiffer,
 } from './service-modes'
-
-// vllm-router finds the Mooncake bootstrap servers only of prefill servers
-// it is given at startup, not of the pods it discovers, so vLLM uses NIXL.
-const TRANSFER_BACKENDS: Record<InferenceRuntime, TransferBackend[]> = {
-  vllm: ['nixl'],
-  sglang: ['mooncake', 'mooncake-tcp', 'nixl'],
-}
-
-// The backend's default for vLLM, whose images do not include the router.
-const VLLM_ROUTER_IMAGE = 'vllm/vllm-router:v0.1.17'
 
 // Radix Select items cannot have an empty value; default leaves --policy out.
 export type RouterPolicyChoice = RouterPolicy | 'default'
@@ -121,7 +112,7 @@ interface ServiceModeFieldsProps {
   blockers: Record<DeploymentMode, string | undefined>
   values: ServiceModeValues
   onValuesChange: (values: ServiceModeValues) => void
-  runtime: InferenceRuntime
+  engine: Engine
   // Labels the per-pod GPU count of PD roles, which follows the GPU type.
   gpuCountLabel: string
   service: ServiceDefaults
@@ -137,7 +128,7 @@ export function ServiceModeFields({
   blockers,
   values,
   onValuesChange,
-  runtime,
+  engine,
   gpuCountLabel,
   service,
   rdmaEnabled,
@@ -180,7 +171,7 @@ export function ServiceModeFields({
           <PDFields
             values={values}
             update={update}
-            runtime={runtime}
+            engine={engine}
             gpuCountLabel={gpuCountLabel}
             service={service}
             rdmaEnabled={rdmaEnabled}
@@ -228,7 +219,7 @@ export function ServiceModeFields({
 interface PDFieldsProps {
   values: ServiceModeValues
   update: (patch: Partial<ServiceModeValues>) => void
-  runtime: InferenceRuntime
+  engine: Engine
   gpuCountLabel: string
   service: ServiceDefaults
   rdmaEnabled: boolean
@@ -238,14 +229,13 @@ interface PDFieldsProps {
 function PDFields({
   values,
   update,
-  runtime,
+  engine,
   gpuCountLabel,
   service,
   rdmaEnabled,
   editing,
 }: PDFieldsProps) {
   const { t } = useTranslation()
-  const isVLLM = runtime === 'vllm'
   // The router's default policy is cache_aware.
   const cacheAware =
     values.routerPolicy === 'cache_aware' || values.routerPolicy === 'default'
@@ -256,8 +246,8 @@ function PDFields({
         <div className="space-y-2">
           <HintLabel
             htmlFor="inference-router-image"
-            hint={t(`modelServing.services.routerImageHints.${runtime}`, {
-              image: VLLM_ROUTER_IMAGE,
+            hint={t(`modelServing.services.routerImageHints.${engine.name}`, {
+              image: engine.defaultRouterImage,
             })}
           >
             {t('modelServing.services.routerImage')}
@@ -266,7 +256,7 @@ function PDFields({
             id="inference-router-image"
             value={values.routerImage}
             onChange={(event) => update({ routerImage: event.target.value })}
-            placeholder={isVLLM ? VLLM_ROUTER_IMAGE : service.image}
+            placeholder={engine.defaultRouterImage || service.image}
           />
         </div>
         {!editing && (
@@ -325,7 +315,7 @@ function PDFields({
           <HintLabel
             htmlFor="inference-transfer-backend"
             hint={
-              isVLLM
+              engine.name === 'vllm'
                 ? t('modelServing.services.transferBackendHintVLLM')
                 : t(
                     `modelServing.services.transferBackendHints.${values.transferBackend}`
@@ -334,10 +324,10 @@ function PDFields({
           >
             {t('modelServing.services.transferBackend')}
           </HintLabel>
-          {/* Remounts with the runtime's options: in a form, Radix empties a
+          {/* Remounts with the Engine's options: in a form, Radix empties a
               select whose value and options change together. */}
           <Select
-            key={runtime}
+            key={engine.name}
             value={values.transferBackend}
             // Never empty, as a further guard against Radix's reset.
             onValueChange={(value) =>
@@ -348,7 +338,7 @@ function PDFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {TRANSFER_BACKENDS[runtime].map((item) => (
+              {engine.transferBackends.map((item) => (
                 <SelectItem key={item} value={item}>
                   {t(`modelServing.services.transferBackends.${item}`)}
                 </SelectItem>
@@ -387,7 +377,7 @@ function PDFields({
       )}
       {pdRoleImagesDiffer(values, service.image) && (
         <p className="text-xs text-destructive">
-          {isVLLM
+          {engine.pdSameImage
             ? t('modelServing.services.roleImagesMustMatchVLLM')
             : t('modelServing.services.roleImagesDiffer')}
         </p>
@@ -401,7 +391,7 @@ function PDFields({
             onChange={(patch) =>
               update({ [role]: { ...values[role], ...patch } })
             }
-            runtime={runtime}
+            engine={engine}
             gpuCountLabel={gpuCountLabel}
             service={service}
             editing={editing}
@@ -416,7 +406,7 @@ interface PDRoleFieldsProps {
   role: PDRole
   values: PDRoleValues
   onChange: (patch: Partial<PDRoleValues>) => void
-  runtime: InferenceRuntime
+  engine: Engine
   gpuCountLabel: string
   service: ServiceDefaults
   editing: boolean
@@ -426,16 +416,16 @@ function PDRoleFields({
   role,
   values,
   onChange,
-  runtime,
+  engine,
   gpuCountLabel,
   service,
   editing,
 }: PDRoleFieldsProps) {
   const { t } = useTranslation()
   const id = (field: string) => `inference-${role}-${field}`
-  const placeholders = ROLE_PLACEHOLDERS[runtime][role]
-  // The create dialog sets one node per replica when it switches to vLLM.
-  const singleNode = runtime === 'vllm'
+  const placeholders = ROLE_PLACEHOLDERS[engine.name][role]
+  // The form sets one node per replica when it switches to such an Engine.
+  const singleNode = engine.pdSingleNode
   // Starts open when the role overrides anything, so it is not hidden.
   const [advancedOpen, setAdvancedOpen] = useState(
     () =>

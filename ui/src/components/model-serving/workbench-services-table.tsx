@@ -2,7 +2,7 @@ import { IconAlertTriangle } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
-import type { InferenceService } from '@/lib/api/model-serving'
+import { useEngines, type InferenceService } from '@/lib/api/model-serving'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -24,7 +24,7 @@ import {
   type ServiceHealth,
   type ServiceStatus,
 } from './service-health'
-import { RUNTIME_LABELS } from './service-modes'
+import { engineLabel } from './service-modes'
 
 interface WorkbenchServicesTableProps {
   services: InferenceService[]
@@ -67,6 +67,7 @@ export function WorkbenchServicesTable({
   statusColumn = false,
 }: WorkbenchServicesTableProps) {
   const { t } = useTranslation()
+  const { data: engines } = useEngines()
 
   const rows = services
     .map((service) => {
@@ -142,7 +143,7 @@ export function WorkbenchServicesTable({
             </TableCell>
             <TableCell>{service.model}</TableCell>
             <TableCell>
-              {RUNTIME_LABELS[service.runtime] ?? service.runtime}
+              {engineLabel(engines?.items, service.runtime)}
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">

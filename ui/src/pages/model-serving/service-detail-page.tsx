@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 import {
   deleteInferenceService,
+  useEngines,
   useInferenceService,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
@@ -29,7 +30,7 @@ import { ErrorMessage } from '@/components/error-message'
 import { DetailItem } from '@/components/model-serving/detail-item'
 import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { ServiceDeploymentCard } from '@/components/model-serving/service-deployment-card'
-import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
+import { engineLabel } from '@/components/model-serving/service-modes'
 import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
 import { ServicePublishCard } from '@/components/model-serving/service-publish-card'
 import { SharedSubdomainAlert } from '@/components/model-serving/shared-subdomain-alert'
@@ -48,6 +49,7 @@ export function ServiceDetailPage() {
     error,
     refetch,
   } = useInferenceService(namespace, name)
+  const { data: engines } = useEngines()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -161,7 +163,7 @@ export function ServiceDetailPage() {
               })}
             </DetailItem>
             <DetailItem label={t('modelServing.services.runtime')}>
-              {RUNTIME_LABELS[service.runtime] ?? service.runtime}
+              {engineLabel(engines?.items, service.runtime)}
             </DetailItem>
             <DetailItem label={t('modelServing.services.mode')}>
               {t(`modelServing.services.modes.${service.mode}`, {

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 
 import type {
   DeploymentMode,
+  Engine,
   InferenceRuntime,
   ModelType,
 } from '@/lib/api/model-serving'
@@ -27,7 +28,7 @@ interface ParserSuggestion {
   models: string
 }
 
-// Common parsers each runtime registers under its own names. Images may know
+// Common parsers each Engine registers under its own names. Images may know
 // others, which can be typed in.
 const TOOL_CALL_PARSERS: Record<InferenceRuntime, ParserSuggestion[]> = {
   vllm: [
@@ -64,7 +65,7 @@ const REASONING_PARSERS: Record<InferenceRuntime, ParserSuggestion[]> = {
 }
 
 interface ServiceEngineFieldsProps {
-  runtime: InferenceRuntime
+  engine: Engine
   mode: DeploymentMode
   modelType: ModelType | undefined
   gpuCount: string
@@ -74,10 +75,10 @@ interface ServiceEngineFieldsProps {
 }
 
 // ServiceEngineFields sets the engine settings beginners most often need,
-// which the backend passes under each runtime's flags, and shows the
+// which the backend passes under each Engine's flags, and shows the
 // parallelism the GPU counts give.
 export function ServiceEngineFields({
-  runtime,
+  engine,
   mode,
   modelType,
   gpuCount,
@@ -89,7 +90,7 @@ export function ServiceEngineFields({
   const engineDefault = t('modelServing.services.engine.engineDefault')
 
   const formatParallelism = (gpus: string, nodes: string) => {
-    const { tp, pp } = parallelism(runtime, Number(gpus), Number(nodes))
+    const { tp, pp } = parallelism(engine, Number(gpus), Number(nodes))
     return pp > 1 ? `TP ${tp} × PP ${pp}` : `TP ${tp}`
   }
   const parallelismText =
@@ -220,8 +221,8 @@ export function ServiceEngineFields({
       {/* Embedding models neither call tools nor reason. */}
       {modelType !== 'embedding' && (
         <>
-          {parserField('toolCallParser', TOOL_CALL_PARSERS[runtime])}
-          {parserField('reasoningParser', REASONING_PARSERS[runtime])}
+          {parserField('toolCallParser', TOOL_CALL_PARSERS[engine.name])}
+          {parserField('reasoningParser', REASONING_PARSERS[engine.name])}
         </>
       )}
     </>

@@ -1,6 +1,7 @@
 import type {
   CreateInferenceServiceRequest,
   DeploymentMode,
+  Engine,
   EnvVar,
   GPUMode,
   InferenceRuntime,
@@ -8,36 +9,15 @@ import type {
   RDMARequest,
   TaintEffect,
   Toleration,
-  TransferBackend,
 } from '@/lib/api/model-serving'
 
 import type { PDRoleValues, ServiceModeValues } from './service-mode-fields'
 import type { NetworkValues } from './service-network-fields'
 
-const DEFAULT_IMAGES: Record<InferenceRuntime, string> = {
-  vllm: 'vllm/vllm-openai:latest',
-  sglang: 'lmsysorg/sglang:latest',
-}
-
-// vLLM prefill and decode refuse to transfer KV between different builds, so
-// PD pins a release whose image includes NIXL instead of following latest.
-const VLLM_PD_IMAGE = 'vllm/vllm-openai:v0.33.0'
-
-export const defaultImage = (
-  runtime: InferenceRuntime,
-  mode: DeploymentMode
-) =>
-  runtime === 'vllm' && mode === 'pd' ? VLLM_PD_IMAGE : DEFAULT_IMAGES[runtime]
-
-// vLLM transfers over NIXL only. SGLang starts with Mooncake over TCP, since
-// Mooncake over RDMA needs an RDMA network, which starts unset.
-export const DEFAULT_TRANSFER_BACKENDS: Record<
-  InferenceRuntime,
-  TransferBackend
-> = {
-  vllm: 'nixl',
-  sglang: 'mooncake-tcp',
-}
+// The image a service runs unless one is given, which the backend picks the
+// same way.
+export const defaultImage = (engine: Engine, mode: DeploymentMode) =>
+  mode === 'pd' ? engine.pdImage : engine.defaultImage
 
 // Radix Select items cannot have an empty value.
 export const ANY_NODE = '__any__'
@@ -92,25 +72,24 @@ export const DEFAULT_PD_ROLE: PDRoleValues = {
   tolerations: '',
 }
 
-export function defaultFormValues(): ServiceFormValues {
+export function defaultFormValues(engine: Engine): ServiceFormValues {
   return {
     name: '',
     namespace: 'default',
     modelId: '',
-    runtime: 'vllm',
-    image: DEFAULT_IMAGES.vllm,
+    runtime: engine.name,
+    image: engine.defaultImage,
     mode: 'single',
     modeValues: {
       replicas: '1',
       groupSize: '2',
       prefill: DEFAULT_PD_ROLE,
       decode: DEFAULT_PD_ROLE,
-      // The backend runs the router from the service image with SGLang and
-      // from vllm-router's image with vLLM when empty.
+      // Empty runs the Engine's default router image.
       routerImage: '',
       routerReplicas: '1',
       routerPolicy: 'default',
-      transferBackend: DEFAULT_TRANSFER_BACKENDS.vllm,
+      transferBackend: engine.defaultTransfer,
       ibDevices: '',
     },
     networkValues: {
@@ -335,9 +314,10 @@ export function requestFromFormValues(
 // Fills the form from the request a service was recorded with, which comes
 // back from the backend with nulls for empty lists.
 export function formValuesFromRequest(
-  request: CreateInferenceServiceRequest
+  request: CreateInferenceServiceRequest,
+  engine: Engine
 ): ServiceFormValues {
-  const defaults = defaultFormValues()
+  const defaults = defaultFormValues(engine)
   const { pd, vgpu } = request
   const percentage = !!vgpu && vgpu.memoryPercentage > 0
   return {

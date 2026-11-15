@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 import {
   deleteInferenceService,
+  useEngines,
   useInferenceServices,
   useModelServingStatus,
   type InferenceService,
@@ -21,7 +22,7 @@ import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { formatGPUSpec } from '@/components/model-serving/gpu-spec'
 import { LWSCard } from '@/components/model-serving/lws-card'
-import { RUNTIME_LABELS } from '@/components/model-serving/service-modes'
+import { engineLabel } from '@/components/model-serving/service-modes'
 
 export function ServicesPage() {
   const { t } = useTranslation()
@@ -30,6 +31,7 @@ export function ServicesPage() {
   const { currentCluster } = useCluster()
   const { data, isLoading, error } = useInferenceServices()
   const { data: status } = useModelServingStatus()
+  const { data: engines } = useEngines()
   const lwsMissing = status?.lws === false
   const [deletingService, setDeletingService] =
     useState<InferenceService | null>(null)
@@ -74,7 +76,7 @@ export function ServicesPage() {
         id: 'runtime',
         header: t('modelServing.services.runtime'),
         cell: ({ row: { original: service } }) =>
-          RUNTIME_LABELS[service.runtime] ?? service.runtime,
+          engineLabel(engines?.items, service.runtime),
       },
       {
         id: 'mode',
@@ -156,7 +158,7 @@ export function ServicesPage() {
         ),
       },
     ],
-    [t]
+    [t, engines]
   )
 
   const actions = useMemo<Action<InferenceService>[]>(
