@@ -146,9 +146,7 @@ export function ScaleServiceForm({
         ) : (
           <div className="space-y-2">
             <Label htmlFor="scale-replicas">
-              {service.mode === 'multi'
-                ? t('modelServing.services.groups')
-                : t('common.fields.replicas')}
+              {t('common.fields.replicas')}
             </Label>
             <Input
               id="scale-replicas"
