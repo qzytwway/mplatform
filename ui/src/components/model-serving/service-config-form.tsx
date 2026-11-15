@@ -1,4 +1,9 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useState,
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -7,6 +12,7 @@ import { toast } from 'sonner'
 
 import {
   createInferenceService,
+  previewInferenceService,
   updateInferenceService,
   useGPUComponents,
   useGPUNodes,
@@ -15,6 +21,7 @@ import {
   type DeploymentMode,
   type GPUMode,
   type InferenceRuntime,
+  type InferenceServicePreview,
   type ModelType,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
@@ -54,6 +61,7 @@ import {
   pdRoleImagesDiffer,
 } from './service-modes'
 import { ServiceNetworkFields } from './service-network-fields'
+import { ServicePreviewDialog } from './service-preview-dialog'
 import { ServiceSchedulingFields } from './service-scheduling-fields'
 
 const MAX_NAME_LENGTH = 40
@@ -79,6 +87,8 @@ export function ServiceConfigForm({
   const { data: gpuComponents } = useGPUComponents()
   const [values, setValues] = useState(initial)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const [preview, setPreview] = useState<InferenceServicePreview | null>(null)
   // Starts open when anything in it is set, so it is not hidden.
   const [advancedOpen, setAdvancedOpen] = useState(() => {
     const { extraArgs, env, scheduling } = initial
@@ -153,6 +163,25 @@ export function ServiceConfigForm({
 
   const servicesPath = '/model-serving/services'
   const detailPath = `${servicesPath}/${values.namespace}/${values.name}`
+  const incomplete = !values.modelId || !values.namespace || vllmImagesDiffer
+
+  // The browser checks the fields first, as it does before submitting.
+  const handlePreview = async (event: MouseEvent<HTMLButtonElement>) => {
+    if (!currentCluster || !event.currentTarget.form?.reportValidity()) return
+    setIsPreviewing(true)
+    try {
+      setPreview(
+        await previewInferenceService(
+          currentCluster,
+          requestFromFormValues(values)
+        )
+      )
+    } catch (err) {
+      toast.error(translateError(err, t))
+    } finally {
+      setIsPreviewing(false)
+    }
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -562,15 +591,19 @@ export function ServiceConfigForm({
             {t('common.actions.cancel')}
           </Link>
         </Button>
-        <Button
-          type="submit"
-          disabled={
-            isSubmitting ||
-            !values.modelId ||
-            !values.namespace ||
-            vllmImagesDiffer
-          }
-        >
+        {!editing && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handlePreview}
+            disabled={isPreviewing || isSubmitting || incomplete}
+          >
+            {isPreviewing
+              ? t('modelServing.services.preview.rendering')
+              : t('modelServing.services.preview.action')}
+          </Button>
+        )}
+        <Button type="submit" disabled={isSubmitting || incomplete}>
           {editing
             ? isSubmitting
               ? t('common.actions.saving')
@@ -580,6 +613,12 @@ export function ServiceConfigForm({
               : t('common.actions.create')}
         </Button>
       </div>
+      {/* Rendered outside the form element, so nothing in it submits. */}
+      <ServicePreviewDialog
+        preview={preview}
+        mode={mode}
+        onClose={() => setPreview(null)}
+      />
     </form>
   )
 }

@@ -202,25 +202,8 @@ func (h *Handler) GetService(c *gin.Context) {
 }
 
 func (h *Handler) CreateService(c *gin.Context) {
-	var body serviceRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	req, err := parseServiceRequest(&body)
+	req, served, storage, status, err := parseCreate(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	served, storage, err := loadModelSource(req.ModelID)
-	if err == nil {
-		err = validateModelMode(&req, served)
-	}
-	if err != nil {
-		status := http.StatusBadRequest
-		if errors.Is(err, errLookupFailed) {
-			status = http.StatusInternalServerError
-		}
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
@@ -275,6 +258,29 @@ func (h *Handler) CreateService(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, service)
+}
+
+// parseCreate reads the request of a new service with the model it serves,
+// returning the response status for errors.
+func parseCreate(c *gin.Context) (serviceRequest, *model.ServedModel, *model.ModelStorage, int, error) {
+	var body serviceRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		return serviceRequest{}, nil, nil, http.StatusBadRequest, err
+	}
+	req, err := parseServiceRequest(&body)
+	if err != nil {
+		return req, nil, nil, http.StatusBadRequest, err
+	}
+	served, storage, err := loadModelSource(req.ModelID)
+	if err == nil {
+		err = validateModelMode(&req, served)
+	}
+	if errors.Is(err, errLookupFailed) {
+		return req, nil, nil, http.StatusInternalServerError, err
+	} else if err != nil {
+		return req, nil, nil, http.StatusBadRequest, err
+	}
+	return req, served, storage, http.StatusOK, nil
 }
 
 var errLookupFailed = errors.New("failed to load model source")
