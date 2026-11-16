@@ -66,21 +66,29 @@ apiServer:
       mountPath: /etc/kubernetes/mplatform/encryption-config.yaml
       readOnly: true
       pathType: File
+# The controller manager, scheduler and etcd serve metrics on all addresses
+# rather than loopback only, so kube-prometheus-stack can scrape them.
 controllerManager:
   extraArgs:
     - name: profiling
       value: "false"
     - name: terminated-pod-gc-threshold
       value: "1000"
+    - name: bind-address
+      value: 0.0.0.0
 scheduler:
   extraArgs:
     - name: profiling
       value: "false"
+    - name: bind-address
+      value: 0.0.0.0
 etcd:
   local:
     extraArgs:
       - name: quota-backend-bytes
         value: "8589934592"
+      - name: listen-metrics-urls
+        value: http://0.0.0.0:2381
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
@@ -117,3 +125,5 @@ tlsCipherSuites:
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
 kind: KubeProxyConfiguration
 mode: iptables
+# Served on all addresses so kube-prometheus-stack can scrape it.
+metricsBindAddress: 0.0.0.0:10249
