@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import App, { StandaloneAIChatApp } from './App'
 import { HomeRoute } from './components/home-route'
@@ -130,6 +130,10 @@ export const router = createBrowserRouter(
         {
           path: 'observability/alerts/notifications',
           element: <AlertsPage view="notifications" />,
+        },
+        {
+          path: 'model-serving',
+          element: <Navigate to="/model-serving/overview" replace />,
         },
         {
           path: 'model-serving/overview',

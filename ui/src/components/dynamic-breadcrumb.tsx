@@ -11,6 +11,8 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 
+import { MODEL_SERVING_ITEMS } from './model-serving-nav'
+
 interface BreadcrumbSegment {
   label: string
   href?: string
@@ -50,6 +52,16 @@ export function DynamicBreadcrumb() {
         crumbs.push({ label: t('nav.metrics') })
       }
       return crumbs
+    }
+
+    if (pathSegments[0] === 'model-serving') {
+      const page = MODEL_SERVING_ITEMS.find(
+        ({ url }) =>
+          location.pathname === url || location.pathname.startsWith(`${url}/`)
+      )
+      return page
+        ? [{ label: t('nav.modelServing') }, { label: t(page.titleKey) }]
+        : [{ label: t('nav.modelServing') }]
     }
 
     // Helper function to create breadcrumb item

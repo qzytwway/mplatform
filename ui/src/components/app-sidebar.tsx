@@ -10,16 +10,11 @@ import {
   IconBellOff,
   IconBellRinging,
   IconBox,
-  IconChartBar,
   IconChartLine,
-  IconCpu,
-  IconDatabase,
   IconFileText,
   IconHistory,
   IconLayoutDashboard,
   IconListCheck,
-  IconRocket,
-  IconRouteAltLeft,
   IconSend,
   IconServer2,
   IconSparkles,
@@ -47,6 +42,7 @@ import {
 } from '@/components/ui/sidebar'
 
 import { ClusterSelector } from './cluster-selector'
+import { MODEL_SERVING_ITEMS } from './model-serving-nav'
 import { SidebarItemIcon } from './sidebar-item-icon'
 import { Collapsible, CollapsibleTrigger } from './ui/collapsible'
 import { VersionInfo } from './version-info'
@@ -86,35 +82,6 @@ const ALERTING_ITEMS = [
     titleKey: 'nav.alertNotifications',
     Icon: IconSend,
   },
-]
-
-const MODEL_SERVING_ITEMS = [
-  {
-    url: '/model-serving/overview',
-    titleKey: 'nav.workbench',
-    Icon: IconLayoutDashboard,
-  },
-  {
-    url: '/model-serving/services',
-    titleKey: 'nav.inferenceServices',
-    Icon: IconRocket,
-  },
-  {
-    url: '/model-serving/gateway',
-    titleKey: 'nav.gateway',
-    Icon: IconRouteAltLeft,
-  },
-  {
-    url: '/model-serving/usage',
-    titleKey: 'nav.modelUsage',
-    Icon: IconChartBar,
-  },
-  {
-    url: '/model-serving/models',
-    titleKey: 'nav.modelRegistry',
-    Icon: IconDatabase,
-  },
-  { url: '/model-serving/gpus', titleKey: 'nav.gpuResources', Icon: IconCpu },
 ]
 
 const SIDEBAR_ALERTS_REFRESH_MS = 60000
