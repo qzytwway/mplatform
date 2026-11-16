@@ -5,7 +5,7 @@ import type {
   ModelType,
 } from '@/lib/api/model-serving'
 
-import type { ServiceModeValues } from './service-mode-fields'
+import type { ServiceModeValues } from './service-form'
 
 export const DEPLOYMENT_MODES: DeploymentMode[] = ['single', 'multi', 'pd']
 

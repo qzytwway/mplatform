@@ -9,8 +9,7 @@ import type {
 import { Input } from '@/components/ui/input'
 import { HintLabel } from '@/components/form-layout'
 
-import type { ServiceFormValues } from './service-form'
-import type { ServiceModeValues } from './service-mode-fields'
+import type { ServiceFormValues, ServiceModeValues } from './service-form'
 import { parallelism } from './service-modes'
 
 type EngineValues = Pick<

@@ -5,11 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { InferenceRuntime } from '@/lib/api/model-serving'
 
-import {
-  ServiceModeFields,
-  type PDRoleValues,
-  type ServiceModeValues,
-} from './service-mode-fields'
+import type { PDRoleValues, ServiceModeValues } from './service-form'
+import { ServiceModeFields } from './service-mode-fields'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),

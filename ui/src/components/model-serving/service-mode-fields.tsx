@@ -6,7 +6,6 @@ import type {
   DeploymentMode,
   Engine,
   InferenceRuntime,
-  RouterPolicy,
   ServiceOptions,
   TransferBackend,
 } from '@/lib/api/model-serving'
@@ -28,10 +27,12 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { HintLabel } from '@/components/form-layout'
 
+import type {
+  PDRoleValues,
+  RouterPolicyChoice,
+  ServiceModeValues,
+} from './service-form'
 import { DEPLOYMENT_MODES, pdRoleImagesDiffer } from './service-modes'
-
-// Radix Select items cannot have an empty value; default leaves --policy out.
-export type RouterPolicyChoice = RouterPolicy | 'default'
 
 type PDRole = 'prefill' | 'decode'
 
@@ -61,38 +62,11 @@ const ROLE_PLACEHOLDERS: Record<
   },
 }
 
-// image, cpu and memory are empty to keep the service's; env and nodeSelector
-// hold one KEY=VALUE per line, tolerations one toleration per line.
-export interface PDRoleValues {
-  replicas: string
-  groupSize: string
-  gpuCount: string
-  extraArgs: string
-  image: string
-  cpu: string
-  memory: string
-  env: string
-  nodeSelector: string
-  tolerations: string
-}
-
 // The service settings PD roles use unless they set their own.
 export interface ServiceDefaults {
   image: string
   cpu: string
   memory: string
-}
-
-export interface ServiceModeValues {
-  replicas: string
-  groupSize: string
-  prefill: PDRoleValues
-  decode: PDRoleValues
-  routerImage: string
-  routerReplicas: string
-  routerPolicy: RouterPolicyChoice
-  transferBackend: TransferBackend
-  ibDevices: string
 }
 
 interface ServiceModeFieldsProps {
