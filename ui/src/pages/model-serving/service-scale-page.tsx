@@ -17,7 +17,11 @@ export function ServiceScalePage() {
     error,
     refetch,
   } = useInferenceService(namespace, name)
-  const { data: options, error: optionsError } = useServiceOptions()
+  const {
+    data: options,
+    error: optionsError,
+    refetch: refetchOptions,
+  } = useServiceOptions()
   usePageTitle(t('modelServing.services.scaleTitle'))
 
   const renderForm = () => {
@@ -28,7 +32,10 @@ export function ServiceScalePage() {
         <ErrorMessage
           resourceName={t('modelServing.services.resourceType')}
           error={error ?? optionsError}
-          refetch={() => void refetch()}
+          refetch={() => {
+            void refetch()
+            void refetchOptions()
+          }}
         />
       )
     return (

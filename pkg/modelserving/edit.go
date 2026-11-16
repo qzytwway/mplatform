@@ -180,8 +180,7 @@ func parseEdit(c *gin.Context, workload *unstructured.Unstructured) (serviceRequ
 // applyEdit writes the objects rebuilt from an edited request: the storage
 // Secret before the workload whose new pods read it, then the router. A
 // service without a PodMonitor, such as one created before its CRD was
-// installed, gets one; an existing one only depends on the service's name and
-// stays.
+// installed, gets one; an existing one is left as it is.
 func applyEdit(c *gin.Context, cs *cluster.ClientSet, crd string, workload *unstructured.Unstructured, router *appsv1.Deployment, objects []client.Object, built *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	ctx := c.Request.Context()
 	for _, object := range objects {
