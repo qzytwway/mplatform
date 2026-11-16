@@ -4,9 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -242,10 +240,6 @@ func (req *serviceRequest) engine() *engine {
 		panic(err)
 	}
 	return e
-}
-
-func (h *Handler) ListEngines(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"items": engines})
 }
 
 // readVLLMConnector reads the kv_connector of --kv-transfer-config, given as

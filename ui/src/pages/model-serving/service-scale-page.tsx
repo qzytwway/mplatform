@@ -2,7 +2,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 
-import { useInferenceService } from '@/lib/api/model-serving'
+import { useInferenceService, useServiceOptions } from '@/lib/api/model-serving'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/error-message'
@@ -17,19 +17,33 @@ export function ServiceScalePage() {
     error,
     refetch,
   } = useInferenceService(namespace, name)
+  const {
+    data: options,
+    error: optionsError,
+    refetch: refetchOptions,
+  } = useServiceOptions()
   usePageTitle(t('modelServing.services.scaleTitle'))
 
   const renderForm = () => {
-    if (isLoading) return <Skeleton className="h-48 w-full max-w-4xl" />
-    if (error || !service)
+    if (isLoading || (!options && !optionsError))
+      return <Skeleton className="h-48 w-full max-w-4xl" />
+    if (error || optionsError || !service || !options)
       return (
         <ErrorMessage
           resourceName={t('modelServing.services.resourceType')}
-          error={error}
-          refetch={() => void refetch()}
+          error={error ?? optionsError}
+          refetch={() => {
+            void refetch()
+            void refetchOptions()
+          }}
         />
       )
-    return <ScaleServiceForm service={service} />
+    return (
+      <ScaleServiceForm
+        service={service}
+        maxRoleReplicas={options.maxPDRoleReplicas}
+      />
+    )
   }
 
   return (

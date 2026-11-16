@@ -2,7 +2,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
-import { useEngines } from '@/lib/api/model-serving'
+import { useServiceOptions } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,14 +13,14 @@ export function ServiceCreatePage() {
   const { t } = useTranslation()
   usePageTitle(t('modelServing.services.createTitle'))
   // The form starts from the first Engine's defaults.
-  const { data: engines, error } = useEngines()
+  const { data: options, error } = useServiceOptions()
 
   const renderForm = () => {
-    if (engines)
+    if (options)
       return (
         <ServiceConfigForm
-          initial={defaultFormValues(engines.items[0])}
-          engines={engines.items}
+          initial={defaultFormValues(options.engines[0])}
+          options={options}
         />
       )
     if (error)

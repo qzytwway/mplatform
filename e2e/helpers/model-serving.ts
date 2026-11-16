@@ -141,6 +141,7 @@ export interface ServiceRole {
   name: string
   replicas: number
   readyReplicas: number
+  ready: boolean
   groupSize?: number
   gpuCount?: number
 }

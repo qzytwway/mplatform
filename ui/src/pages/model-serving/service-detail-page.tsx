@@ -8,8 +8,8 @@ import { toast } from 'sonner'
 
 import {
   deleteInferenceService,
-  useEngines,
   useInferenceService,
+  useServiceOptions,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
@@ -49,7 +49,7 @@ export function ServiceDetailPage() {
     error,
     refetch,
   } = useInferenceService(namespace, name)
-  const { data: engines } = useEngines()
+  const { data: options } = useServiceOptions()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -163,7 +163,7 @@ export function ServiceDetailPage() {
               })}
             </DetailItem>
             <DetailItem label={t('modelServing.services.runtime')}>
-              {engineLabel(engines?.items, service.runtime)}
+              {engineLabel(options?.engines, service.runtime)}
             </DetailItem>
             <DetailItem label={t('modelServing.services.mode')}>
               {t(`modelServing.services.modes.${service.mode}`, {

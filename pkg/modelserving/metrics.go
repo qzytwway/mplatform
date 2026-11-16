@@ -76,7 +76,7 @@ func checkPodMonitorName(ctx context.Context, cs *cluster.ClientSet, req *servic
 		Status: metav1.StatusFailure,
 		Code:   http.StatusConflict,
 		Reason: metav1.StatusReasonAlreadyExists,
-		Message: fmt.Sprintf("PodMonitor %s/%s already exists and is not an inference service's; delete it or choose another service name",
+		Message: fmt.Sprintf("PodMonitor %s/%s already exists and is not an inference service's; delete it, or create the service under another name",
 			req.Namespace, req.Name),
 	}}
 }

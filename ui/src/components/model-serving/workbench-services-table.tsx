@@ -2,7 +2,10 @@ import { IconAlertTriangle } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
-import { useEngines, type InferenceService } from '@/lib/api/model-serving'
+import {
+  useServiceOptions,
+  type InferenceService,
+} from '@/lib/api/model-serving'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -67,7 +70,7 @@ export function WorkbenchServicesTable({
   statusColumn = false,
 }: WorkbenchServicesTableProps) {
   const { t } = useTranslation()
-  const { data: engines } = useEngines()
+  const { data: options } = useServiceOptions()
 
   const rows = services
     .map((service) => {
@@ -143,18 +146,14 @@ export function WorkbenchServicesTable({
             </TableCell>
             <TableCell>{service.model}</TableCell>
             <TableCell>
-              {engineLabel(engines?.items, service.runtime)}
+              {engineLabel(options?.engines, service.runtime)}
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">
                 {service.roles.map((role) => (
                   <Badge
                     key={role.name}
-                    variant={
-                      role.replicas > 0 && role.readyReplicas >= role.replicas
-                        ? 'outline'
-                        : 'secondary'
-                    }
+                    variant={role.ready ? 'outline' : 'secondary'}
                     className="tabular-nums"
                   >
                     {service.mode === 'pd' &&

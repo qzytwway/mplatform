@@ -27,8 +27,7 @@ type previewResource struct {
 }
 
 // PreviewService renders the objects CreateService would create from the same
-// request. Only the PodMonitor needs the cluster; whether the cluster can run
-// the service is left to creating it.
+// request, after the same checks that the cluster can take it.
 func (h *Handler) PreviewService(c *gin.Context) {
 	req, served, storage, status, err := parseCreate(c)
 	if err != nil {
@@ -40,9 +39,14 @@ func (h *Handler) PreviewService(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	ctx := c.Request.Context()
+	if _, status, err := admitService(ctx, cs, &req); err != nil {
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
 	objects, workload, err := buildServiceObjects(&req, served, storage)
 	if err == nil {
-		objects, err = withPodMonitor(c.Request.Context(), cs, &req, objects)
+		objects, err = withPodMonitor(ctx, cs, &req, objects)
 	}
 	if err != nil {
 		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})

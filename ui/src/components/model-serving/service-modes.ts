@@ -9,11 +9,6 @@ import type { ServiceModeValues } from './service-mode-fields'
 
 export const DEPLOYMENT_MODES: DeploymentMode[] = ['single', 'multi', 'pd']
 
-// The backend's limits for PD services, which keep the names the
-// DisaggregatedSet webhook derives from them short enough.
-export const MAX_PD_NAME_LENGTH = 30
-export const MAX_PD_ROLE_REPLICAS = 100
-
 // The name people know an Engine by, or its id until the catalog loads.
 export function engineLabel(engines: Engine[] | undefined, name: string) {
   return engines?.find((engine) => engine.name === name)?.label ?? name

@@ -40,9 +40,14 @@ function pdService(routerReplicas: number): InferenceServiceDetail {
     gpuCount: 1,
     groupSize: 1,
     roles: [
-      { name: 'prefill', replicas: 1, readyReplicas: 1 },
-      { name: 'decode', replicas: 1, readyReplicas: 1 },
-      { name: 'router', replicas: routerReplicas, readyReplicas: 1 },
+      { name: 'prefill', replicas: 1, readyReplicas: 1, ready: true },
+      { name: 'decode', replicas: 1, readyReplicas: 1, ready: true },
+      {
+        name: 'router',
+        replicas: routerReplicas,
+        readyReplicas: 1,
+        ready: true,
+      },
     ],
     ready: true,
     published: false,
@@ -59,7 +64,7 @@ function renderForm(service: InferenceServiceDetail) {
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <ScaleServiceForm service={service} />
+        <ScaleServiceForm service={service} maxRoleReplicas={100} />
       </MemoryRouter>
     </QueryClientProvider>
   )

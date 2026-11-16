@@ -213,27 +213,8 @@ func (h *Handler) CreateService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	crd, status, err := requireWorkloadCRD(ctx, cs, req.Mode)
+	crd, status, err := admitService(ctx, cs, &req)
 	if err != nil {
-		c.JSON(status, gin.H{"error": err.Error()})
-		return
-	}
-	workloads, err := listWorkloads(ctx, cs, req.Namespace)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if other := groupNameConflict(&req, workloads); other != "" {
-		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("name %s clashes with inference service %s in this namespace: the pods and Services of each group are named <service>-<group index>", req.Name, other)})
-		return
-	}
-	if req.VGPU != nil {
-		if status, err := requireModeComponents(cs, gpuModeVGPU); err != nil {
-			c.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
-	}
-	if status, err := requirePriorityClass(ctx, cs, req.PriorityClassName); err != nil {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
@@ -304,6 +285,38 @@ func loadModelSource(modelID uint) (*model.ServedModel, *model.ModelStorage, err
 		return nil, nil, fmt.Errorf("%w: %w", errLookupFailed, err)
 	}
 	return served, storage, nil
+}
+
+// admitService checks that the cluster can take a new service, returning the
+// CRD it deploys through, or the response status and error when it cannot.
+// Preview runs the same checks, so a service that previews also creates.
+func admitService(ctx context.Context, cs *cluster.ClientSet, req *serviceRequest) (string, int, error) {
+	crd, status, err := requireWorkloadCRD(ctx, cs, req.Mode)
+	if err != nil {
+		return "", status, err
+	}
+	workloads, err := listWorkloads(ctx, cs, req.Namespace)
+	if err != nil {
+		return "", http.StatusInternalServerError, err
+	}
+	if other := groupNameConflict(req, workloads); other != "" {
+		return "", http.StatusConflict, fmt.Errorf("name %s clashes with inference service %s in this namespace: the pods and Services of each group are named <service>-<group index>", req.Name, other)
+	}
+	if status, err := requireServiceResources(ctx, cs, req); err != nil {
+		return "", status, err
+	}
+	return crd, http.StatusOK, nil
+}
+
+// requireServiceResources checks that what the pods of a service use exists
+// in the cluster: the vGPU components and the PriorityClass.
+func requireServiceResources(ctx context.Context, cs *cluster.ClientSet, req *serviceRequest) (int, error) {
+	if req.VGPU != nil {
+		if status, err := requireModeComponents(cs, gpuModeVGPU); err != nil {
+			return status, err
+		}
+	}
+	return requirePriorityClass(ctx, cs, req.PriorityClassName)
 }
 
 // requireWorkloadCRD returns the CRD a mode deploys through, or the response
