@@ -5,8 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type {
   DeploymentMode,
   Engine,
-  InferenceRuntime,
-  RouterPolicy,
+  PDRole,
   ServiceOptions,
   TransferBackend,
 } from '@/lib/api/model-serving'
@@ -28,71 +27,18 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { HintLabel } from '@/components/form-layout'
 
+import type {
+  PDRoleValues,
+  RouterPolicyChoice,
+  ServiceModeValues,
+} from './service-form'
 import { DEPLOYMENT_MODES, pdRoleImagesDiffer } from './service-modes'
-
-// Radix Select items cannot have an empty value; default leaves --policy out.
-export type RouterPolicyChoice = RouterPolicy | 'default'
-
-type PDRole = 'prefill' | 'decode'
-
-const ROLE_PLACEHOLDERS: Record<
-  InferenceRuntime,
-  Record<PDRole, { extraArgs: string; env: string }>
-> = {
-  vllm: {
-    prefill: {
-      extraArgs: '--max-num-batched-tokens 16384',
-      env: 'UCX_NET_DEVICES=mlx5_0:1',
-    },
-    decode: {
-      extraArgs: '--max-num-seqs 128',
-      env: 'UCX_NET_DEVICES=mlx5_0:1',
-    },
-  },
-  sglang: {
-    prefill: {
-      extraArgs: '--chunked-prefill-size 16384',
-      env: 'SGLANG_DISAGGREGATION_THREAD_POOL_SIZE=4',
-    },
-    decode: {
-      extraArgs: '--max-running-requests 128',
-      env: 'SGLANG_DISAGGREGATION_QUEUE_SIZE=4',
-    },
-  },
-}
-
-// image, cpu and memory are empty to keep the service's; env and nodeSelector
-// hold one KEY=VALUE per line, tolerations one toleration per line.
-export interface PDRoleValues {
-  replicas: string
-  groupSize: string
-  gpuCount: string
-  extraArgs: string
-  image: string
-  cpu: string
-  memory: string
-  env: string
-  nodeSelector: string
-  tolerations: string
-}
 
 // The service settings PD roles use unless they set their own.
 export interface ServiceDefaults {
   image: string
   cpu: string
   memory: string
-}
-
-export interface ServiceModeValues {
-  replicas: string
-  groupSize: string
-  prefill: PDRoleValues
-  decode: PDRoleValues
-  routerImage: string
-  routerReplicas: string
-  routerPolicy: RouterPolicyChoice
-  transferBackend: TransferBackend
-  ibDevices: string
 }
 
 interface ServiceModeFieldsProps {
@@ -420,7 +366,7 @@ function PDRoleFields({
 }: PDRoleFieldsProps) {
   const { t } = useTranslation()
   const id = (field: string) => `inference-${role}-${field}`
-  const placeholders = ROLE_PLACEHOLDERS[engine.name][role]
+  const placeholders = engine.roleHints[role]
   // The form sets one node per replica when it switches to such an Engine.
   const singleNode = engine.pdSingleNode
   // Starts open when the role overrides anything, so it is not hidden.

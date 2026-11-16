@@ -1,3 +1,5 @@
+import { ENGINE_METRICS } from '@/lib/engine-metrics'
+
 // Ready-made rules for what the built-in kube-prometheus-stack rules leave
 // out: GPUs, inference services, and adjustable usage thresholds. Their title
 // and description are translated under observability.alerts.templates.items.
@@ -51,7 +53,7 @@ export const ALERT_RULE_TEMPLATES: AlertRuleTemplate[] = [
   {
     name: 'InferenceFirstTokenSlow',
     category: 'inference',
-    expr: 'histogram_quantile(0.95, sum by (le, namespace, inference_service) (rate({__name__=~"vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket", inference_role!="prefill"}[5m]))) > 2',
+    expr: `histogram_quantile(0.95, sum by (le, namespace, inference_service) (rate({__name__=~"${ENGINE_METRICS.firstTokenBuckets}", inference_role!="prefill"}[5m]))) > 2`,
     for: '10m',
     severity: 'warning',
     target: INFERENCE_TARGET,
@@ -59,7 +61,7 @@ export const ALERT_RULE_TEMPLATES: AlertRuleTemplate[] = [
   {
     name: 'InferenceRequestsQueued',
     category: 'inference',
-    expr: 'sum by (namespace, inference_service) ({__name__=~"vllm:num_requests_waiting|sglang:num_queue_reqs"}) > 10',
+    expr: `sum by (namespace, inference_service) ({__name__=~"${ENGINE_METRICS.queuedRequests}"}) > 10`,
     for: '5m',
     severity: 'warning',
     target: INFERENCE_TARGET,
@@ -67,7 +69,7 @@ export const ALERT_RULE_TEMPLATES: AlertRuleTemplate[] = [
   {
     name: 'InferenceKVCacheFull',
     category: 'inference',
-    expr: 'max by (namespace, inference_service, pod) ({__name__=~"vllm:kv_cache_usage_perc|sglang:token_usage"}) > 0.95',
+    expr: `max by (namespace, inference_service, pod) ({__name__=~"${ENGINE_METRICS.kvCacheUsage}"}) > 0.95`,
     for: '10m',
     severity: 'warning',
     target: '{{ $labels.namespace }}/{{ $labels.pod }}',

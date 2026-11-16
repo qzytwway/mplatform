@@ -10,13 +10,13 @@ import {
   useModelStorage,
   type ModelStorage,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Field, Section } from '@/components/form-layout'
-import { MODELS_PATH } from '@/components/model-serving/model-form'
 
 const DEFAULT_DOWNLOADER_IMAGE = 'amazon/aws-cli:latest'
 
@@ -39,7 +39,7 @@ export function StorageConfigPage() {
   return (
     <div className="flex flex-col gap-4">
       <Link
-        to={MODELS_PATH}
+        to={MODEL_SERVING_PATHS.models}
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -86,7 +86,7 @@ function StorageForm({ storage }: { storage: ModelStorage | null }) {
       await queryClient.invalidateQueries({
         queryKey: ['model-serving-storage'],
       })
-      navigate(MODELS_PATH)
+      navigate(MODEL_SERVING_PATHS.models)
     } catch (err) {
       toast.error(translateError(err, t))
       setIsSaving(false)
@@ -179,7 +179,9 @@ function StorageForm({ storage }: { storage: ModelStorage | null }) {
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" asChild>
-          <Link to={MODELS_PATH}>{t('common.actions.cancel')}</Link>
+          <Link to={MODEL_SERVING_PATHS.models}>
+            {t('common.actions.cancel')}
+          </Link>
         </Button>
         <Button type="submit" disabled={isSaving}>
           {isSaving ? t('common.actions.saving') : t('common.actions.save')}

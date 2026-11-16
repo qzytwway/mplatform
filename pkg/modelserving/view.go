@@ -72,7 +72,7 @@ type serviceDetail struct {
 // inference service, reading the pd roles' state from the cluster.
 func describeWorkload(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) (inferenceService, error) {
 	var router *appsv1.Deployment
-	if workload.GetKind() == disaggregatedSetGVK.Kind {
+	if isDisaggregated(workload) {
 		var err error
 		if router, err = getRouter(ctx, cs, workload); err != nil {
 			return inferenceService{}, err
@@ -98,7 +98,7 @@ func describeService(ctx context.Context, cs *cluster.ClientSet, workload *unstr
 		CreatedAt:  workload.GetCreationTimestamp().Time,
 	}
 	template, _, _ := unstructured.NestedMap(workload.Object, "spec", "leaderWorkerTemplate")
-	if workload.GetKind() == disaggregatedSetGVK.Kind {
+	if isDisaggregated(workload) {
 		roles, err := pdRoles(ctx, cs, workload, router)
 		if err != nil {
 			return service, err

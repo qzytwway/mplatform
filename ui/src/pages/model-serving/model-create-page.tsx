@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { useModelStorage } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { usePageTitle } from '@/hooks/use-page-title'
-import { ModelForm, MODELS_PATH } from '@/components/model-serving/model-form'
+import { ModelForm } from '@/components/model-serving/model-form'
 
 export function ModelCreatePage() {
   const { t } = useTranslation()
@@ -18,7 +19,7 @@ export function ModelCreatePage() {
   return (
     <div className="flex flex-col gap-4">
       <Link
-        to={MODELS_PATH}
+        to={MODEL_SERVING_PATHS.models}
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

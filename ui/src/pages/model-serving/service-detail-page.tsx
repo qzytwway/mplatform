@@ -11,6 +11,7 @@ import {
   useInferenceService,
   useServiceOptions,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Badge } from '@/components/ui/badge'
@@ -35,8 +36,6 @@ import { ServicePodsTable } from '@/components/model-serving/service-pods-table'
 import { ServicePublishCard } from '@/components/model-serving/service-publish-card'
 import { SharedSubdomainAlert } from '@/components/model-serving/shared-subdomain-alert'
 
-const SERVICES_PATH = '/model-serving/services'
-
 export function ServiceDetailPage() {
   const { namespace = '', name = '' } = useParams()
   const { t } = useTranslation()
@@ -59,7 +58,7 @@ export function ServiceDetailPage() {
     try {
       await deleteInferenceService(currentCluster, namespace, name)
       toast.success(t('modelServing.services.messages.deleted'))
-      navigate(SERVICES_PATH)
+      navigate(MODEL_SERVING_PATHS.services)
       await queryClient.invalidateQueries({
         queryKey: ['model-serving-services', currentCluster],
         exact: true,
@@ -72,7 +71,7 @@ export function ServiceDetailPage() {
 
   const backLink = (
     <Link
-      to={SERVICES_PATH}
+      to={MODEL_SERVING_PATHS.services}
       className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
     >
       <ArrowLeft className="h-4 w-4" />
@@ -128,7 +127,7 @@ export function ServiceDetailPage() {
             <Button
               variant="outline"
               onClick={() =>
-                navigate(`${SERVICES_PATH}/${namespace}/${name}/edit`)
+                navigate(MODEL_SERVING_PATHS.serviceEdit(namespace, name))
               }
               disabled={!service.editable}
             >
@@ -222,7 +221,7 @@ export function ServiceDetailPage() {
             <Button
               variant="outline"
               onClick={() =>
-                navigate(`${SERVICES_PATH}/${namespace}/${name}/scale`)
+                navigate(MODEL_SERVING_PATHS.serviceScale(namespace, name))
               }
             >
               {t('common.actions.scale')}

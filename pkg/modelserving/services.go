@@ -13,13 +13,9 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -171,7 +167,7 @@ func (h *Handler) GetService(c *gin.Context) {
 	ctx := c.Request.Context()
 	var router *appsv1.Deployment
 	var err error
-	if workload.GetKind() == disaggregatedSetGVK.Kind {
+	if isDisaggregated(workload) {
 		if router, err = getRouter(ctx, cs, workload); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -381,26 +377,6 @@ func isGroupName(name, service string) bool {
 	return ok && index != "" && strings.Trim(index, "0123456789") == ""
 }
 
-// buildServiceObjects returns everything a service consists of in creation
-// order, the workload last so its pods find their Secret and Service.
-func buildServiceObjects(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage) ([]client.Object, *unstructured.Unstructured, error) {
-	objects := []client.Object{}
-	if storage != nil {
-		objects = append(objects, buildStorageSecret(req, storage))
-	}
-	objects = append(objects, buildService(req))
-	build := buildLeaderWorkerSet
-	if req.Mode == modePD {
-		objects = append(objects, routerObjects(req)...)
-		build = buildDisaggregatedSet
-	}
-	workload, err := build(req, served, storage)
-	if err != nil {
-		return nil, nil, err
-	}
-	return append(objects, workload), workload, nil
-}
-
 // createObjects creates objects in order and removes the ones already created
 // when a later one fails, so a failed service leaves nothing behind.
 func createObjects(ctx context.Context, cs *cluster.ClientSet, objects []client.Object) error {
@@ -449,7 +425,7 @@ func (h *Handler) ScaleService(c *gin.Context) {
 	ctx := c.Request.Context()
 	// Look the router up first so a missing one fails before anything changes.
 	var router *appsv1.Deployment
-	if req.RouterReplicas != nil && workload.GetKind() == disaggregatedSetGVK.Kind {
+	if req.RouterReplicas != nil && isDisaggregated(workload) {
 		if router, err = getRouter(ctx, cs, workload); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -487,7 +463,7 @@ func (h *Handler) ScaleService(c *gin.Context) {
 // The router of a pd service is scaled apart.
 func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*unstructured.Unstructured, error) {
 	scaled := workload.DeepCopy()
-	if workload.GetKind() != disaggregatedSetGVK.Kind {
+	if !isDisaggregated(workload) {
 		if req.Replicas < 1 {
 			return nil, fmt.Errorf("replicas must be at least 1")
 		}
@@ -529,47 +505,4 @@ func (h *Handler) DeleteService(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "inference service deleted"})
-}
-
-// deleteServiceObjects deletes the workload with the objects created next to
-// it. Same-named objects without the service label are not ours and stay.
-// The workload goes last so a delete that failed halfway can be retried.
-func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) error {
-	name, namespace := workload.GetName(), workload.GetNamespace()
-	companions := []struct {
-		gvk  schema.GroupVersionKind
-		name string
-	}{
-		{appsv1.SchemeGroupVersion.WithKind("Deployment"), name + routerSuffix},
-		{rbacv1.SchemeGroupVersion.WithKind("RoleBinding"), name + routerSuffix},
-		{rbacv1.SchemeGroupVersion.WithKind("Role"), name + routerSuffix},
-		{corev1.SchemeGroupVersion.WithKind("ServiceAccount"), name + routerSuffix},
-		{networkingv1.SchemeGroupVersion.WithKind("Ingress"), name + ingressSuffix},
-		{corev1.SchemeGroupVersion.WithKind("Service"), name},
-		{corev1.SchemeGroupVersion.WithKind("Secret"), name + storageSecretSuffix},
-		{podMonitorGVK, name},
-	}
-	for _, companion := range companions {
-		// Unstructured reads skip the informer cache, which may not have seen
-		// a service that was only just created.
-		object := &unstructured.Unstructured{}
-		object.SetGroupVersionKind(companion.gvk)
-		err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: companion.name}, object)
-		// Only the PodMonitor kind may be missing, in clusters without its CRD.
-		if apierrors.IsNotFound(err) || (companion.gvk == podMonitorGVK && apimeta.IsNoMatchError(err)) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if object.GetLabels()[serviceLabel] != name {
-			continue
-		}
-		if err := cs.K8sClient.Delete(ctx, object); err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
-	}
-	if err := cs.K8sClient.Delete(ctx, workload); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	return nil
 }

@@ -3,9 +3,8 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { usePageTitle } from '@/hooks/use-page-title'
-
-export const GATEWAY_PATH = '/model-serving/gateway'
 
 interface CallerPageLayoutProps {
   title: string
@@ -24,7 +23,7 @@ export function CallerPageLayout({
   return (
     <div className="flex flex-col gap-4">
       <Link
-        to={GATEWAY_PATH}
+        to={MODEL_SERVING_PATHS.gateway}
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

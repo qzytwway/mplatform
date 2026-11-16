@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
 
-import type { RDMAMode } from '@/lib/api/model-serving'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -11,17 +10,9 @@ import {
 } from '@/components/ui/select'
 import { HintLabel } from '@/components/form-layout'
 
-// Radix Select items cannot have an empty value.
-export type RDMAChoice = RDMAMode | 'none'
+import type { NetworkValues, RDMAChoice } from './service-form'
 
 const RDMA_CHOICES: RDMAChoice[] = ['none', 'device-plugin', 'host']
-
-export interface NetworkValues {
-  rdma: RDMAChoice
-  resource: string
-  resourceCount: string
-  networks: string
-}
 
 interface ServiceNetworkFieldsProps {
   values: NetworkValues

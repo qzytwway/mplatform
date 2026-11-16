@@ -82,10 +82,9 @@ const (
 	modelVolume    = "model"
 	shmVolume      = "shm"
 
-	storageSecretSuffix = "-model-storage"
-	accessKeyEnv        = "AWS_ACCESS_KEY_ID"
-	secretKeyEnv        = "AWS_SECRET_ACCESS_KEY"
-	regionEnv           = "AWS_DEFAULT_REGION"
+	accessKeyEnv = "AWS_ACCESS_KEY_ID"
+	secretKeyEnv = "AWS_SECRET_ACCESS_KEY"
+	regionEnv    = "AWS_DEFAULT_REGION"
 
 	probePeriodSeconds = 10
 	// Loading large model weights can take up to half an hour.

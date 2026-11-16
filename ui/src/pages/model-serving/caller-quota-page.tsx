@@ -12,6 +12,7 @@ import {
   type AdjustQuotaRequest,
   type ModelCaller,
 } from '@/lib/api/model-gateway'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
@@ -19,10 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Field, Section } from '@/components/form-layout'
-import {
-  CallerPageLayout,
-  GATEWAY_PATH,
-} from '@/components/model-serving/caller-page-layout'
+import { CallerPageLayout } from '@/components/model-serving/caller-page-layout'
 
 export function CallerQuotaPage() {
   const { t } = useTranslation()
@@ -109,7 +107,7 @@ function CallerQuotaForm({
           remaining: result.remaining.toLocaleString(),
         })
       )
-      navigate(GATEWAY_PATH)
+      navigate(MODEL_SERVING_PATHS.gateway)
     } catch (err) {
       toast.error(translateError(err, t))
     } finally {
@@ -159,7 +157,9 @@ function CallerQuotaForm({
       </Section>
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" asChild>
-          <Link to={GATEWAY_PATH}>{t('common.actions.cancel')}</Link>
+          <Link to={MODEL_SERVING_PATHS.gateway}>
+            {t('common.actions.cancel')}
+          </Link>
         </Button>
         <Button type="submit" disabled={isSaving || !!unavailableHint}>
           {isSaving ? t('common.actions.saving') : t('common.actions.save')}

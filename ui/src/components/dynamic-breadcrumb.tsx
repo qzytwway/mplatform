@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { getResourceCatalogEntry } from '@/lib/resource-catalog'
 import {
   Breadcrumb,
@@ -54,7 +55,7 @@ export function DynamicBreadcrumb() {
       return crumbs
     }
 
-    if (pathSegments[0] === 'model-serving') {
+    if (`/${pathSegments[0]}` === MODEL_SERVING_PATHS.root) {
       const page = MODEL_SERVING_ITEMS.find(
         ({ url }) =>
           location.pathname === url || location.pathname.startsWith(`${url}/`)

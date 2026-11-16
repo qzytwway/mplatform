@@ -6,6 +6,7 @@ import {
   useServiceOptions,
   type InferenceService,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -137,7 +138,10 @@ export function WorkbenchServicesTable({
                   />
                 )}
                 <Link
-                  to={`/model-serving/services/${service.namespace}/${service.name}`}
+                  to={MODEL_SERVING_PATHS.service(
+                    service.namespace,
+                    service.name
+                  )}
                   className="font-medium app-link"
                 >
                   {service.name}

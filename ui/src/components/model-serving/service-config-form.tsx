@@ -21,6 +21,7 @@ import {
   type ModelType,
   type ServiceOptions,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -169,8 +170,7 @@ export function ServiceConfigForm({
       }),
     })
 
-  const servicesPath = '/model-serving/services'
-  const detailPath = `${servicesPath}/${values.namespace}/${values.name}`
+  const detailPath = MODEL_SERVING_PATHS.service(values.namespace, values.name)
   const incomplete = !values.modelId || !values.namespace || roleImagesDiffer
 
   const save = async () => {
@@ -621,7 +621,7 @@ export function ServiceConfigForm({
       </Card>
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" asChild>
-          <Link to={editing ? detailPath : servicesPath}>
+          <Link to={editing ? detailPath : MODEL_SERVING_PATHS.services}>
             {t('common.actions.cancel')}
           </Link>
         </Button>

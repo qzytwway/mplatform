@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { queryPrometheus } from '@/lib/api/prometheus'
+import { ENGINE_METRICS } from '@/lib/engine-metrics'
 import { useCluster } from '@/hooks/use-cluster'
 
 // What the workbench reports as a problem.
@@ -30,27 +31,21 @@ function series(names: string, role = '') {
 const QUERIES: [keyof ServiceHealth, string][] = [
   [
     'tokensPerSecond',
-    `sum ${BY_SERVICE} (rate(${series('vllm:prompt_tokens_total|sglang:prompt_tokens_total', ', inference_role!="decode"')}[${RATE_WINDOW}]))`,
+    `sum ${BY_SERVICE} (rate(${series(ENGINE_METRICS.promptTokens, ', inference_role!="decode"')}[${RATE_WINDOW}]))`,
   ],
   [
     'tokensPerSecond',
-    `sum ${BY_SERVICE} (rate(${series('vllm:generation_tokens_total|sglang:generation_tokens_total', ', inference_role!="prefill"')}[${RATE_WINDOW}]))`,
+    `sum ${BY_SERVICE} (rate(${series(ENGINE_METRICS.generationTokens, ', inference_role!="prefill"')}[${RATE_WINDOW}]))`,
   ],
   [
     'firstTokenSeconds',
-    `histogram_quantile(0.95, sum by (le, namespace, inference_service) (rate(${series('vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket', ', inference_role!="prefill"')}[${RATE_WINDOW}])))`,
+    `histogram_quantile(0.95, sum by (le, namespace, inference_service) (rate(${series(ENGINE_METRICS.firstTokenBuckets, ', inference_role!="prefill"')}[${RATE_WINDOW}])))`,
   ],
-  [
-    'running',
-    `sum ${BY_SERVICE} (${series('vllm:num_requests_running|sglang:num_running_reqs')})`,
-  ],
-  [
-    'queued',
-    `sum ${BY_SERVICE} (${series('vllm:num_requests_waiting|sglang:num_queue_reqs')})`,
-  ],
+  ['running', `sum ${BY_SERVICE} (${series(ENGINE_METRICS.runningRequests)})`],
+  ['queued', `sum ${BY_SERVICE} (${series(ENGINE_METRICS.queuedRequests)})`],
   [
     'kvCacheRatio',
-    `max ${BY_SERVICE} (${series('vllm:kv_cache_usage_perc|sglang:token_usage')})`,
+    `max ${BY_SERVICE} (${series(ENGINE_METRICS.kvCacheUsage)})`,
   ],
 ]
 

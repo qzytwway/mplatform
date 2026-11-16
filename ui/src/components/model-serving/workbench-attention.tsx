@@ -7,7 +7,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
-import { countFiringAlerts, useAlertRules } from '@/lib/api/alerts'
+import { useAlertRules } from '@/lib/api/alerts'
 import {
   useCallerQuotas,
   useGatewayStatus,
@@ -22,27 +22,12 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 
+import type { ServiceHealth } from './service-health'
 import {
-  formatMs,
-  formatPercent,
-  healthIssues,
-  serviceKey,
-  type ServiceHealth,
-} from './service-health'
-
-interface AttentionItem {
-  key: string
-  critical: boolean
-  text: string
-  to: string
-  // What following the link lets the user do, shown when grouped.
-  action: string
-}
-
-export interface AttentionSource {
-  name: string
-  to: string
-}
+  attentionItems,
+  type AttentionItem,
+  type AttentionSource,
+} from './workbench-attention-items'
 
 interface WorkbenchAttentionProps {
   services: InferenceService[]
@@ -59,7 +44,7 @@ interface WorkbenchAttentionProps {
   grouped?: boolean
 }
 
-// Lists what is wrong with model serving right now, the critical items first.
+// Shows what is wrong with model serving right now.
 export function WorkbenchAttention({
   services,
   health,
@@ -81,147 +66,24 @@ export function WorkbenchAttention({
   const text = (key: string, values?: Record<string, unknown>) =>
     t(`modelServing.workbench.attention.${key}`, values)
 
-  const viewService = text('viewService')
-  const items: AttentionItem[] = []
-  for (const service of services) {
-    const { name, namespace } = service
-    const key = serviceKey(namespace, name)
-    const to = `/model-serving/services/${namespace}/${name}`
-    if (!service.ready)
-      items.push({
-        key: `${key}/ready`,
-        critical: true,
-        text: text('serviceNotReady', {
-          name,
-          ready: service.roles.reduce(
-            (sum, role) => sum + role.readyReplicas,
-            0
-          ),
-          replicas: service.roles.reduce((sum, role) => sum + role.replicas, 0),
-        }),
-        to,
-        action: viewService,
-      })
-    const metrics = health.get(key)
-    const issues = healthIssues(metrics)
-    if (issues.kvCache)
-      items.push({
-        key: `${key}/kv`,
-        critical: false,
-        text: text('kvCache', {
-          name,
-          value: formatPercent(metrics!.kvCacheRatio!),
-        }),
-        to,
-        action: viewService,
-      })
-    if (issues.queued)
-      items.push({
-        key: `${key}/queued`,
-        critical: false,
-        text: text('queued', { name, count: metrics!.queued }),
-        to,
-        action: viewService,
-      })
-    if (issues.firstToken)
-      items.push({
-        key: `${key}/ttft`,
-        critical: false,
-        text: text('slowFirstToken', {
-          name,
-          value: formatMs(metrics!.firstTokenSeconds! * 1000),
-        }),
-        to,
-        action: viewService,
-      })
-  }
-  for (const node of gpuNodes)
-    if (!node.ready)
-      items.push({
-        key: `gpu/${node.name}`,
-        critical: true,
-        text: text('gpuNodeNotReady', { name: node.name }),
-        to: '/model-serving/gpus',
-        action: t('nav.gpuResources'),
-      })
-  if (status?.lws === false)
-    items.push({
-      key: 'lws',
-      critical: true,
-      text: text('lwsMissing'),
-      to: '/model-serving/services',
-      action: t('nav.inferenceServices'),
-    })
-  if (gateway && !gateway.installed)
-    items.push({
-      key: 'gateway',
-      critical: false,
-      text: text('gatewayMissing'),
-      to: '/model-serving/gateway',
-      action: t('nav.gateway'),
-    })
-  if (gateway?.upgradeRequired)
-    items.push({
-      key: 'gateway-upgrade',
-      critical: false,
-      text: text('gatewayUpgrade'),
-      to: '/model-serving/gateway',
-      action: t('nav.gateway'),
-    })
-  const remaining = new Map(
-    (quotas?.items ?? []).map((quota) => [quota.id, quota.remaining])
+  const sorted = attentionItems(
+    {
+      services,
+      health,
+      gpuNodes,
+      callers,
+      nearLimitCallers,
+      status,
+      gateway,
+      quotas,
+      alerts: alerts.data,
+      alertsFailed: !!alerts.error,
+      failedSources,
+    },
+    (key, values) => t(key, values)
   )
-  for (const caller of callers)
-    if (
-      caller.enabled &&
-      caller.quotaLimited &&
-      (remaining.get(caller.id) ?? 1) <= 0
-    )
-      items.push({
-        key: `quota/${caller.id}`,
-        critical: true,
-        text: text('callerQuotaExhausted', { name: caller.name }),
-        to: `/model-serving/gateway/callers/${caller.id}/quota`,
-        action: t('modelServing.callers.adjustQuota'),
-      })
-  for (const caller of nearLimitCallers)
-    items.push({
-      key: `limit/${caller.id}`,
-      critical: false,
-      text: text('callerNearLimit', { name: caller.name }),
-      to: `/model-serving/gateway/callers/${caller.id}/edit`,
-      action: text('editLimit'),
-    })
-  // Alerts without a severity, such as the always-firing Watchdog, report no
-  // problem.
-  const firingAlerts = countFiringAlerts(
-    alerts.data,
-    (alert) => alert.labels.severity !== 'none'
-  )
-  if (firingAlerts > 0)
-    items.push({
-      key: 'alerts',
-      critical: false,
-      text: text('firingAlerts', { count: firingAlerts }),
-      to: '/observability/alerts',
-      action: text('viewAlerts'),
-    })
-  const failed = alerts.error
-    ? [...failedSources, { name: t('nav.alerts'), to: '/observability/alerts' }]
-    : failedSources
-  for (const source of failed)
-    items.push({
-      key: `failed/${source.to}`,
-      critical: false,
-      text: text('checkFailed', { name: source.name }),
-      to: source.to,
-      action: source.name,
-    })
   const pending = loading || gatewayLoading || alerts.isLoading
 
-  const sorted = [...items].sort(
-    (a, b) => Number(b.critical) - Number(a.critical)
-  )
   const groups = [
     {
       key: 'critical',

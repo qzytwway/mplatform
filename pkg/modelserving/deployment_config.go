@@ -84,7 +84,7 @@ type resourceQuantity struct {
 // mode, its router, which may be nil.
 func readDeploymentConfig(workload *unstructured.Unstructured, router *appsv1.Deployment) (*deploymentConfig, error) {
 	config := &deploymentConfig{}
-	if workload.GetKind() != disaggregatedSetGVK.Kind {
+	if !isDisaggregated(workload) {
 		spec, _, _ := unstructured.NestedMap(workload.Object, "spec")
 		role, err := readRoleConfig(roleDefault, spec)
 		if err != nil {

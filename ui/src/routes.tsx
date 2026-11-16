@@ -4,6 +4,7 @@ import App, { StandaloneAIChatApp } from './App'
 import { HomeRoute } from './components/home-route'
 import { InitCheckRoute } from './components/init-check-route'
 import { ProtectedRoute } from './components/protected-route'
+import { MODEL_SERVING_PATHS } from './lib/model-serving-paths'
 import { getSubPath } from './lib/subpath'
 import { CRListPage } from './pages/cr-list-page'
 import { HelmChartDetailPage } from './pages/helm-chart-detail-page'
@@ -132,71 +133,71 @@ export const router = createBrowserRouter(
           element: <AlertsPage view="notifications" />,
         },
         {
-          path: 'model-serving',
-          element: <Navigate to="/model-serving/overview" replace />,
+          path: MODEL_SERVING_PATHS.root,
+          element: <Navigate to={MODEL_SERVING_PATHS.overview} replace />,
         },
         {
-          path: 'model-serving/overview',
+          path: MODEL_SERVING_PATHS.overview,
           element: <WorkbenchPage />,
         },
         {
-          path: 'model-serving/services',
+          path: MODEL_SERVING_PATHS.services,
           element: <ServicesPage />,
         },
         {
-          path: 'model-serving/services/create',
+          path: MODEL_SERVING_PATHS.serviceCreate,
           element: <ServiceCreatePage />,
         },
         {
-          path: 'model-serving/services/:namespace/:name',
+          path: MODEL_SERVING_PATHS.service(':namespace', ':name'),
           element: <ServiceDetailPage />,
         },
         {
-          path: 'model-serving/services/:namespace/:name/edit',
+          path: MODEL_SERVING_PATHS.serviceEdit(':namespace', ':name'),
           element: <ServiceEditPage />,
         },
         {
-          path: 'model-serving/services/:namespace/:name/scale',
+          path: MODEL_SERVING_PATHS.serviceScale(':namespace', ':name'),
           element: <ServiceScalePage />,
         },
         {
-          path: 'model-serving/gateway',
+          path: MODEL_SERVING_PATHS.gateway,
           element: <GatewayPage />,
         },
         {
-          path: 'model-serving/gateway/callers/create',
+          path: MODEL_SERVING_PATHS.callerCreate,
           element: <CallerCreatePage />,
         },
         {
-          path: 'model-serving/gateway/callers/:id/edit',
+          path: MODEL_SERVING_PATHS.callerEdit(':id'),
           element: <CallerEditPage />,
         },
         {
-          path: 'model-serving/gateway/callers/:id/quota',
+          path: MODEL_SERVING_PATHS.callerQuota(':id'),
           element: <CallerQuotaPage />,
         },
         {
-          path: 'model-serving/usage',
+          path: MODEL_SERVING_PATHS.usage,
           element: <UsagePage />,
         },
         {
-          path: 'model-serving/models',
+          path: MODEL_SERVING_PATHS.models,
           element: <ModelsPage />,
         },
         {
-          path: 'model-serving/models/create',
+          path: MODEL_SERVING_PATHS.modelCreate,
           element: <ModelCreatePage />,
         },
         {
-          path: 'model-serving/models/:id/edit',
+          path: MODEL_SERVING_PATHS.modelEdit(':id'),
           element: <ModelEditPage />,
         },
         {
-          path: 'model-serving/models/storage',
+          path: MODEL_SERVING_PATHS.storage,
           element: <StorageConfigPage />,
         },
         {
-          path: 'model-serving/gpus',
+          path: MODEL_SERVING_PATHS.gpus,
           element: <GPUsPage />,
         },
         {

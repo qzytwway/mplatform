@@ -3,14 +3,13 @@ import { useTranslation } from 'react-i18next'
 import type {
   DeploymentMode,
   Engine,
-  InferenceRuntime,
   ModelType,
+  ParserSuggestion,
 } from '@/lib/api/model-serving'
 import { Input } from '@/components/ui/input'
 import { HintLabel } from '@/components/form-layout'
 
-import type { ServiceFormValues } from './service-form'
-import type { ServiceModeValues } from './service-mode-fields'
+import type { ServiceFormValues, ServiceModeValues } from './service-form'
 import { parallelism } from './service-modes'
 
 type EngineValues = Pick<
@@ -21,48 +20,6 @@ type EngineValues = Pick<
   | 'toolCallParser'
   | 'reasoningParser'
 >
-
-interface ParserSuggestion {
-  value: string
-  // The models it parses; empty for auto, whose label is translated.
-  models: string
-}
-
-// Common parsers each Engine registers under its own names. Images may know
-// others, which can be typed in.
-const TOOL_CALL_PARSERS: Record<InferenceRuntime, ParserSuggestion[]> = {
-  vllm: [
-    { value: 'hermes', models: 'Qwen2.5 / Qwen3' },
-    { value: 'qwen3_xml', models: 'Qwen3-Coder' },
-    { value: 'llama3_json', models: 'Llama 3.x' },
-    { value: 'glm45', models: 'GLM-4.5 / GLM-4.6' },
-    { value: 'kimi_k2', models: 'Kimi K2' },
-  ],
-  sglang: [
-    { value: 'qwen25', models: 'Qwen2.5 / Qwen3' },
-    { value: 'qwen3_coder', models: 'Qwen3-Coder' },
-    { value: 'llama3', models: 'Llama 3.x' },
-    { value: 'deepseekv3', models: 'DeepSeek-V3' },
-    { value: 'deepseekv31', models: 'DeepSeek-V3.1' },
-    { value: 'glm45', models: 'GLM-4.5 / GLM-4.6' },
-    { value: 'kimi_k2', models: 'Kimi K2' },
-  ],
-}
-
-const REASONING_PARSERS: Record<InferenceRuntime, ParserSuggestion[]> = {
-  vllm: [
-    { value: 'qwen3', models: 'Qwen3' },
-    { value: 'deepseek_r1', models: 'DeepSeek-R1 / QwQ' },
-    { value: 'deepseek_v3', models: 'DeepSeek-V3.1' },
-    { value: 'glm45', models: 'GLM-4.5' },
-  ],
-  sglang: [
-    { value: 'auto', models: '' },
-    { value: 'qwen3', models: 'Qwen3' },
-    { value: 'deepseek-r1', models: 'DeepSeek-R1' },
-    { value: 'glm45', models: 'GLM-4.5' },
-  ],
-}
 
 interface ServiceEngineFieldsProps {
   engine: Engine
@@ -221,8 +178,8 @@ export function ServiceEngineFields({
       {/* Embedding models neither call tools nor reason. */}
       {modelType !== 'embedding' && (
         <>
-          {parserField('toolCallParser', TOOL_CALL_PARSERS[engine.name])}
-          {parserField('reasoningParser', REASONING_PARSERS[engine.name])}
+          {parserField('toolCallParser', engine.toolCallParsers)}
+          {parserField('reasoningParser', engine.reasoningParsers)}
         </>
       )}
     </>

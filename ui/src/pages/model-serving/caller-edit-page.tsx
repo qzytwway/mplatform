@@ -2,13 +2,11 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useModelCallers } from '@/lib/api/model-gateway'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CallerForm } from '@/components/model-serving/caller-form'
-import {
-  CallerPageLayout,
-  GATEWAY_PATH,
-} from '@/components/model-serving/caller-page-layout'
+import { CallerPageLayout } from '@/components/model-serving/caller-page-layout'
 
 export function CallerEditPage() {
   const { t } = useTranslation()
@@ -30,7 +28,12 @@ export function CallerEditPage() {
               })}
         </p>
       )
-    return <CallerForm caller={caller} onSaved={() => navigate(GATEWAY_PATH)} />
+    return (
+      <CallerForm
+        caller={caller}
+        onSaved={() => navigate(MODEL_SERVING_PATHS.gateway)}
+      />
+    )
   }
 
   return (

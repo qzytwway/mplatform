@@ -8,6 +8,7 @@ import {
   scaleInferenceService,
   type InferenceServiceDetail,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
@@ -27,7 +28,10 @@ export function ScaleServiceForm({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { currentCluster } = useCluster()
-  const detailPath = `/model-serving/services/${service.namespace}/${service.name}`
+  const detailPath = MODEL_SERVING_PATHS.service(
+    service.namespace,
+    service.name
+  )
   const isPD = service.mode === 'pd'
   const roleReplicas = (name: string) =>
     String(service.roles.find((role) => role.name === name)?.replicas ?? 1)

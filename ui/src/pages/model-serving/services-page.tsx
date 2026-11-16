@@ -13,6 +13,7 @@ import {
   useServiceOptions,
   type InferenceService,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { getAge, translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +45,7 @@ export function ServicesPage() {
         header: t('common.fields.name'),
         cell: ({ row: { original: service } }) => (
           <Link
-            to={`/model-serving/services/${service.namespace}/${service.name}`}
+            to={MODEL_SERVING_PATHS.service(service.namespace, service.name)}
             className="font-medium app-link"
           >
             {service.name}
@@ -220,7 +221,7 @@ export function ServicesPage() {
           {t('modelServing.services.title')}
         </h1>
         <Button
-          onClick={() => navigate('/model-serving/services/create')}
+          onClick={() => navigate(MODEL_SERVING_PATHS.serviceCreate)}
           disabled={lwsMissing}
         >
           <IconPlus className="mr-2 h-4 w-4" />
