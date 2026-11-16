@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/model-serving'
 import { useModelUsage, useModelUsageSeries } from '@/lib/api/model-usage'
 import { usePrometheusQuery } from '@/lib/api/prometheus'
+import { ENGINE_METRICS } from '@/lib/engine-metrics'
 import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { cn, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -66,7 +67,7 @@ type WorkbenchLayout = 'overview' | 'issues'
 // The 95th percentile time to first token across the platform's services.
 // Prefill pods of PD services never return the first token to the client.
 function ttftQuery(seconds: number) {
-  return `histogram_quantile(0.95, sum by (le) (rate({__name__=~"vllm:time_to_first_token_seconds_bucket|sglang:time_to_first_token_seconds_bucket", inference_service!="", inference_role!="prefill"}[${seconds}s])))`
+  return `histogram_quantile(0.95, sum by (le) (rate({__name__=~"${ENGINE_METRICS.firstTokenBuckets}", inference_service!="", inference_role!="prefill"}[${seconds}s])))`
 }
 
 interface StatCardProps {
