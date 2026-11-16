@@ -46,8 +46,9 @@ var tlsCipherSuites = []string{
 }
 
 var (
-	controlPlanePorts = []string{"6443/tcp", "2379-2380/tcp", "10250/tcp", "10256/tcp", "10257/tcp", "10259/tcp", "30000-32767/tcp"}
-	workerPorts       = []string{"10250/tcp", "10256/tcp", "30000-32767/tcp"}
+	// 2381 and 10249 serve etcd and kube-proxy metrics.
+	controlPlanePorts = []string{"6443/tcp", "2379-2380/tcp", "2381/tcp", "10249/tcp", "10250/tcp", "10256/tcp", "10257/tcp", "10259/tcp", "30000-32767/tcp"}
+	workerPorts       = []string{"10249/tcp", "10250/tcp", "10256/tcp", "30000-32767/tcp"}
 	// Calico VXLAN, Typha and BGP, which Calico uses for same-subnet routes
 	// with VXLANCrossSubnet.
 	calicoPorts = []string{"4789/udp", "5473/tcp", "179/tcp"}

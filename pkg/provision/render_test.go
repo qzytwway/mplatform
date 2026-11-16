@@ -140,9 +140,9 @@ func TestRenderInitConfig(t *testing.T) {
 				"/var/log/kubernetes/audit": "/var/log/kubernetes/audit",
 				encryptionPath:              encryptionPath,
 			})
-			expect(t, "controllerManager.extraArgs", args(t, get(cluster, "controllerManager", "extraArgs")), map[string]string{"profiling": "false", "terminated-pod-gc-threshold": "1000"})
-			expect(t, "scheduler.extraArgs", args(t, get(cluster, "scheduler", "extraArgs")), map[string]string{"profiling": "false"})
-			expect(t, "etcd.extraArgs", args(t, get(cluster, "etcd", "local", "extraArgs")), map[string]string{"quota-backend-bytes": "8589934592"})
+			expect(t, "controllerManager.extraArgs", args(t, get(cluster, "controllerManager", "extraArgs")), map[string]string{"profiling": "false", "terminated-pod-gc-threshold": "1000", "bind-address": "0.0.0.0"})
+			expect(t, "scheduler.extraArgs", args(t, get(cluster, "scheduler", "extraArgs")), map[string]string{"profiling": "false", "bind-address": "0.0.0.0"})
+			expect(t, "etcd.extraArgs", args(t, get(cluster, "etcd", "local", "extraArgs")), map[string]string{"quota-backend-bytes": "8589934592", "listen-metrics-urls": "http://0.0.0.0:2381"})
 
 			for key, want := range map[string]any{
 				"cgroupDriver":                    "systemd",
@@ -169,6 +169,7 @@ func TestRenderInitConfig(t *testing.T) {
 			})
 			expect(t, "kubelet.tlsCipherSuites", toStrings(get(kubelet, "tlsCipherSuites")), tlsCipherSuites)
 			expect(t, "kubeProxy.mode", get(proxy, "mode"), "iptables")
+			expect(t, "kubeProxy.metricsBindAddress", get(proxy, "metricsBindAddress"), "0.0.0.0:10249")
 		})
 	}
 }
