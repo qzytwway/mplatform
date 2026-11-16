@@ -11,6 +11,7 @@ import {
   type ModelCaller,
 } from '@/lib/api/model-gateway'
 import { useServedModels } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
@@ -19,8 +20,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Field, Section } from '@/components/form-layout'
-
-import { GATEWAY_PATH } from './caller-page-layout'
 
 export interface IssuedKey {
   name: string
@@ -240,7 +239,9 @@ export function CallerForm({ caller, onSaved }: CallerFormProps) {
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" asChild>
-          <Link to={GATEWAY_PATH}>{t('common.actions.cancel')}</Link>
+          <Link to={MODEL_SERVING_PATHS.gateway}>
+            {t('common.actions.cancel')}
+          </Link>
         </Button>
         <Button type="submit" disabled={isSaving}>
           {isSaving ? t('common.actions.saving') : t('common.actions.save')}

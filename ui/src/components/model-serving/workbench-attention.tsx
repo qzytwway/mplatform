@@ -18,6 +18,7 @@ import {
   type GPUNode,
   type InferenceService,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -86,7 +87,7 @@ export function WorkbenchAttention({
   for (const service of services) {
     const { name, namespace } = service
     const key = serviceKey(namespace, name)
-    const to = `/model-serving/services/${namespace}/${name}`
+    const to = MODEL_SERVING_PATHS.service(namespace, name)
     if (!service.ready)
       items.push({
         key: `${key}/ready`,
@@ -141,7 +142,7 @@ export function WorkbenchAttention({
         key: `gpu/${node.name}`,
         critical: true,
         text: text('gpuNodeNotReady', { name: node.name }),
-        to: '/model-serving/gpus',
+        to: MODEL_SERVING_PATHS.gpus,
         action: t('nav.gpuResources'),
       })
   if (status?.lws === false)
@@ -149,7 +150,7 @@ export function WorkbenchAttention({
       key: 'lws',
       critical: true,
       text: text('lwsMissing'),
-      to: '/model-serving/services',
+      to: MODEL_SERVING_PATHS.services,
       action: t('nav.inferenceServices'),
     })
   if (gateway && !gateway.installed)
@@ -157,7 +158,7 @@ export function WorkbenchAttention({
       key: 'gateway',
       critical: false,
       text: text('gatewayMissing'),
-      to: '/model-serving/gateway',
+      to: MODEL_SERVING_PATHS.gateway,
       action: t('nav.gateway'),
     })
   if (gateway?.upgradeRequired)
@@ -165,7 +166,7 @@ export function WorkbenchAttention({
       key: 'gateway-upgrade',
       critical: false,
       text: text('gatewayUpgrade'),
-      to: '/model-serving/gateway',
+      to: MODEL_SERVING_PATHS.gateway,
       action: t('nav.gateway'),
     })
   const remaining = new Map(
@@ -181,7 +182,7 @@ export function WorkbenchAttention({
         key: `quota/${caller.id}`,
         critical: true,
         text: text('callerQuotaExhausted', { name: caller.name }),
-        to: `/model-serving/gateway/callers/${caller.id}/quota`,
+        to: MODEL_SERVING_PATHS.callerQuota(caller.id),
         action: t('modelServing.callers.adjustQuota'),
       })
   for (const caller of nearLimitCallers)
@@ -189,7 +190,7 @@ export function WorkbenchAttention({
       key: `limit/${caller.id}`,
       critical: false,
       text: text('callerNearLimit', { name: caller.name }),
-      to: `/model-serving/gateway/callers/${caller.id}/edit`,
+      to: MODEL_SERVING_PATHS.callerEdit(caller.id),
       action: text('editLimit'),
     })
   // Alerts without a severity, such as the always-firing Watchdog, report no

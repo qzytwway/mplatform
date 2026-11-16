@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { deleteModelStorage, useModelStorage } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -94,7 +95,7 @@ export function StorageCard() {
                 </Button>
               )}
               <Button variant="outline" asChild>
-                <Link to="/model-serving/models/storage">
+                <Link to={MODEL_SERVING_PATHS.storage}>
                   {storage
                     ? t('common.actions.edit')
                     : t('modelServing.storage.configure')}

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { useServiceOptions } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,7 +34,7 @@ export function ServiceCreatePage() {
   return (
     <div className="flex flex-col gap-4">
       <Link
-        to="/model-serving/services"
+        to={MODEL_SERVING_PATHS.services}
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

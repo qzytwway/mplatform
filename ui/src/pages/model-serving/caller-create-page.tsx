@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/form-layout'
@@ -11,10 +12,7 @@ import {
   CallerForm,
   type IssuedKey,
 } from '@/components/model-serving/caller-form'
-import {
-  CallerPageLayout,
-  GATEWAY_PATH,
-} from '@/components/model-serving/caller-page-layout'
+import { CallerPageLayout } from '@/components/model-serving/caller-page-layout'
 
 export function CallerCreatePage() {
   const { t } = useTranslation()
@@ -58,7 +56,9 @@ export function CallerCreatePage() {
           </Section>
           <div className="flex justify-end">
             <Button asChild>
-              <Link to={GATEWAY_PATH}>{t('common.actions.done')}</Link>
+              <Link to={MODEL_SERVING_PATHS.gateway}>
+                {t('common.actions.done')}
+              </Link>
             </Button>
           </div>
         </div>

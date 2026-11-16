@@ -21,6 +21,7 @@ import {
   useModelCallers,
   type ModelCaller,
 } from '@/lib/api/model-gateway'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { Button } from '@/components/ui/button'
@@ -31,7 +32,6 @@ import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialo
 
 import { callerColumns } from './caller-columns'
 import { CallerKeyDialog } from './caller-key-dialog'
-import { GATEWAY_PATH } from './caller-page-layout'
 import { ConfirmDialog } from './confirm-dialog'
 
 export function CallersCard({
@@ -196,8 +196,7 @@ export function CallersCard({
           {t('modelServing.callers.adjustQuota')}
         </>
       ),
-      onClick: (caller) =>
-        navigate(`${GATEWAY_PATH}/callers/${caller.id}/quota`),
+      onClick: (caller) => navigate(MODEL_SERVING_PATHS.callerQuota(caller.id)),
       shouldDisable: (caller) => !caller.quotaLimited || !limitsAvailable,
     },
     {
@@ -207,8 +206,7 @@ export function CallersCard({
           {t('common.actions.edit')}
         </>
       ),
-      onClick: (caller) =>
-        navigate(`${GATEWAY_PATH}/callers/${caller.id}/edit`),
+      onClick: (caller) => navigate(MODEL_SERVING_PATHS.callerEdit(caller.id)),
     },
     {
       label: (
@@ -247,7 +245,7 @@ export function CallersCard({
             </p>
           </div>
           <Button asChild>
-            <Link to={`${GATEWAY_PATH}/callers/create`}>
+            <Link to={MODEL_SERVING_PATHS.callerCreate}>
               <IconPlus className="mr-2 h-4 w-4" />
               {t('modelServing.callers.create')}
             </Link>

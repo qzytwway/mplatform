@@ -7,6 +7,7 @@ import {
   getInferenceServiceRequest,
   useServiceOptions,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -56,7 +57,7 @@ export function ServiceEditPage() {
   return (
     <div className="flex flex-col gap-4">
       <Link
-        to={`/model-serving/services/${namespace}/${name}`}
+        to={MODEL_SERVING_PATHS.service(namespace, name)}
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

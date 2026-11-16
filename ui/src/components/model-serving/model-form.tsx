@@ -11,6 +11,7 @@ import {
   type ModelType,
   type ServedModel,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,8 +23,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Field, Section } from '@/components/form-layout'
-
-export const MODELS_PATH = '/model-serving/models'
 
 interface ModelFormProps {
   model: ServedModel | null
@@ -64,7 +63,7 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
       await queryClient.invalidateQueries({
         queryKey: ['model-serving-models'],
       })
-      navigate(MODELS_PATH)
+      navigate(MODEL_SERVING_PATHS.models)
     } catch (err) {
       toast.error(translateError(err, t))
       setIsSaving(false)
@@ -182,7 +181,9 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" asChild>
-          <Link to={MODELS_PATH}>{t('common.actions.cancel')}</Link>
+          <Link to={MODEL_SERVING_PATHS.models}>
+            {t('common.actions.cancel')}
+          </Link>
         </Button>
         <Button type="submit" disabled={isSaving}>
           {submitLabel}

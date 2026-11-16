@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/model-serving'
 import { useModelUsage, useModelUsageSeries } from '@/lib/api/model-usage'
 import { usePrometheusQuery } from '@/lib/api/prometheus'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { cn, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -449,7 +450,7 @@ export function WorkbenchPage() {
             : t('modelServing.workbench.notReady', {
                 count: serviceItems.length - readyServices,
               }),
-      to: '/model-serving/services',
+      to: MODEL_SERVING_PATHS.services,
       alert: readyServices < serviceItems.length,
     },
     {
@@ -459,7 +460,7 @@ export function WorkbenchPage() {
           ? `${gpuShown.allocated} / ${gpuShown.capacity}`
           : '-',
       detail: gpus.data ? gpuDetail() : '',
-      to: '/model-serving/gpus',
+      to: MODEL_SERVING_PATHS.gpus,
     },
     {
       label: t('modelServing.workbench.tokens'),
@@ -472,7 +473,7 @@ export function WorkbenchPage() {
             output: compact.format(usageTotals.output),
           })
         : noData,
-      to: '/model-serving/usage',
+      to: MODEL_SERVING_PATHS.usage,
     },
     {
       label: t('modelServing.workbench.requests'),
@@ -484,7 +485,7 @@ export function WorkbenchPage() {
             value: formatMs(avgDurationMs),
           })
         : noData,
-      to: '/model-serving/usage',
+      to: MODEL_SERVING_PATHS.usage,
     },
     {
       label: t('modelServing.workbench.ttft'),
@@ -512,7 +513,7 @@ export function WorkbenchPage() {
         {
           failed: !!services.error,
           name: t('nav.inferenceServices'),
-          to: '/model-serving/services',
+          to: MODEL_SERVING_PATHS.services,
         },
         {
           failed: !!healthQuery.error,
@@ -522,12 +523,12 @@ export function WorkbenchPage() {
         {
           failed: !!gpus.error,
           name: t('nav.gpuResources'),
-          to: '/model-serving/gpus',
+          to: MODEL_SERVING_PATHS.gpus,
         },
         {
           failed: !!callers.error,
           name: t('nav.gateway'),
-          to: '/model-serving/gateway',
+          to: MODEL_SERVING_PATHS.gateway,
         },
       ].filter((source) => source.failed)}
       grouped={grouped}
@@ -546,7 +547,7 @@ export function WorkbenchPage() {
           : undefined
       }
       link={{
-        to: '/model-serving/services',
+        to: MODEL_SERVING_PATHS.services,
         label: t('modelServing.workbench.viewServices'),
       }}
     >
@@ -581,7 +582,7 @@ export function WorkbenchPage() {
       <Section
         title={t('modelServing.workbench.modelRanking')}
         link={{
-          to: '/model-serving/usage',
+          to: MODEL_SERVING_PATHS.usage,
           label: t('modelServing.workbench.viewUsage'),
         }}
       >
@@ -618,7 +619,7 @@ export function WorkbenchPage() {
         title={t('modelServing.workbench.callerLimits')}
         hint={t('modelServing.workbench.callerLimitsHint')}
         link={{
-          to: '/model-serving/gateway',
+          to: MODEL_SERVING_PATHS.gateway,
           label: t('modelServing.workbench.viewGateway'),
         }}
       >
@@ -653,18 +654,18 @@ export function WorkbenchPage() {
           <TimeWindowControls timeWindow={timeWindow} />
           <Button
             variant="outline"
-            onClick={() => navigate('/model-serving/models/create')}
+            onClick={() => navigate(MODEL_SERVING_PATHS.modelCreate)}
           >
             {t('modelServing.models.create')}
           </Button>
           <Button
             variant="outline"
-            onClick={() => navigate('/model-serving/gateway/callers/create')}
+            onClick={() => navigate(MODEL_SERVING_PATHS.callerCreate)}
           >
             {t('modelServing.callers.create')}
           </Button>
           <Button
-            onClick={() => navigate('/model-serving/services/create')}
+            onClick={() => navigate(MODEL_SERVING_PATHS.serviceCreate)}
             disabled={status?.lws === false}
           >
             <IconPlus className="mr-2 h-4 w-4" />
@@ -691,7 +692,10 @@ export function WorkbenchPage() {
             {renderAttention(true)}
             <Section
               title={t('modelServing.workbench.gpuNodes')}
-              link={{ to: '/model-serving/gpus', label: t('nav.gpuResources') }}
+              link={{
+                to: MODEL_SERVING_PATHS.gpus,
+                label: t('nav.gpuResources'),
+              }}
             >
               <WorkbenchGPUNodes
                 nodes={gpus.data?.items ?? []}

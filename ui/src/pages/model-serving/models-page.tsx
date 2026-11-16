@@ -12,6 +12,7 @@ import {
   useServedModels,
   type ServedModel,
 } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
-import { MODELS_PATH } from '@/components/model-serving/model-form'
 import { StorageCard } from '@/components/model-serving/storage-card'
 
 export function ModelsPage() {
@@ -86,7 +86,7 @@ export function ModelsPage() {
             {t('common.actions.edit')}
           </>
         ),
-        onClick: (model) => navigate(`${MODELS_PATH}/${model.id}/edit`),
+        onClick: (model) => navigate(MODEL_SERVING_PATHS.modelEdit(model.id)),
       },
       {
         label: (
@@ -147,7 +147,7 @@ export function ModelsPage() {
               </p>
             </div>
             <Button asChild>
-              <Link to={`${MODELS_PATH}/create`}>
+              <Link to={MODEL_SERVING_PATHS.modelCreate}>
                 <IconPlus className="mr-2 h-4 w-4" />
                 {t('modelServing.models.create')}
               </Link>

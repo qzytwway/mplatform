@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 
 import { useInferenceService, useServiceOptions } from '@/lib/api/model-serving'
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/error-message'
@@ -49,7 +50,7 @@ export function ServiceScalePage() {
   return (
     <div className="flex flex-col gap-4">
       <Link
-        to={`/model-serving/services/${namespace}/${name}`}
+        to={MODEL_SERVING_PATHS.service(namespace, name)}
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
