@@ -28,7 +28,7 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g.GET("/models", h.ListModels)
 	g.POST("/models", h.CreateModel)
 	g.PUT("/models/:id", h.UpdateModel)
-	g.GET("/engines", h.ListEngines)
+	g.GET("/service-options", h.ListServiceOptions)
 	g.DELETE("/models/:id", h.DeleteModel)
 
 	g.GET("/clusters/:cluster/status", h.GetStatus)

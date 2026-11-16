@@ -21,8 +21,11 @@ type serviceRole struct {
 	Name          string `json:"name"`
 	Replicas      int32  `json:"replicas"`
 	ReadyReplicas int32  `json:"readyReplicas"`
-	GroupSize     int64  `json:"groupSize,omitempty"`
-	GPUCount      int64  `json:"gpuCount,omitempty"`
+	// Ready is whether the role serves with as many replicas as it asks
+	// for; scaling down and rollouts leave more ready for a while.
+	Ready     bool  `json:"ready"`
+	GroupSize int64 `json:"groupSize,omitempty"`
+	GPUCount  int64 `json:"gpuCount,omitempty"`
 }
 
 type inferenceService struct {
@@ -109,8 +112,10 @@ func describeService(ctx context.Context, cs *cluster.ClientSet, workload *unstr
 	}
 	service.GroupSize, service.Image, service.GPUCount, service.VGPU = readGroupTemplate(template)
 	service.Ready = true
-	for _, role := range service.Roles {
-		service.Ready = service.Ready && role.Replicas > 0 && role.ReadyReplicas == role.Replicas
+	for i := range service.Roles {
+		role := &service.Roles[i]
+		role.Ready = role.Replicas > 0 && role.ReadyReplicas >= role.Replicas
+		service.Ready = service.Ready && role.Ready
 	}
 	return service, nil
 }

@@ -15,12 +15,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Section } from '@/components/form-layout'
 
-import { MAX_PD_ROLE_REPLICAS } from './service-modes'
-
 export function ScaleServiceForm({
   service,
+  maxRoleReplicas,
 }: {
   service: InferenceServiceDetail
+  // The most replicas the backend takes for a PD role.
+  maxRoleReplicas: number
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -98,7 +99,7 @@ export function ScaleServiceForm({
                 id="scale-prefill-replicas"
                 type="number"
                 min={1}
-                max={MAX_PD_ROLE_REPLICAS}
+                max={maxRoleReplicas}
                 value={prefillReplicas}
                 onChange={(event) => setPrefillReplicas(event.target.value)}
                 required
@@ -112,7 +113,7 @@ export function ScaleServiceForm({
                 id="scale-decode-replicas"
                 type="number"
                 min={1}
-                max={MAX_PD_ROLE_REPLICAS}
+                max={maxRoleReplicas}
                 value={decodeReplicas}
                 onChange={(event) => setDecodeReplicas(event.target.value)}
                 required

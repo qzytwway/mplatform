@@ -7,6 +7,7 @@ import type {
   Engine,
   InferenceRuntime,
   RouterPolicy,
+  ServiceOptions,
   TransferBackend,
 } from '@/lib/api/model-serving'
 import { Button } from '@/components/ui/button'
@@ -27,22 +28,10 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { HintLabel } from '@/components/form-layout'
 
-import {
-  DEPLOYMENT_MODES,
-  MAX_PD_ROLE_REPLICAS,
-  pdRoleImagesDiffer,
-} from './service-modes'
+import { DEPLOYMENT_MODES, pdRoleImagesDiffer } from './service-modes'
 
 // Radix Select items cannot have an empty value; default leaves --policy out.
 export type RouterPolicyChoice = RouterPolicy | 'default'
-
-const ROUTER_POLICIES: RouterPolicyChoice[] = [
-  'default',
-  'cache_aware',
-  'power_of_two',
-  'round_robin',
-  'random',
-]
 
 type PDRole = 'prefill' | 'decode'
 
@@ -113,6 +102,7 @@ interface ServiceModeFieldsProps {
   values: ServiceModeValues
   onValuesChange: (values: ServiceModeValues) => void
   engine: Engine
+  options: ServiceOptions
   // Labels the per-pod GPU count of PD roles, which follows the GPU type.
   gpuCountLabel: string
   service: ServiceDefaults
@@ -129,6 +119,7 @@ export function ServiceModeFields({
   values,
   onValuesChange,
   engine,
+  options,
   gpuCountLabel,
   service,
   rdmaEnabled,
@@ -172,6 +163,7 @@ export function ServiceModeFields({
             values={values}
             update={update}
             engine={engine}
+            options={options}
             gpuCountLabel={gpuCountLabel}
             service={service}
             rdmaEnabled={rdmaEnabled}
@@ -220,6 +212,7 @@ interface PDFieldsProps {
   values: ServiceModeValues
   update: (patch: Partial<ServiceModeValues>) => void
   engine: Engine
+  options: ServiceOptions
   gpuCountLabel: string
   service: ServiceDefaults
   rdmaEnabled: boolean
@@ -230,6 +223,7 @@ function PDFields({
   values,
   update,
   engine,
+  options,
   gpuCountLabel,
   service,
   rdmaEnabled,
@@ -298,7 +292,7 @@ function PDFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ROUTER_POLICIES.map((item) => (
+              {(['default', ...options.routerPolicies] as const).map((item) => (
                 <SelectItem key={item} value={item}>
                   {t(`modelServing.services.routerPolicies.${item}`)}
                 </SelectItem>
@@ -392,6 +386,7 @@ function PDFields({
               update({ [role]: { ...values[role], ...patch } })
             }
             engine={engine}
+            maxReplicas={options.maxPDRoleReplicas}
             gpuCountLabel={gpuCountLabel}
             service={service}
             editing={editing}
@@ -407,6 +402,7 @@ interface PDRoleFieldsProps {
   values: PDRoleValues
   onChange: (patch: Partial<PDRoleValues>) => void
   engine: Engine
+  maxReplicas: number
   gpuCountLabel: string
   service: ServiceDefaults
   editing: boolean
@@ -417,6 +413,7 @@ function PDRoleFields({
   values,
   onChange,
   engine,
+  maxReplicas,
   gpuCountLabel,
   service,
   editing,
@@ -452,7 +449,7 @@ function PDRoleFields({
               id={id('replicas')}
               type="number"
               min={1}
-              max={MAX_PD_ROLE_REPLICAS}
+              max={maxReplicas}
               value={values.replicas}
               onChange={(event) => onChange({ replicas: event.target.value })}
               required

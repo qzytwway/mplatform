@@ -1,4 +1,4 @@
-import type { Engine } from '@/lib/api/model-serving'
+import type { Engine, ServiceOptions } from '@/lib/api/model-serving'
 
 // The Engine catalog the backend serves, for tests of forms that follow it.
 export const VLLM_ENGINE: Engine = {
@@ -30,3 +30,11 @@ export const SGLANG_ENGINE: Engine = {
 }
 
 export const ENGINES = [VLLM_ENGINE, SGLANG_ENGINE]
+
+export const SERVICE_OPTIONS: ServiceOptions = {
+  engines: ENGINES,
+  routerPolicies: ['cache_aware', 'power_of_two', 'round_robin', 'random'],
+  maxNameLength: 40,
+  maxPDNameLength: 30,
+  maxPDRoleReplicas: 100,
+}

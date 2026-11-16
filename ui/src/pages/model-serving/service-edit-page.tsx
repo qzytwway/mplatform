@@ -3,7 +3,10 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 
-import { getInferenceServiceRequest, useEngines } from '@/lib/api/model-serving'
+import {
+  getInferenceServiceRequest,
+  useServiceOptions,
+} from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
 import { usePageTitle } from '@/hooks/use-page-title'
@@ -30,19 +33,19 @@ export function ServiceEditPage() {
     gcTime: 0,
     retry: false,
   })
-  const { data: engines, error: enginesError } = useEngines()
-  const engine = engines?.items.find((item) => item.name === data?.runtime)
+  const { data: options, error: optionsError } = useServiceOptions()
+  const engine = options?.engines.find((item) => item.name === data?.runtime)
 
   const renderForm = () => {
-    if (data && engines && engine)
+    if (data && options && engine)
       return (
         <ServiceConfigForm
           initial={formValuesFromRequest(data, engine)}
-          engines={engines.items}
+          options={options}
           editing
         />
       )
-    const failure = error ?? enginesError
+    const failure = error ?? optionsError
     if (failure)
       return (
         <p className="text-sm text-destructive">{translateError(failure, t)}</p>

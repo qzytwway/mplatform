@@ -1,5 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
-import { ENGINES, SGLANG_ENGINE, VLLM_ENGINE } from '@/test/engines'
+import { SERVICE_OPTIONS, SGLANG_ENGINE, VLLM_ENGINE } from '@/test/engines'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -82,7 +82,7 @@ describe('ServiceConfigForm when creating', () => {
       <MemoryRouter>
         <ServiceConfigForm
           initial={defaultFormValues(VLLM_ENGINE)}
-          engines={ENGINES}
+          options={SERVICE_OPTIONS}
         />
       </MemoryRouter>
     )
@@ -263,7 +263,7 @@ describe('ServiceConfigForm when editing', () => {
       <MemoryRouter>
         <ServiceConfigForm
           initial={formValuesFromRequest(recordedPD, SGLANG_ENGINE)}
-          engines={ENGINES}
+          options={SERVICE_OPTIONS}
           editing
         />
       </MemoryRouter>

@@ -3,12 +3,14 @@ package modelserving
 import (
 	"cmp"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/distribution/reference"
+	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/model"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -126,6 +128,18 @@ type scaleRequest struct {
 // routerPolicies are --policy values that sglang_router.launch_router and
 // vllm-router both take.
 var routerPolicies = []string{"cache_aware", "power_of_two", "round_robin", "random"}
+
+// ListServiceOptions returns the engines and the limits requests are checked
+// against, which the service forms offer and enforce.
+func (h *Handler) ListServiceOptions(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"engines":           engines,
+		"routerPolicies":    routerPolicies,
+		"maxNameLength":     maxServiceNameLength,
+		"maxPDNameLength":   maxPDServiceNameLength,
+		"maxPDRoleReplicas": maxPDRoleReplicas,
+	})
+}
 
 func parseServiceRequest(body *serviceRequest) (serviceRequest, error) {
 	req := serviceRequest{

@@ -19,6 +19,7 @@ import {
   type InferenceRuntime,
   type InferenceServicePreview,
   type ModelType,
+  type ServiceOptions,
 } from '@/lib/api/model-serving'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
@@ -51,21 +52,15 @@ import {
   type VGPUMemoryUnit,
 } from './service-form'
 import { ServiceModeFields } from './service-mode-fields'
-import {
-  MAX_PD_NAME_LENGTH,
-  modeBlocker,
-  pdRoleImagesDiffer,
-} from './service-modes'
+import { modeBlocker, pdRoleImagesDiffer } from './service-modes'
 import { ServiceNetworkFields } from './service-network-fields'
 import { ServicePreviewDialog } from './service-preview-dialog'
 import { ServiceSchedulingFields } from './service-scheduling-fields'
 
-const MAX_NAME_LENGTH = 40
-
 interface ServiceConfigFormProps {
   initial: ServiceFormValues
-  // The Engine catalog, whose rules the form follows.
-  engines: Engine[]
+  // The Engine catalog and limits, whose rules the form follows.
+  options: ServiceOptions
   // Editing keeps the name, namespace, model, Engine and mode, and leaves
   // replicas to scaling.
   editing?: boolean
@@ -73,9 +68,10 @@ interface ServiceConfigFormProps {
 
 export function ServiceConfigForm({
   initial,
-  engines,
+  options,
   editing = false,
 }: ServiceConfigFormProps) {
+  const { engines } = options
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -254,7 +250,7 @@ export function ServiceConfigForm({
                       {mode === 'pd' && (
                         <p>
                           {t('modelServing.services.pdNameHint', {
-                            max: MAX_PD_NAME_LENGTH,
+                            max: options.maxPDNameLength,
                           })}
                         </p>
                       )}
@@ -270,7 +266,11 @@ export function ServiceConfigForm({
                 onChange={(event) => set({ name: event.target.value })}
                 placeholder="qwen-chat"
                 pattern="[a-z]([a-z0-9\-]*[a-z0-9])?"
-                maxLength={mode === 'pd' ? MAX_PD_NAME_LENGTH : MAX_NAME_LENGTH}
+                maxLength={
+                  mode === 'pd'
+                    ? options.maxPDNameLength
+                    : options.maxNameLength
+                }
                 disabled={editing}
                 required
               />
@@ -354,6 +354,7 @@ export function ServiceConfigForm({
                 pd: modeBlocker('pd', modelType, status),
               }}
               engine={engine}
+              options={options}
               values={modeValues}
               onValuesChange={(next) => set({ modeValues: next })}
               gpuCountLabel={gpuCountLabel}

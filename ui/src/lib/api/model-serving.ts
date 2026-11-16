@@ -82,6 +82,8 @@ export interface InferenceServiceRole {
   name: string
   replicas: number
   readyReplicas: number
+  // Serving with as many replicas as asked for.
+  ready: boolean
   // Set on PD roles, which size their groups apart.
   groupSize?: number
   gpuCount?: number
@@ -338,11 +340,20 @@ export function useServedModels() {
   })
 }
 
-// The Engines a service can run, which only change with the backend.
-export function useEngines() {
+// The Engines a service can run and the limits the backend checks requests
+// against, which only change with the backend.
+export interface ServiceOptions {
+  engines: Engine[]
+  routerPolicies: RouterPolicy[]
+  maxNameLength: number
+  maxPDNameLength: number
+  maxPDRoleReplicas: number
+}
+
+export function useServiceOptions() {
   return useQuery({
-    queryKey: ['model-serving-engines'],
-    queryFn: () => apiClient.get<{ items: Engine[] }>(`${BASE}/engines`),
+    queryKey: ['model-serving-service-options'],
+    queryFn: () => apiClient.get<ServiceOptions>(`${BASE}/service-options`),
     staleTime: Infinity,
   })
 }

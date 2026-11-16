@@ -93,13 +93,7 @@ func (h *Handler) UpdateService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if req.VGPU != nil {
-		if status, err := requireModeComponents(cs, gpuModeVGPU); err != nil {
-			c.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
-	}
-	if status, err := requirePriorityClass(ctx, cs, req.PriorityClassName); err != nil {
+	if status, err := requireServiceResources(ctx, cs, &req); err != nil {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
@@ -117,6 +111,9 @@ func (h *Handler) UpdateService(c *gin.Context) {
 	}
 	keepReplicas(&req, workload, router)
 	objects, built, err := buildServiceObjects(&req, served, storage)
+	if err == nil {
+		objects, err = withPodMonitor(ctx, cs, &req, objects)
+	}
 	if err != nil {
 		c.JSON(createErrorStatus(err), gin.H{"error": err.Error()})
 		return
@@ -181,12 +178,20 @@ func parseEdit(c *gin.Context, workload *unstructured.Unstructured) (serviceRequ
 }
 
 // applyEdit writes the objects rebuilt from an edited request: the storage
-// Secret before the workload whose new pods read it, then the router.
+// Secret before the workload whose new pods read it, then the router. A
+// service without a PodMonitor, such as one created before its CRD was
+// installed, gets one; an existing one only depends on the service's name and
+// stays.
 func applyEdit(c *gin.Context, cs *cluster.ClientSet, crd string, workload *unstructured.Unstructured, router *appsv1.Deployment, objects []client.Object, built *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	ctx := c.Request.Context()
 	for _, object := range objects {
 		if secret, ok := object.(*corev1.Secret); ok {
 			if err := refreshSecret(ctx, cs, secret); err != nil {
+				return nil, err
+			}
+		}
+		if monitor, ok := object.(*unstructured.Unstructured); ok && monitor.GroupVersionKind() == podMonitorGVK {
+			if err := cs.K8sClient.Create(ctx, monitor); err != nil && !apierrors.IsAlreadyExists(err) {
 				return nil, err
 			}
 		}

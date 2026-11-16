@@ -8,9 +8,9 @@ import { toast } from 'sonner'
 
 import {
   deleteInferenceService,
-  useEngines,
   useInferenceServices,
   useModelServingStatus,
+  useServiceOptions,
   type InferenceService,
 } from '@/lib/api/model-serving'
 import { getAge, translateError } from '@/lib/utils'
@@ -31,7 +31,7 @@ export function ServicesPage() {
   const { currentCluster } = useCluster()
   const { data, isLoading, error } = useInferenceServices()
   const { data: status } = useModelServingStatus()
-  const { data: engines } = useEngines()
+  const { data: options } = useServiceOptions()
   const lwsMissing = status?.lws === false
   const [deletingService, setDeletingService] =
     useState<InferenceService | null>(null)
@@ -76,7 +76,7 @@ export function ServicesPage() {
         id: 'runtime',
         header: t('modelServing.services.runtime'),
         cell: ({ row: { original: service } }) =>
-          engineLabel(engines?.items, service.runtime),
+          engineLabel(options?.engines, service.runtime),
       },
       {
         id: 'mode',
@@ -104,11 +104,7 @@ export function ServicesPage() {
             {service.roles.map((role) => (
               <Badge
                 key={role.name}
-                variant={
-                  role.replicas > 0 && role.readyReplicas >= role.replicas
-                    ? 'outline'
-                    : 'secondary'
-                }
+                variant={role.ready ? 'outline' : 'secondary'}
                 className="tabular-nums"
               >
                 {service.mode === 'pd' &&
@@ -158,7 +154,7 @@ export function ServicesPage() {
         ),
       },
     ],
-    [t, engines]
+    [t, options]
   )
 
   const actions = useMemo<Action<InferenceService>[]>(
