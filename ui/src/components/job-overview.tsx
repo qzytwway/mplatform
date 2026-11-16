@@ -112,7 +112,7 @@ function JobSummaryGrid({ job }: { job: Job }) {
   const completions = job.spec?.completions ?? 1
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 @4xl/job-overview:grid-cols-6">
+    <div className="grid divide-x border-y md:grid-cols-2 @4xl/job-overview:grid-cols-6">
       <WorkloadSummaryCard
         label={t('common.fields.status')}
         value={

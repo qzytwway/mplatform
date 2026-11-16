@@ -772,7 +772,7 @@ function HelmReleaseSummaryGrid({ release }: { release: HelmRelease }) {
   const status = release.status?.status || '-'
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 @4xl/helmrelease-overview:grid-cols-6">
+    <div className="grid divide-x border-y md:grid-cols-2 @4xl/helmrelease-overview:grid-cols-6">
       <WorkloadSummaryCard
         label={t('common.fields.status')}
         value={

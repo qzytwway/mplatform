@@ -15,11 +15,11 @@ export function VersionInfo() {
   }
 
   return (
-    <div className="text-[10px] text-muted-foreground/60 font-mono leading-none">
+    <div className="whitespace-nowrap text-[11px] text-sidebar-foreground/65 font-mono leading-none">
       v{versionInfo.version.replace(/^v/, '')} •{' '}
       <button
         onClick={handleCommitClick}
-        className="hover:text-primary/80 hover:underline transition-colors cursor-pointer"
+        className="hover:text-sidebar-foreground hover:underline transition-colors cursor-pointer"
         title={`View commit ${versionInfo.commitId} on GitHub`}
       >
         {versionInfo.commitId.slice(0, 7)}

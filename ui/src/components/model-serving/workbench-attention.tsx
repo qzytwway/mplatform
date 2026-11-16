@@ -103,7 +103,7 @@ export function WorkbenchAttention({
     <li key={item.key} className="min-w-0">
       <Link
         to={item.to}
-        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-background/60"
       >
         {item.critical ? (
           <IconAlertCircleFilled className="size-4 shrink-0 text-destructive" />
@@ -126,9 +126,17 @@ export function WorkbenchAttention({
     </li>
   )
 
+  // The band takes the colour of the most severe item, so how bad things are
+  // reads before any item does.
+  const tone = sorted.some((item) => item.critical)
+    ? 'border-destructive/40 bg-destructive/10 dark:border-destructive/60 dark:bg-destructive/20'
+    : sorted.length > 0
+      ? 'border-warning/40 bg-warning/10 dark:border-warning/55 dark:bg-warning/15'
+      : 'border-border'
+
   return (
-    <section className="rounded-xl border bg-card">
-      <header className="flex items-center gap-2 border-b px-4 py-3">
+    <section className={cn('rounded-md border', tone)}>
+      <header className="flex items-center gap-2 border-b border-inherit px-4 py-3">
         <h2 className="text-sm font-semibold">{title}</h2>
         {sorted.length > 0 && (
           <Badge variant="secondary" className="tabular-nums">

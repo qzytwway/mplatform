@@ -23,12 +23,6 @@ import { cn, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -70,46 +64,26 @@ function ttftQuery(seconds: number) {
   return `histogram_quantile(0.95, sum by (le) (rate({__name__=~"${ENGINE_METRICS.firstTokenBuckets}", inference_service!="", inference_role!="prefill"}[${seconds}s])))`
 }
 
-interface StatCardProps {
+interface Stat {
   label: string
   value: string
   detail: string
   to?: string
-  // Whether the detail reports a problem; only the strip shows it.
+  // Whether the detail reports a problem.
   alert?: boolean
 }
 
-function StatCard({ label, value, detail, to }: StatCardProps) {
-  return (
-    <Card className="gap-2 py-5">
-      <CardHeader className="px-5">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl font-semibold tabular-nums">
-          {to ? (
-            <Link to={to} className="hover:text-primary/80 hover:underline">
-              {value}
-            </Link>
-          ) : (
-            value
-          )}
-        </CardTitle>
-        <div className="text-sm text-muted-foreground tabular-nums">
-          {detail}
-        </div>
-      </CardHeader>
-    </Card>
-  )
-}
-
 // The stats as one strip of cells, each a link where the stat has a page.
-function StatStrip({ stats }: { stats: StatCardProps[] }) {
+function StatStrip({ stats }: { stats: Stat[] }) {
   return (
-    <section className="grid grid-cols-5 divide-x rounded-xl border bg-card">
+    <section className="grid grid-cols-5 divide-x border-y">
       {stats.map(({ label, value, detail, to, alert }) => {
         const content = (
           <>
             <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            <span className="font-mono text-2xl font-semibold tabular-nums">
+              {value}
+            </span>
             <span
               className={cn(
                 'text-sm tabular-nums',
@@ -125,10 +99,7 @@ function StatStrip({ stats }: { stats: StatCardProps[] }) {
           <Link
             key={label}
             to={to}
-            className={cn(
-              className,
-              'hover:bg-muted/50 first:rounded-l-xl last:rounded-r-xl'
-            )}
+            className={cn(className, 'hover:bg-muted/50')}
           >
             {content}
           </Link>
@@ -151,8 +122,8 @@ interface SectionProps {
 
 function Section({ title, hint, link, children }: SectionProps) {
   return (
-    <section className="flex min-w-0 flex-col rounded-xl border bg-card">
-      <header className="flex flex-wrap items-baseline gap-3 border-b px-4 py-3">
+    <section className="flex min-w-0 flex-col">
+      <header className="flex flex-wrap items-baseline gap-3 border-b py-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
         {link && (
@@ -161,7 +132,7 @@ function Section({ title, hint, link, children }: SectionProps) {
           </Link>
         )}
       </header>
-      <div className="min-w-0 flex-1 p-4">{children}</div>
+      <div className="min-w-0 flex-1 pt-3">{children}</div>
     </section>
   )
 }
@@ -363,14 +334,12 @@ export function WorkbenchPage() {
       )
     if (serviceItems.length === 0)
       return (
-        <div className="rounded-xl border border-dashed px-6 py-10 text-center">
-          <h3 className="text-base font-semibold">
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">
             {t('modelServing.services.empty')}
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('modelServing.services.emptyHint')}
-          </p>
-        </div>
+          </span>{' '}
+          {t('modelServing.services.emptyHint')}
+        </p>
       )
     return (
       <WorkbenchServicesTable
@@ -439,7 +408,7 @@ export function WorkbenchPage() {
 
   const noData = t('modelServing.workbench.noData')
 
-  const stats: StatCardProps[] = [
+  const stats: Stat[] = [
     {
       label: t('modelServing.workbench.servicesReady'),
       value: services.data ? `${readyServices} / ${serviceItems.length}` : '-',
@@ -557,7 +526,7 @@ export function WorkbenchPage() {
   )
 
   const usageSections = (
-    <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-6 @5xl/main:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
       <Section
         title={t('modelServing.usage.trend')}
         hint={t('modelServing.usage.trendHint', {
@@ -630,7 +599,7 @@ export function WorkbenchPage() {
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold">
           {t('modelServing.workbench.title')}
@@ -678,40 +647,34 @@ export function WorkbenchPage() {
       {layout === 'overview' ? (
         <>
           {renderAttention(false)}
-          <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-5">
-            {stats.map((stat) => (
-              <StatCard key={stat.label} {...stat} />
-            ))}
-          </div>
+          <StatStrip stats={stats} />
           {renderServicesSection(false)}
           {usageSections}
         </>
       ) : (
         <>
+          {renderAttention(true)}
           <StatStrip stats={stats} />
-          <div className="grid grid-cols-1 items-start gap-4 @5xl/main:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            {renderAttention(true)}
-            <Section
-              title={t('modelServing.workbench.gpuNodes')}
-              link={{
-                to: MODEL_SERVING_PATHS.gpus,
-                label: t('nav.gpuResources'),
-              }}
-            >
-              <WorkbenchGPUNodes
-                nodes={gpus.data?.items ?? []}
-                loading={gpus.isLoading}
-                error={gpus.error}
-              />
-            </Section>
-          </div>
+          <Section
+            title={t('modelServing.workbench.gpuNodes')}
+            link={{
+              to: MODEL_SERVING_PATHS.gpus,
+              label: t('nav.gpuResources'),
+            }}
+          >
+            <WorkbenchGPUNodes
+              nodes={gpus.data?.items ?? []}
+              loading={gpus.isLoading}
+              error={gpus.error}
+            />
+          </Section>
           {renderServicesSection(true)}
           <Collapsible
             open={usageOpen}
             onOpenChange={setUsageOpen}
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-6"
           >
-            <CollapsibleTrigger className="flex items-center gap-2 rounded-xl border bg-card px-4 py-3 text-left hover:bg-muted/50">
+            <CollapsibleTrigger className="flex items-center gap-2 border-y py-3 text-left hover:bg-muted/50">
               <IconChevronRight
                 className={cn(
                   'size-4 shrink-0 text-muted-foreground transition-transform',

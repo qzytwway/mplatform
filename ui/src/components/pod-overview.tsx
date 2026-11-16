@@ -8,6 +8,7 @@ import { cn, formatDate, getAge } from '@/lib/utils'
 import { useOwnerInfo } from '@/hooks/use-owner-info'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PodStatusIcon } from '@/components/pod-status-icon'
+import { FIGURE } from '@/components/workload-overview-parts'
 
 import { ContainerDetailDialog } from './pod-container-detail-dialog'
 import {
@@ -152,7 +153,7 @@ function PodSummaryGrid({
   const { t } = useTranslation()
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 @4xl/pod-overview:grid-cols-6">
+    <div className="grid divide-x border-y md:grid-cols-2 @4xl/pod-overview:grid-cols-6">
       <PodSummaryCard
         label={t('common.fields.status')}
         value={
@@ -189,7 +190,7 @@ function PodSummaryGrid({
           pod.spec?.nodeName ? (
             <Link
               to={`/nodes/${pod.spec.nodeName}`}
-              className="app-link line-clamp-2 max-w-full break-all leading-snug"
+              className="app-link line-clamp-2 max-w-full break-words leading-snug"
               title={pod.spec.nodeName}
             >
               {pod.spec.nodeName}
@@ -354,29 +355,30 @@ function PodSummaryCard({
   truncateValue?: boolean
 }) {
   return (
-    <Card className="gap-0 rounded-lg border-border/70 py-0 shadow-none">
-      <CardContent className="p-4">
-        <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="min-w-0 px-4 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className={cn(
+          'mt-2 min-w-0 text-lg font-semibold tabular-nums',
+          truncateValue && 'truncate',
+          (mono ||
+            typeof value === 'number' ||
+            (typeof value === 'string' && FIGURE.test(value))) &&
+            'font-mono'
+        )}
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </div>
+      {detail ? (
         <div
-          className={cn(
-            'mt-2 min-w-0 text-lg font-semibold tabular-nums',
-            truncateValue && 'truncate',
-            mono && 'font-mono'
-          )}
-          title={typeof value === 'string' ? value : undefined}
+          className="mt-1 truncate text-xs text-muted-foreground"
+          title={typeof detail === 'string' ? detail : undefined}
         >
-          {value}
+          {detail}
         </div>
-        {detail ? (
-          <div
-            className="mt-1 truncate text-xs text-muted-foreground"
-            title={typeof detail === 'string' ? detail : undefined}
-          >
-            {detail}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+      ) : null}
+    </div>
   )
 }
 

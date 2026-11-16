@@ -95,6 +95,12 @@ export interface CreateSilenceRequest {
 
 const ALERTS_REFRESH_MS = 30000
 
+// Alerts without a severity, such as the always-firing Watchdog, report no
+// problem.
+export function reportsProblem(alert: AlertInstance) {
+  return alert.labels.severity !== 'none'
+}
+
 // Counts the firing alerts of the rules that are not muted.
 export function countFiringAlerts(
   rules: AlertRule[] | undefined,

@@ -216,7 +216,7 @@ describe('attentionItems', () => {
       },
     ])
   })
-  it('counts firing alerts that have a severity', () => {
+  it('counts firing alerts that have a severity, critical when one is', () => {
     const alert = (severity: string, state: AlertInstance['state']) =>
       ({
         labels: { severity },
@@ -243,7 +243,7 @@ describe('attentionItems', () => {
     expect(items).toEqual([
       {
         key: 'alerts',
-        critical: false,
+        critical: true,
         text: 'modelServing.workbench.attention.firingAlerts {"count":2}',
         to: '/observability/alerts',
         action: 'modelServing.workbench.attention.viewAlerts',

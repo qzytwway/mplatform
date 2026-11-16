@@ -121,7 +121,7 @@ function DaemonSetSummaryGrid({ daemonset }: { daemonset: DaemonSet }) {
   const daemonsetStatus = getDaemonSetStatus(daemonset)
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 @4xl/daemonset-overview:grid-cols-6">
+    <div className="grid divide-x border-y md:grid-cols-2 @4xl/daemonset-overview:grid-cols-6">
       <WorkloadSummaryCard
         label={t('common.fields.status')}
         value={

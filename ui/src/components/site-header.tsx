@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useTerminal } from '@/contexts/terminal-context'
-import { Plus, Settings, TerminalSquare } from 'lucide-react'
+import { Plus, Server, Settings, TerminalSquare } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
+import { useCluster } from '@/hooks/use-cluster'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -21,6 +22,7 @@ export function SiteHeader() {
   const navigate = useNavigate()
   const { user, capabilities } = useAuth()
   const { toggleTerminal, isOpen } = useTerminal()
+  const { currentCluster } = useCluster()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const isAdmin = user?.isAdmin() ?? false
   const kubectlEnabled = capabilities.kubectlEnabled
@@ -34,6 +36,21 @@ export function SiteHeader() {
             orientation="vertical"
             className="mx-2 data-[orientation=vertical]:h-4"
           />
+          {currentCluster && (
+            <>
+              <span
+                className="flex items-center gap-1.5 text-sm font-medium"
+                title={currentCluster}
+              >
+                <Server className="size-4 text-muted-foreground" />
+                {currentCluster}
+              </span>
+              <Separator
+                orientation="vertical"
+                className="mx-2 data-[orientation=vertical]:h-4"
+              />
+            </>
+          )}
           <DynamicBreadcrumb />
           <div className="ml-auto flex items-center gap-2">
             <Search />

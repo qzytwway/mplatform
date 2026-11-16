@@ -77,7 +77,7 @@ samp {
 
 :root {
   --header-height: 3.5rem;
-  --radius: 0.5rem;
+  --radius: 0.375rem;
 }
 
 html {
@@ -95,6 +95,10 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    caret-color: var(--ring);
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--ring) 30%, transparent);
   }
 
   /* A slim rounded thumb on no track, inset so it stays clear of rounded

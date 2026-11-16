@@ -26,7 +26,11 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { SidebarCustomResourceItem, SidebarItem } from '@/types/sidebar'
 import { useResources, useVersionInfo } from '@/lib/api'
-import { countFiringAlerts, useAlertRules } from '@/lib/api/alerts'
+import {
+  countFiringAlerts,
+  reportsProblem,
+  useAlertRules,
+} from '@/lib/api/alerts'
 import {
   Sidebar,
   SidebarContent,
@@ -100,7 +104,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: alertRules } = useAlertRules({
     refetchInterval: SIDEBAR_ALERTS_REFRESH_MS,
   })
-  const firingAlerts = countFiringAlerts(alertRules)
+  const firingAlerts = countFiringAlerts(alertRules, reportsProblem)
   const [openAPIGroupItems, setOpenAPIGroupItems] = useState<
     Record<string, boolean>
   >({})
@@ -339,7 +343,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          <div className="p-4 text-center text-muted-foreground">
+          <div className="p-4 text-center text-sidebar-foreground/70">
             {t('common.messages.loading', 'Loading...')}
           </div>
         </SidebarContent>
@@ -392,7 +396,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
         {user?.isAdmin() && (
           <SidebarMenu>
-            <li className="px-2 text-xs text-muted-foreground">
+            <li className="px-2 text-xs text-sidebar-foreground/70">
               {t('nav.platform')}
             </li>
             <SidebarMenuItem>
@@ -503,7 +507,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
                     {pinnedItems.length > 0 && (
                       <>
-                        <li className="px-2 pt-2 text-xs text-muted-foreground">
+                        <li className="px-2 pt-2 text-xs text-sidebar-foreground/70">
                           {t('sidebar.pinned', 'Pinned')}
                         </li>
                         {pinnedItems.map(renderSidebarItem)}
@@ -521,7 +525,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       >
                         <SidebarMenuItem>
                           <CollapsibleTrigger asChild>
-                            <SidebarMenuButton className="h-7 text-muted-foreground data-[state=open]:font-medium data-[state=open]:text-sidebar-foreground">
+                            <SidebarMenuButton className="h-7 text-sidebar-foreground/70 data-[state=open]:font-medium data-[state=open]:text-sidebar-foreground">
                               <span className="truncate">
                                 {group.nameKey
                                   ? t(group.nameKey, {
@@ -588,7 +592,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     </span>
                                     {url === '/observability/alerts' &&
                                       firingAlerts > 0 && (
-                                        <span className="ml-auto rounded-full bg-destructive/15 px-1.5 text-[11px] font-medium tabular-nums text-destructive">
+                                        <span className="ml-auto rounded-full bg-destructive px-1.5 text-[11px] font-medium tabular-nums text-background">
                                           {firingAlerts}
                                         </span>
                                       )}
