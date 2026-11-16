@@ -8,6 +8,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// roleHint holds example extra arguments and a KEY=VALUE environment line.
+type roleHint struct {
+	ExtraArgs string `json:"extraArgs"`
+	Env       string `json:"env"`
+}
+
+// parserSuggestion is a parser with the models it parses; models is empty for
+// auto, which the form labels itself.
+type parserSuggestion struct {
+	Value  string `json:"value"`
+	Models string `json:"models"`
+}
+
 // engine holds everything that differs between the Engines an Inference
 // Service can run. Code that builds, checks or reads back a service asks its
 // engine instead of branching on the engine's name. The exported fields are
@@ -36,6 +49,13 @@ type engine struct {
 	// node holding a tensor-parallel slice over its own GPUs; otherwise the
 	// tensors are split across every GPU of the Replica.
 	PipelineAcrossNodes bool `json:"pipelineAcrossNodes"`
+	// RoleHints suggest what prefill and decode commonly set, which the form
+	// shows as placeholders.
+	RoleHints map[string]roleHint `json:"roleHints"`
+	// Common parsers the Engine registers under its own names. Images may
+	// know others, which can be typed in.
+	ToolCallParsers  []parserSuggestion `json:"toolCallParsers"`
+	ReasoningParsers []parserSuggestion `json:"reasoningParsers"`
 
 	command []string
 	// modelFlags come before the model path, which vllm serve takes as its
@@ -94,6 +114,23 @@ var vllmEngine = engine{
 	PDSingleNode:        true,
 	PDSameImage:         true,
 	PipelineAcrossNodes: true,
+	RoleHints: map[string]roleHint{
+		rolePrefill: {ExtraArgs: "--max-num-batched-tokens 16384", Env: "UCX_NET_DEVICES=mlx5_0:1"},
+		roleDecode:  {ExtraArgs: "--max-num-seqs 128", Env: "UCX_NET_DEVICES=mlx5_0:1"},
+	},
+	ToolCallParsers: []parserSuggestion{
+		{"hermes", "Qwen2.5 / Qwen3"},
+		{"qwen3_xml", "Qwen3-Coder"},
+		{"llama3_json", "Llama 3.x"},
+		{"glm45", "GLM-4.5 / GLM-4.6"},
+		{"kimi_k2", "Kimi K2"},
+	},
+	ReasoningParsers: []parserSuggestion{
+		{"qwen3", "Qwen3"},
+		{"deepseek_r1", "DeepSeek-R1 / QwQ"},
+		{"deepseek_v3", "DeepSeek-V3.1"},
+		{"glm45", "GLM-4.5"},
+	},
 
 	command: []string{"vllm", "serve"},
 	// vLLM always serves /metrics on its HTTP port.
@@ -156,6 +193,26 @@ var sglangEngine = engine{
 	// otherwise.
 	DefaultTransfer:     transferMooncakeTCP,
 	DefaultRDMATransfer: transferMooncake,
+
+	RoleHints: map[string]roleHint{
+		rolePrefill: {ExtraArgs: "--chunked-prefill-size 16384", Env: "SGLANG_DISAGGREGATION_THREAD_POOL_SIZE=4"},
+		roleDecode:  {ExtraArgs: "--max-running-requests 128", Env: "SGLANG_DISAGGREGATION_QUEUE_SIZE=4"},
+	},
+	ToolCallParsers: []parserSuggestion{
+		{"qwen25", "Qwen2.5 / Qwen3"},
+		{"qwen3_coder", "Qwen3-Coder"},
+		{"llama3", "Llama 3.x"},
+		{"deepseekv3", "DeepSeek-V3"},
+		{"deepseekv31", "DeepSeek-V3.1"},
+		{"glm45", "GLM-4.5 / GLM-4.6"},
+		{"kimi_k2", "Kimi K2"},
+	},
+	ReasoningParsers: []parserSuggestion{
+		{"auto", ""},
+		{"qwen3", "Qwen3"},
+		{"deepseek-r1", "DeepSeek-R1"},
+		{"glm45", "GLM-4.5"},
+	},
 
 	command:    []string{"python3", "-m", "sglang.launch_server"},
 	modelFlags: []string{"--model-path"},

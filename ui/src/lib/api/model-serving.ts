@@ -241,11 +241,23 @@ export interface Engine {
   // Groups of several nodes pipeline layers across them rather than split
   // tensors across every GPU.
   pipelineAcrossNodes: boolean
+  // Placeholders for what prefill and decode commonly set.
+  roleHints: Record<PDRole, { extraArgs: string; env: string }>
+  toolCallParsers: ParserSuggestion[]
+  reasoningParsers: ParserSuggestion[]
 }
 
-// --policy values that sglang_router.launch_router and vllm-router both take.
-export type RouterPolicy =
-  'cache_aware' | 'power_of_two' | 'round_robin' | 'random'
+export type PDRole = 'prefill' | 'decode'
+
+// A parser with the models it parses; models is empty for auto, whose label
+// is translated.
+export interface ParserSuggestion {
+  value: string
+  models: string
+}
+
+// A --policy value the router takes, as listed by the service options.
+export type RouterPolicy = string
 
 export type RDMAMode = 'device-plugin' | 'host'
 
