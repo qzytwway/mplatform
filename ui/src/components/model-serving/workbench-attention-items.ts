@@ -1,4 +1,8 @@
-import { countFiringAlerts, type AlertRule } from '@/lib/api/alerts'
+import {
+  countFiringAlerts,
+  reportsProblem,
+  type AlertRule,
+} from '@/lib/api/alerts'
 import type {
   CallerQuotas,
   GatewayStatus,
@@ -171,16 +175,15 @@ export function attentionItems(
       to: MODEL_SERVING_PATHS.callerEdit(caller.id),
       action: text('editLimit'),
     })
-  // Alerts without a severity, such as the always-firing Watchdog, report no
-  // problem.
-  const firingAlerts = countFiringAlerts(
+  const firingAlerts = countFiringAlerts(input.alerts, reportsProblem)
+  const firingCritical = countFiringAlerts(
     input.alerts,
-    (alert) => alert.labels.severity !== 'none'
+    (alert) => alert.labels.severity === 'critical'
   )
   if (firingAlerts > 0)
     items.push({
       key: 'alerts',
-      critical: false,
+      critical: firingCritical > 0,
       text: text('firingAlerts', { count: firingAlerts }),
       to: ALERTS_PATH,
       action: text('viewAlerts'),

@@ -10,12 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { OverviewData } from '@/types/api'
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface ClusterStatsCardsProps {
   stats?: OverviewData
@@ -30,14 +25,12 @@ export function ClusterStatsCards({
 
   if (isLoading || !stats) {
     return (
-      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      <div className="grid grid-cols-2 divide-x border-y @5xl/main:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i} className="animate-pulse">
-            <CardHeader>
-              <div className="h-4 bg-muted rounded w-1/3 mb-2"></div>
-              <div className="h-8 bg-muted rounded w-1/2"></div>
-            </CardHeader>
-          </Card>
+          <div key={i} className="flex flex-col gap-2 px-5 py-4">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-8 w-1/2" />
+          </div>
         ))}
       </div>
     )
@@ -49,8 +42,6 @@ export function ClusterStatsCards({
       value: stats.totalNodes,
       subValue: stats.readyNodes,
       icon: IconServer,
-      color: 'text-info',
-      bgColor: 'bg-info/10',
       routePath: '/nodes',
     },
     {
@@ -58,77 +49,59 @@ export function ClusterStatsCards({
       value: stats.totalPods,
       subValue: stats.runningPods,
       icon: IconBox,
-      color: 'text-success',
-      bgColor: 'bg-success/10',
       routePath: '/pods',
     },
     {
       label: t('nav.namespaces'),
       value: stats.totalNamespaces,
       icon: IconFolders,
-      color: 'text-info',
-      bgColor: 'bg-info/10',
       routePath: '/namespaces',
     },
     {
       label: t('nav.services'),
       value: stats.totalServices,
       icon: IconNetwork,
-      color: 'text-warning',
-      bgColor: 'bg-warning/10',
       routePath: '/services',
     },
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+    <section className="grid grid-cols-2 divide-x border-y @5xl/main:grid-cols-4">
       {statsConfig.map((stat) => {
         const Icon = stat.icon
+        const notReady =
+          stat.subValue === undefined ? 0 : stat.value - stat.subValue
         return (
-          <Card key={stat.label} className="@container/card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                    <Icon className={`size-6 ${stat.color}`} />
-                  </div>
-                  <div>
-                    <CardDescription>{stat.label}</CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                      {stat.routePath ? (
-                        <Link
-                          to={stat.routePath}
-                          className="hover:text-primary/80 hover:underline transition-colors cursor-pointer"
-                        >
-                          {stat.value}
-                        </Link>
-                      ) : (
-                        stat.value
-                      )}
-                    </CardTitle>
-                    <div className="text-sm text-muted-foreground">
-                      {stat.subValue === undefined ||
-                      stat.subValue === stat.value ? (
-                        <div className="flex items-center gap-1">
-                          <IconCircleCheckFilled className="size-4 text-success flex-shrink-0" />
-                          {t('overview.allReady')}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <IconAlertCircleFilled className="size-4 text-destructive flex-shrink-0" />
-                          {t('overview.notReadyCount', {
-                            count: stat.value - (stat.subValue || 0),
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
+          <div
+            key={stat.label}
+            className="flex min-w-0 flex-col gap-1 px-5 py-4"
+          >
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Icon className="size-4 shrink-0" />
+              {stat.label}
+            </span>
+            <span className="font-mono text-3xl font-semibold tabular-nums">
+              <Link
+                to={stat.routePath}
+                className="hover:text-primary/80 hover:underline"
+              >
+                {stat.value}
+              </Link>
+            </span>
+            {notReady > 0 ? (
+              <span className="flex items-center gap-1 text-sm text-destructive">
+                <IconAlertCircleFilled className="size-4 shrink-0" />
+                {t('overview.notReadyCount', { count: notReady })}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <IconCircleCheckFilled className="size-4 shrink-0 text-success" />
+                {t('overview.allReady')}
+              </span>
+            )}
+          </div>
         )
       })}
-    </div>
+    </section>
   )
 }

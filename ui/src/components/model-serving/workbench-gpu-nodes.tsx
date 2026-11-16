@@ -53,13 +53,13 @@ export function WorkbenchGPUNodes({
                 {t('modelServing.workbench.status.notReady')}
               </span>
             )}
-            <span className="ml-auto shrink-0 text-xs tabular-nums">
+            <span className="ml-auto shrink-0 font-mono text-xs tabular-nums">
               {node.allocated} / {node.capacity}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-info"
+              className="h-full rounded-full bg-chart-1"
               style={{
                 width: `${node.capacity ? (node.allocated / node.capacity) * 100 : 0}%`,
               }}

@@ -3,7 +3,9 @@ import type { Container } from 'kubernetes-types/core/v1'
 
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+
+// Counts and ratios are figures, set like every other measurement.
+export const FIGURE = /^[\d\s/.,]+$/
 
 export function WorkloadSummaryCard({
   label,
@@ -17,28 +19,29 @@ export function WorkloadSummaryCard({
   mono?: boolean
 }) {
   return (
-    <Card className="gap-0 rounded-lg border-border/70 py-0 shadow-none">
-      <CardContent className="p-4">
-        <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="min-w-0 px-4 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div
+        className={cn(
+          'mt-2 min-w-0 truncate text-lg font-semibold tabular-nums',
+          (mono ||
+            typeof value === 'number' ||
+            (typeof value === 'string' && FIGURE.test(value))) &&
+            'font-mono'
+        )}
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </div>
+      {detail ? (
         <div
-          className={cn(
-            'mt-2 min-w-0 truncate text-lg font-semibold tabular-nums',
-            mono && 'font-mono'
-          )}
-          title={typeof value === 'string' ? value : undefined}
+          className="mt-1 truncate text-xs text-muted-foreground"
+          title={typeof detail === 'string' ? detail : undefined}
         >
-          {value}
+          {detail}
         </div>
-        {detail ? (
-          <div
-            className="mt-1 truncate text-xs text-muted-foreground"
-            title={typeof detail === 'string' ? detail : undefined}
-          >
-            {detail}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+      ) : null}
+    </div>
   )
 }
 
