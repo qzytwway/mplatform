@@ -43,9 +43,12 @@ export interface AttentionInput {
   gateway: GatewayStatus | undefined
   quotas: CallerQuotas | undefined
   alerts: AlertRule[] | undefined
-  // What failed to load, so its checks did not run.
+  alertsFailed: boolean
+  // What else failed to load, so its checks did not run.
   failedSources: AttentionSource[]
 }
+
+const ALERTS_PATH = '/observability/alerts'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
 
@@ -179,10 +182,13 @@ export function attentionItems(
       key: 'alerts',
       critical: false,
       text: text('firingAlerts', { count: firingAlerts }),
-      to: '/observability/alerts',
+      to: ALERTS_PATH,
       action: text('viewAlerts'),
     })
-  for (const source of input.failedSources)
+  const failedSources = input.alertsFailed
+    ? [...input.failedSources, { name: t('nav.alerts'), to: ALERTS_PATH }]
+    : input.failedSources
+  for (const source of failedSources)
     items.push({
       key: `failed/${source.to}`,
       critical: false,

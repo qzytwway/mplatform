@@ -55,6 +55,7 @@ const input = (patch: Partial<AttentionInput> = {}): AttentionInput => ({
   gateway: undefined,
   quotas: undefined,
   alerts: undefined,
+  alertsFailed: false,
   failedSources: [],
   ...patch,
 })
@@ -263,6 +264,19 @@ describe('attentionItems', () => {
         text: 'modelServing.workbench.attention.checkFailed {"name":"GPUs"}',
         to: '/model-serving/gpus',
         action: 'GPUs',
+      },
+    ])
+  })
+  it('warns that alerts were not checked when they failed to load', () => {
+    const items = attentionItems(input({ alertsFailed: true }), t)
+
+    expect(items).toEqual([
+      {
+        key: 'failed//observability/alerts',
+        critical: false,
+        text: 'modelServing.workbench.attention.checkFailed {"name":"nav.alerts"}',
+        to: '/observability/alerts',
+        action: 'nav.alerts',
       },
     ])
   })

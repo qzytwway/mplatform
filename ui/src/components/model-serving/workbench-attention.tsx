@@ -66,9 +66,6 @@ export function WorkbenchAttention({
   const text = (key: string, values?: Record<string, unknown>) =>
     t(`modelServing.workbench.attention.${key}`, values)
 
-  const failed = alerts.error
-    ? [...failedSources, { name: t('nav.alerts'), to: '/observability/alerts' }]
-    : failedSources
   const sorted = attentionItems(
     {
       services,
@@ -80,7 +77,8 @@ export function WorkbenchAttention({
       gateway,
       quotas,
       alerts: alerts.data,
-      failedSources: failed,
+      alertsFailed: !!alerts.error,
+      failedSources,
     },
     (key, values) => t(key, values)
   )

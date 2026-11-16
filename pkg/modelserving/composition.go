@@ -18,7 +18,7 @@ import (
 )
 
 // An Inference Service is its workload and the companions created next to
-// it, each named <service><suffix> and labelled with the service.
+// it, each named <Inference Service name><suffix> and labelled with that name.
 const (
 	routerSuffix        = "-router"
 	ingressSuffix       = "-gateway"
@@ -32,8 +32,8 @@ type companion struct {
 
 var ingressCompanion = companion{networkingv1.SchemeGroupVersion.WithKind("Ingress"), ingressSuffix}
 
-// serviceCompanions are every companion a service may have, in the order
-// they are deleted, the reverse of creation:
+// serviceCompanions are every companion an Inference Service may have, in
+// the order they are deleted, the reverse of creation:
 //   - the router with its RBAC objects, only under PD disaggregation;
 //   - the Gateway route, only once Published;
 //   - the OpenAI Service, always;
@@ -50,8 +50,8 @@ var serviceCompanions = []companion{
 	{podMonitorGVK, ""},
 }
 
-// isDisaggregated reports whether a service's workload runs it under PD
-// disaggregation, which a request tells by its mode.
+// isDisaggregated reports whether an Inference Service's workload runs it
+// under PD disaggregation. A request says so in its Deployment Mode instead.
 func isDisaggregated(workload *unstructured.Unstructured) bool {
 	return workload.GetKind() == disaggregatedSetGVK.Kind
 }
@@ -90,12 +90,12 @@ func deleteServiceObjects(ctx context.Context, cs *cluster.ClientSet, workload *
 	return nil
 }
 
-// deleteCompanion deletes a companion of the service of workload. A
-// same-named object without the service label is not ours and stays.
+// deleteCompanion deletes a companion of the Inference Service whose workload
+// is given. A same-named object without its label is not ours and stays.
 func deleteCompanion(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured, companion companion) error {
 	name := workload.GetName()
 	// Unstructured reads skip the informer cache, which may not have seen a
-	// service that was only just created.
+	// companion that was only just created.
 	object := &unstructured.Unstructured{}
 	object.SetGroupVersionKind(companion.gvk)
 	err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: workload.GetNamespace(), Name: name + companion.suffix}, object)
