@@ -53,6 +53,12 @@ func isService(workload *unstructured.Unstructured) bool {
 	return labels[managedByLabel] == managedByValue && labels[disaggregatedSetNameLabel] == ""
 }
 
+// isDisaggregated reports whether a service's workload runs it under PD
+// disaggregation, which a request tells by its mode.
+func isDisaggregated(workload *unstructured.Unstructured) bool {
+	return workload.GetKind() == disaggregatedSetGVK.Kind
+}
+
 func (h *Handler) ListServices(c *gin.Context) {
 	cs, err := h.cm.GetClientSet(c.Param("cluster"))
 	if err != nil {
@@ -171,7 +177,7 @@ func (h *Handler) GetService(c *gin.Context) {
 	ctx := c.Request.Context()
 	var router *appsv1.Deployment
 	var err error
-	if workload.GetKind() == disaggregatedSetGVK.Kind {
+	if isDisaggregated(workload) {
 		if router, err = getRouter(ctx, cs, workload); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -449,7 +455,7 @@ func (h *Handler) ScaleService(c *gin.Context) {
 	ctx := c.Request.Context()
 	// Look the router up first so a missing one fails before anything changes.
 	var router *appsv1.Deployment
-	if req.RouterReplicas != nil && workload.GetKind() == disaggregatedSetGVK.Kind {
+	if req.RouterReplicas != nil && isDisaggregated(workload) {
 		if router, err = getRouter(ctx, cs, workload); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -487,7 +493,7 @@ func (h *Handler) ScaleService(c *gin.Context) {
 // The router of a pd service is scaled apart.
 func scaleWorkload(workload *unstructured.Unstructured, req *scaleRequest) (*unstructured.Unstructured, error) {
 	scaled := workload.DeepCopy()
-	if workload.GetKind() != disaggregatedSetGVK.Kind {
+	if !isDisaggregated(workload) {
 		if req.Replicas < 1 {
 			return nil, fmt.Errorf("replicas must be at least 1")
 		}
