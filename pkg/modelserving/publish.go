@@ -19,7 +19,6 @@ import (
 
 const (
 	publishedAnnotation = "model-serving.mplatform.io/published"
-	ingressSuffix       = "-gateway"
 	ingressClass        = "higress"
 	// Higress routes on a request header when an Ingress carries this
 	// annotation prefix followed by the header name.
@@ -153,7 +152,7 @@ func publishService(ctx context.Context, cs *cluster.ClientSet, workload *unstru
 // rollbackPublish removes the route first, so nothing stays reachable even
 // if a later step fails. marked is nil when the workload was never marked.
 func rollbackPublish(ctx context.Context, cs *cluster.ClientSet, workload, marked *unstructured.Unstructured) error {
-	if err := deleteIngress(ctx, cs, workload); err != nil {
+	if err := deleteCompanion(ctx, cs, workload, ingressCompanion); err != nil {
 		return err
 	}
 	if marked != nil {
@@ -171,7 +170,7 @@ func rollbackPublish(ctx context.Context, cs *cluster.ClientSet, workload, marke
 // unpublishService removes the route before the mark, so a failure never
 // leaves a route that is reachable but not marked as published.
 func unpublishService(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	if err := deleteIngress(ctx, cs, workload); err != nil {
+	if err := deleteCompanion(ctx, cs, workload, ingressCompanion); err != nil {
 		return nil, err
 	}
 	return markPublished(ctx, cs, workload, false)
@@ -236,19 +235,4 @@ func applyIngress(ctx context.Context, cs *cluster.ClientSet, ingress *networkin
 	existing.Annotations = ingress.Annotations
 	existing.Spec = ingress.Spec
 	return cs.K8sClient.Update(ctx, &existing)
-}
-
-func deleteIngress(ctx context.Context, cs *cluster.ClientSet, workload *unstructured.Unstructured) error {
-	// An unstructured read skips the informer cache, which may not have seen
-	// a route that was only just created.
-	ingress := &unstructured.Unstructured{}
-	ingress.SetGroupVersionKind(networkingv1.SchemeGroupVersion.WithKind("Ingress"))
-	key := client.ObjectKey{Namespace: workload.GetNamespace(), Name: workload.GetName() + ingressSuffix}
-	if err := cs.K8sClient.Get(ctx, key, ingress); err != nil {
-		return client.IgnoreNotFound(err)
-	}
-	if ingress.GetLabels()[serviceLabel] != workload.GetName() {
-		return nil
-	}
-	return client.IgnoreNotFound(cs.K8sClient.Delete(ctx, ingress))
 }

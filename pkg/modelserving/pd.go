@@ -21,8 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const routerSuffix = "-router"
-
 func buildDisaggregatedSet(req *serviceRequest, served *model.ServedModel, storage *model.ModelStorage) (*unstructured.Unstructured, error) {
 	roles := []any{}
 	for _, role := range []struct {
