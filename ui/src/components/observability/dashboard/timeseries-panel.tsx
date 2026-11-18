@@ -47,7 +47,7 @@ function SeriesTooltip({ active, payload, label, series }: TooltipProps) {
     })
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
   return (
-    <div className="grid min-w-48 max-w-96 gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <div className="flex min-w-48 max-w-96 flex-col gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">
         {typeof label === 'number'
           ? formatDate(new Date(label).toISOString())
