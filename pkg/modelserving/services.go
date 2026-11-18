@@ -13,6 +13,7 @@ import (
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -209,7 +210,7 @@ func (h *Handler) CreateService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	crd, status, err := admitService(ctx, cs, &req)
+	crd, status, err := admitService(ctx, cs, &req, served)
 	if err != nil {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
@@ -286,7 +287,7 @@ func loadModelSource(modelID uint) (*model.ServedModel, *model.ModelStorage, err
 // admitService checks that the cluster can take a new service, returning the
 // CRD it deploys through, or the response status and error when it cannot.
 // Preview runs the same checks, so a service that previews also creates.
-func admitService(ctx context.Context, cs *cluster.ClientSet, req *serviceRequest) (string, int, error) {
+func admitService(ctx context.Context, cs *cluster.ClientSet, req *serviceRequest, served *model.ServedModel) (string, int, error) {
 	crd, status, err := requireWorkloadCRD(ctx, cs, req.Mode)
 	if err != nil {
 		return "", status, err
@@ -298,21 +299,40 @@ func admitService(ctx context.Context, cs *cluster.ClientSet, req *serviceReques
 	if other := groupNameConflict(req, workloads); other != "" {
 		return "", http.StatusConflict, fmt.Errorf("name %s clashes with inference service %s in this namespace: the pods and Services of each group are named <service>-<group index>", req.Name, other)
 	}
-	if status, err := requireServiceResources(ctx, cs, req); err != nil {
+	if status, err := requireServiceResources(ctx, cs, req, served); err != nil {
 		return "", status, err
 	}
 	return crd, http.StatusOK, nil
 }
 
 // requireServiceResources checks that what the pods of a service use exists
-// in the cluster: the vGPU components and the PriorityClass.
-func requireServiceResources(ctx context.Context, cs *cluster.ClientSet, req *serviceRequest) (int, error) {
+// in the cluster: the vGPU components, the PriorityClass and the model's claim.
+func requireServiceResources(ctx context.Context, cs *cluster.ClientSet, req *serviceRequest, served *model.ServedModel) (int, error) {
 	if req.VGPU != nil {
 		if status, err := requireModeComponents(cs, gpuModeVGPU); err != nil {
 			return status, err
 		}
 	}
-	return requirePriorityClass(ctx, cs, req.PriorityClassName)
+	if status, err := requirePriorityClass(ctx, cs, req.PriorityClassName); err != nil {
+		return status, err
+	}
+	return requireModelClaim(ctx, cs, req.Namespace, served)
+}
+
+// requireModelClaim checks that the claim of a pvc model exists in the
+// namespace of the service, as pods only mount claims of their own namespace.
+func requireModelClaim(ctx context.Context, cs *cluster.ClientSet, namespace string, served *model.ServedModel) (int, error) {
+	if served.SourceType != sourceTypePVC {
+		return http.StatusOK, nil
+	}
+	err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: served.Claim}, &corev1.PersistentVolumeClaim{})
+	switch {
+	case apierrors.IsNotFound(err):
+		return http.StatusBadRequest, fmt.Errorf("PersistentVolumeClaim %s does not exist in namespace %s; create it there before serving model %s", served.Claim, namespace, served.Name)
+	case err != nil:
+		return http.StatusInternalServerError, err
+	}
+	return http.StatusOK, nil
 }
 
 // requireWorkloadCRD returns the CRD a mode deploys through, or the response

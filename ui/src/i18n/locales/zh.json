@@ -2274,7 +2274,8 @@
     },
     "sourceTypes": {
       "local": "节点本地",
-      "s3": "对象存储"
+      "s3": "对象存储",
+      "pvc": "共享存储 (PVC)"
     },
     "services": {
       "title": "推理服务",
@@ -2466,7 +2467,7 @@
     "models": {
       "title": "模型仓库",
       "registry": "模型",
-      "description": "登记存放在节点磁盘或对象存储中的离线模型。",
+      "description": "登记存放在节点磁盘、对象存储或共享存储中的离线模型。",
       "create": "添加模型",
       "createTitle": "添加模型",
       "editTitle": "编辑模型",
@@ -2475,8 +2476,11 @@
       "nameHint": "调用方按此名称请求该模型。可使用字母、数字、点、下划线和连字符。",
       "source": "来源",
       "path": "路径",
+      "claim": "PVC 名称",
+      "claimHint": "指向 GPFS、Lustre、CephFS、JuiceFS、NFS 等共享存储的 PVC。每个使用该模型的推理服务所在命名空间都必须有同名 PVC；Pod 分布在多个节点时，访问模式需为 ReadOnlyMany 或 ReadWriteMany。",
       "localPathHint": "模型在节点上的绝对目录。",
       "s3PathHint": "模型在存储桶内的 key 前缀。",
+      "pvcPathHint": "模型在存储卷内的目录，留空表示使用卷的根目录。",
       "storageRequired": "尚未配置对象存储，配置后才能为对象存储中的模型创建推理服务。",
       "sections": {
         "basic": "基本信息",

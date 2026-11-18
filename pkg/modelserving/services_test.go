@@ -46,7 +46,7 @@ func (clusters testClusters) GetClientSet(name string) (*cluster.ClientSet, erro
 	return cs, nil
 }
 
-// newFakeClientSet knows Deployments, Secrets, PriorityClasses, CRDs and, as
+// newFakeClientSet knows Deployments, Secrets, PVCs, PriorityClasses, CRDs and, as
 // unstructured objects, the LeaderWorkerSet and DisaggregatedSet kinds.
 func newFakeClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.Object) *cluster.ClientSet {
 	t.Helper()
@@ -57,6 +57,7 @@ func newFakeClientSet(t *testing.T, funcs interceptor.Funcs, objects ...client.O
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme))
 	mapper := meta.NewDefaultRESTMapper(nil)
 	mapper.Add(corev1.SchemeGroupVersion.WithKind("Secret"), meta.RESTScopeNamespace)
+	mapper.Add(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"), meta.RESTScopeNamespace)
 	mapper.Add(schedulingv1.SchemeGroupVersion.WithKind("PriorityClass"), meta.RESTScopeRoot)
 	for _, gvk := range []schema.GroupVersionKind{lwsGVK, disaggregatedSetGVK} {
 		scheme.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})

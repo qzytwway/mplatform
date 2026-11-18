@@ -24,6 +24,12 @@ import {
 } from '@/components/ui/select'
 import { Field, Section } from '@/components/form-layout'
 
+const PATH_PLACEHOLDERS: Record<ModelSourceType, string> = {
+  local: '/data/models/qwen2.5-7b',
+  s3: 'qwen2.5-7b/',
+  pvc: 'qwen2.5-7b',
+}
+
 interface ModelFormProps {
   model: ServedModel | null
   storageConfigured: boolean
@@ -38,6 +44,7 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
   const [sourceType, setSourceType] = useState<ModelSourceType>(
     model?.sourceType ?? 'local'
   )
+  const [claim, setClaim] = useState(model?.claim ?? '')
   const [path, setPath] = useState(model?.path ?? '')
   const [description, setDescription] = useState(model?.description ?? '')
   const [isSaving, setIsSaving] = useState(false)
@@ -49,6 +56,7 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
       name: name.trim(),
       type,
       sourceType,
+      claim: sourceType === 'pvc' ? claim.trim() : '',
       path: path.trim(),
       description: description.trim(),
     }
@@ -147,28 +155,38 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
                 <SelectItem value="s3">
                   {t('modelServing.sourceTypes.s3')}
                 </SelectItem>
+                <SelectItem value="pvc">
+                  {t('modelServing.sourceTypes.pvc')}
+                </SelectItem>
               </SelectContent>
             </Select>
           </Field>
+          {sourceType === 'pvc' && (
+            <Field
+              id="served-model-claim"
+              label={t('modelServing.models.claim')}
+              hint={t('modelServing.models.claimHint')}
+            >
+              <Input
+                id="served-model-claim"
+                value={claim}
+                onChange={(event) => setClaim(event.target.value)}
+                placeholder="shared-models"
+                required
+              />
+            </Field>
+          )}
           <Field
             id="served-model-path"
             label={t('modelServing.models.path')}
-            hint={
-              sourceType === 'local'
-                ? t('modelServing.models.localPathHint')
-                : t('modelServing.models.s3PathHint')
-            }
+            hint={t(`modelServing.models.${sourceType}PathHint`)}
           >
             <Input
               id="served-model-path"
               value={path}
               onChange={(event) => setPath(event.target.value)}
-              placeholder={
-                sourceType === 'local'
-                  ? '/data/models/qwen2.5-7b'
-                  : 'qwen2.5-7b/'
-              }
-              required
+              placeholder={PATH_PLACEHOLDERS[sourceType]}
+              required={sourceType !== 'pvc'}
             />
             {sourceType === 's3' && !storageConfigured && (
               <p className="text-xs text-destructive">

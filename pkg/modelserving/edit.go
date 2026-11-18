@@ -93,7 +93,7 @@ func (h *Handler) UpdateService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if status, err := requireServiceResources(ctx, cs, &req); err != nil {
+	if status, err := requireServiceResources(ctx, cs, &req, served); err != nil {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
