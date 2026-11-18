@@ -162,11 +162,10 @@ func requiredToolPermissions(ctx context.Context, cs *cluster.ClientSet, toolNam
 			Namespace: permissionNamespace(resource, namespace),
 		}}, nil
 	case "query_prometheus":
-		// Prometheus queries can access metrics from any namespace
-		// Require at least read permission on pods in all namespaces
-		// This ensures users can only query metrics if they have cluster-wide read access
+		// Prometheus queries can read metrics from any namespace, so require
+		// the same permission as the HTTP query endpoint (pkg/metrics/query.go).
 		return []toolPermission{{
-			Resource:  string(common.Pods),
+			Resource:  "prometheus",
 			Verb:      string(common.VerbGet),
 			Namespace: common.AllNamespaces,
 		}}, nil
@@ -202,7 +201,13 @@ func AuthorizeTool(c *gin.Context, cs *cluster.ClientSet, toolName string, args 
 	}
 
 	for _, permission := range permissions {
-		if rbac.CanAccess(user, permission.Resource, permission.Verb, cs.Name, permission.Namespace) {
+		// Same rule as the HTTP handlers: an all-namespaces request needs a
+		// grant with no namespace exclusions.
+		if permission.Namespace == common.AllNamespaces {
+			if rbac.CanAccessAllNamespaces(user, permission.Resource, permission.Verb, cs.Name) {
+				continue
+			}
+		} else if rbac.CanAccess(user, permission.Resource, permission.Verb, cs.Name, permission.Namespace) {
 			continue
 		}
 		return "Forbidden: " + rbac.NoAccess(user.Key(), permission.Verb, permission.Resource, permission.Namespace, cs.Name), true

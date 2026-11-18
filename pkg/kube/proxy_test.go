@@ -2,8 +2,12 @@ package kube
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"k8s.io/client-go/rest"
 )
 
 func TestBuildProxyURL(t *testing.T) {
@@ -166,5 +170,28 @@ func TestCopyHeader(t *testing.T) {
 
 	if !reflect.DeepEqual(dst.Values("X-Test"), []string{"one", "two"}) {
 		t.Fatalf("copyHeader() copied values = %v, want %v", dst.Values("X-Test"), []string{"one", "two"})
+	}
+}
+
+func TestHandleProxySandboxesUpstreamPage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "auth_token", Value: "attacker"})
+		w.Header().Set("Content-Security-Policy", "default-src *")
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<script>fetch('/api/v1/admin/users')</script>"))
+	}))
+	defer upstream.Close()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/proxy/", nil)
+	HandleProxy(c, &K8sClient{Configuration: &rest.Config{Host: upstream.URL}}, "pods", "default", "web", "/")
+
+	if got := rec.Header().Values("Set-Cookie"); len(got) != 0 {
+		t.Fatalf("Set-Cookie = %v, want none", got)
+	}
+	if got := rec.Header().Values("Content-Security-Policy"); len(got) != 1 || got[0] != proxySandboxPolicy {
+		t.Fatalf("Content-Security-Policy = %v, want [%q]", got, proxySandboxPolicy)
 	}
 }

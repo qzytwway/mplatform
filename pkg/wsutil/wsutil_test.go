@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/websocket"
+	"github.com/qzytwway/mplatform/pkg/common"
 )
 
 func TestServeSerializesConcurrentMessages(t *testing.T) {
@@ -94,5 +95,46 @@ func TestSendErrorUsesErrorMessageType(t *testing.T) {
 	}
 	if message.Type != "error" || message.Data != "terminal unavailable" {
 		t.Fatalf("error message = %#v", message)
+	}
+}
+
+func TestServeChecksOrigin(t *testing.T) {
+	previous := common.CORSAllowedOrigins
+	common.CORSAllowedOrigins = []string{"http://localhost:5173"}
+	t.Cleanup(func() { common.CORSAllowedOrigins = previous })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Serve(w, r, func(*Session) {})
+	}))
+	t.Cleanup(server.Close)
+	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
+
+	tests := []struct {
+		name   string
+		origin string
+		want   bool
+	}{
+		{name: "no origin (non-browser client)", origin: "", want: true},
+		{name: "same host", origin: server.URL, want: true},
+		{name: "configured dev origin", origin: "http://localhost:5173", want: true},
+		{name: "other site", origin: "https://wiki.example.com", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			header := http.Header{}
+			if tt.origin != "" {
+				header.Set("Origin", tt.origin)
+			}
+			conn, response, err := websocket.DefaultDialer.Dial(websocketURL, header)
+			if response != nil {
+				_ = response.Body.Close()
+			}
+			if conn != nil {
+				_ = conn.Close()
+			}
+			if got := err == nil; got != tt.want {
+				t.Fatalf("connected = %v (err %v), want %v", got, err, tt.want)
+			}
+		})
 	}
 }

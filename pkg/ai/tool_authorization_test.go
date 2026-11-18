@@ -140,7 +140,7 @@ func TestRequiredToolPermissions(t *testing.T) {
 			name:     "prometheus query",
 			toolName: "query_prometheus",
 			args:     map[string]interface{}{"query": "up"},
-			want:     []toolPermission{{Resource: "pods", Verb: "get", Namespace: "_all"}},
+			want:     []toolPermission{{Resource: "prometheus", Verb: "get", Namespace: "_all"}},
 		},
 	}
 
@@ -289,5 +289,48 @@ func newToolAuthorizationTestClientSet(t *testing.T) *cluster.ClientSet {
 	return &cluster.ClientSet{
 		Name:      "cluster-a",
 		K8sClient: &kube.K8sClient{ClientSet: clientSet},
+	}
+}
+
+func TestAuthorizeToolAllNamespacesRespectsExclusions(t *testing.T) {
+	cs := newToolAuthorizationTestClientSet(t)
+	excludingKubeSystem := common.Role{
+		Name:       "all-but-kube-system",
+		Clusters:   []string{"*"},
+		Namespaces: []string{"*", "!kube-system"},
+		Resources:  []string{"*"},
+		Verbs:      []string{"get"},
+	}
+	unrestricted := common.Role{
+		Name:       "all-namespaces",
+		Clusters:   []string{"*"},
+		Namespaces: []string{"*"},
+		Resources:  []string{"*"},
+		Verbs:      []string{"get"},
+	}
+	tests := []struct {
+		name      string
+		role      common.Role
+		toolName  string
+		args      map[string]interface{}
+		wantError bool
+	}{
+		{name: "list in allowed namespace", role: excludingKubeSystem, toolName: "list_resources", args: map[string]interface{}{"kind": "pods", "namespace": "default"}},
+		{name: "list across namespaces with exclusion", role: excludingKubeSystem, toolName: "list_resources", args: map[string]interface{}{"kind": "pods"}, wantError: true},
+		{name: "prometheus with exclusion", role: excludingKubeSystem, toolName: "query_prometheus", args: map[string]interface{}{"query": "up"}, wantError: true},
+		{name: "list across namespaces unrestricted", role: unrestricted, toolName: "list_resources", args: map[string]interface{}{"kind": "pods"}},
+		{name: "prometheus unrestricted", role: unrestricted, toolName: "query_prometheus", args: map[string]interface{}{"query": "up"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/ai/chat", nil)
+			c.Set("user", model.User{Username: "alice", Roles: []common.Role{tc.role}})
+
+			result, isError := AuthorizeTool(c, cs, tc.toolName, tc.args)
+			if isError != tc.wantError {
+				t.Fatalf("AuthorizeTool() error = %v, want %v; result=%q", isError, tc.wantError, result)
+			}
+		})
 	}
 }
