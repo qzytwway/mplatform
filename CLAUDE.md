@@ -37,6 +37,12 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
   disable rules, commit with `-a`, or work around the hooks. Rehearse with
   `git commit --dry-run`. Write files with the edit tools rather than heredocs in
   Bash: the hooks' command matcher can mistake a heredoc command for a commit.
+- Git pre-commit hook: run `./scripts/install-hooks.sh` once per clone (git hooks
+  aren't versioned). On every commit with staged changes it runs `make lint` when
+  `scripts/lint-gate.sh check` shows the gate already passed (Claude's commits), and
+  `make pre-commit` (format + lint) otherwise; it blocks the commit on failure. So
+  Claude's commits must also pass `make lint`: run it before committing to save a
+  round trip. Fix the reported problems instead of using `--no-verify`.
 - Lint: `make lint` runs `go vet`, golangci-lint (`.golangci.yml`, binary fetched into
   `bin/`) and ESLint in `ui/` and `e2e/`. One part at a time: `bin/golangci-lint run`,
   `pnpm --dir ui run lint`, `pnpm --dir e2e run lint`. The e2e part needs
