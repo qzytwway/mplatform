@@ -97,7 +97,7 @@ for i in {1..30}; do
     if kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath='{.data.token}' 2>/dev/null | grep -q .; then
         break
     fi
-    if [ $i -eq 30 ]; then
+    if [ "$i" -eq 30 ]; then
         echo "Error: Token was not populated in secret after 30 seconds"
         exit 1
     fi

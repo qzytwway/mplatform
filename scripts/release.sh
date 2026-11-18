@@ -15,7 +15,7 @@ echo "🚀 Releasing Helm Chart version $current_version to $version..."
 if command -v gsed >/dev/null 2>&1; then
   SED_CMD=gsed
 else
-  SED_CMD=sed
+  SED_CMD="sed"
 fi
 
 $SED_CMD -i "s/$current_version/$version/g" "$CHART_DIR/Chart.yaml"
