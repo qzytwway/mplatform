@@ -132,7 +132,7 @@ dev: ## Run in development mode
 	@echo "🔄 Starting development mode..."
 	@echo "🚀 Starting $(BINARY_NAME) server..."
 	CGO_ENABLED=0 go build -trimpath $(LDFLAGS) -o $(BINARY_NAME) .
-	./$(BINARY_NAME) -v=5 & \
+	CORS_ALLOWED_ORIGINS=$${CORS_ALLOWED_ORIGINS:-http://localhost:5173} ./$(BINARY_NAME) -v=5 & \
 	BACKEND_PID=$$!; \
 	echo "Backend PID: $$BACKEND_PID"; \
 	trap 'echo "🛑 Stopping backend server..."; kill $$BACKEND_PID 2>/dev/null; exit' INT TERM; \

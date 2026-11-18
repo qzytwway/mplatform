@@ -3,10 +3,14 @@ package wsutil
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/qzytwway/mplatform/pkg/common"
 	"k8s.io/klog/v2"
 )
 
@@ -34,9 +38,19 @@ type Session struct {
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
+	CheckOrigin: checkOrigin,
+}
+
+// checkOrigin accepts same-host pages, the dev origins in
+// CORS_ALLOWED_ORIGINS, and non-browser clients (no Origin header), so other
+// sites can't open terminals with the viewer's cookie.
+func checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" || slices.Contains(common.CORSAllowedOrigins, strings.TrimRight(origin, "/")) {
 		return true
-	},
+	}
+	u, err := url.Parse(origin)
+	return err == nil && strings.EqualFold(u.Host, r.Host)
 }
 
 func Serve(w http.ResponseWriter, r *http.Request, handle func(*Session)) {
