@@ -73,19 +73,44 @@ secret:
   existingSecret: ""
 
 # Database configuration
-# type: sqlite | postgres | mysql
-# - sqlite: embedded DB (default). If you choose sqlite and want data to survive pod restarts,
-#   enable persistence below so a PVC will be used to store the sqlite file.
-# - postgres/mysql: connection fields for external DBs.
+# type: postgres | mysql | sqlite
+# - postgres (default): with db.dsn empty, the chart runs its own PostgreSQL
+#   (see db.postgresql below). Set db.dsn to use an external PostgreSQL instead.
+# - mysql: external MySQL, db.dsn is required.
+# - sqlite: embedded file DB for trials and development. Enable
+#   db.sqlite.persistence so data survives pod restarts.
+# Switching an existing release between databases does not move its data.
 db:
-  # supported values: sqlite, postgres, mysql
-  type: sqlite
-  # full DSN string for MySQL/Postgres.
-  # when type is mysql/postgres, is required
-  # leave empty for use existingSecret to provide it when type is not sqlite
-  # Example: "mysql://user:password@tcp(host:port)/dbname"
+  # supported values: postgres, mysql, sqlite
+  type: postgres
+  # full DSN string for an external MySQL/PostgreSQL.
+  # Leave empty to use the built-in PostgreSQL, or when secret.existingSecret provides DB_DSN.
+  # Examples: "mysql://user:password@tcp(host:3306)/dbname"
+  #           "postgres://user:password@host:5432/dbname?sslmode=require"
   dsn: ""
-  
+  # Set to true after copying an existing SQLite release's data into the new
+  # database; until then an upgrade away from SQLite is refused.
+  migratedFromSqlite: false
+
+  # Built-in PostgreSQL, used when type is postgres and dsn is empty.
+  postgresql:
+    image:
+      repository: postgres
+      tag: "17.6-alpine"
+      pullPolicy: IfNotPresent
+    database: mplatform
+    username: mplatform
+    # Generated on first install and kept across upgrades when empty.
+    # Only read when the data directory is first created; changing it later
+    # does not change the password inside the database.
+    password: ""
+    persistence:
+      # Keep enabled in production: without it the data is lost when the pod moves.
+      enabled: true
+      storageClass: ""
+      size: 8Gi
+    resources: {}
+
   # sqlite-specific options
   sqlite:
     # If true, the chart will create a PVC and mount it into the pod for the sqlite DB file.

@@ -69,3 +69,51 @@ Create the name of the service account to use
 {{- printf "%s-secret" (include "mplatform.fullname" .) }}
 {{- end }}
 {{- end }}
+
+{{/*
+"true" when the chart runs its own PostgreSQL: db.type is postgres and no
+external database was given (db.dsn, or DB_DSN in an existing Secret).
+*/}}
+{{- define "mplatform.postgresql.enabled" -}}
+{{- if and (eq .Values.db.type "postgres") (not .Values.db.dsn) .Values.secret.create (not .Values.secret.existingSecret) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{- define "mplatform.postgresql.fullname" -}}
+{{- printf "%s-postgresql" (include "mplatform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "mplatform.postgresql.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "mplatform.name" . }}-postgresql
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Refuses an upgrade that would move a release from SQLite to PostgreSQL:
+the new database starts empty and its first visitor could claim the super
+user. Data is not migrated by the chart.
+*/}}
+{{- define "mplatform.validateDatabase" -}}
+{{- if and .Release.IsUpgrade (ne .Values.db.type "sqlite") (not .Values.db.migratedFromSqlite) }}
+{{- $deployment := lookup "apps/v1" "Deployment" .Release.Namespace (include "mplatform.fullname" .) }}
+{{- range (dig "spec" "template" "spec" "containers" list $deployment) }}
+{{- range (.env | default list) }}
+{{- if and (eq .name "DB_TYPE") (eq (.value | default "") "sqlite") }}
+{{- fail "This release stores its data in SQLite. Set db.type=sqlite to keep it, or migrate the data to the new database first and then set db.migratedFromSqlite=true (see the chart README)." }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- with .Values.db.postgresql }}
+{{- if and .password (not (regexMatch "^[A-Za-z0-9._~-]+$" .password)) }}
+{{- fail "db.postgresql.password may only contain letters, digits and . _ ~ -" }}
+{{- end }}
+{{- if not (regexMatch "^[a-z_][a-z0-9_]*$" .username) }}
+{{- fail "db.postgresql.username must be lower-case letters, digits and _" }}
+{{- end }}
+{{- if not (regexMatch "^[a-z_][a-z0-9_]*$" .database) }}
+{{- fail "db.postgresql.database must be lower-case letters, digits and _" }}
+{{- end }}
+{{- end }}
+{{- end }}

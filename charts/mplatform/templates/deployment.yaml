@@ -1,3 +1,4 @@
+{{- include "mplatform.validateDatabase" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,6 +36,14 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if include "mplatform.postgresql.enabled" . }}
+      # The app exits when it can't reach its database, so wait for it.
+      initContainers:
+        - name: wait-for-postgresql
+          image: "{{ .Values.db.postgresql.image.repository }}:{{ .Values.db.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.db.postgresql.image.pullPolicy }}
+          command: ["sh", "-c", "until pg_isready -h {{ include "mplatform.postgresql.fullname" . }} -p 5432; do sleep 2; done"]
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           {{- with .Values.securityContext }}
@@ -68,6 +77,17 @@ spec:
               value: sqlite
             - name: DB_DSN
               value: {{ (printf "%s/%s?%s" .Values.db.sqlite.persistence.mountPath .Values.db.sqlite.persistence.filename .Values.db.sqlite.options) }}
+            {{- end }}
+            {{- if include "mplatform.postgresql.enabled" . }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mplatform.postgresql.fullname" . }}
+                  key: password
+            - name: DB_TYPE
+              value: postgres
+            - name: DB_DSN
+              value: "postgres://{{ .Values.db.postgresql.username }}:$(DB_PASSWORD)@{{ include "mplatform.postgresql.fullname" . }}:5432/{{ .Values.db.postgresql.database }}?sslmode=disable"
             {{- end }}
             - name: CHART_DIR
               value: {{ .Values.chartStore.mountPath }}
