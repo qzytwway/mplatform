@@ -364,38 +364,45 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     []
   )
 
-  useEffect(() => {
+  // Show cached or favorite results right away while a search is pending.
+  const [prevResultSource, setPrevResultSource] = useState<{
+    favorites: typeof favorites
+    lastSearchResults: typeof lastSearchResults
+    query: string
+    open: boolean
+  } | null>(null)
+  if (
+    prevResultSource?.favorites !== favorites ||
+    prevResultSource.lastSearchResults !== lastSearchResults ||
+    prevResultSource.query !== query ||
+    prevResultSource.open !== open
+  ) {
+    setPrevResultSource({ favorites, lastSearchResults, query, open })
     const searchQuery = query.trim()
     const favoriteResults = favorites || []
     const previousResults = lastSearchResults || []
     const isLabelQuery = searchQuery.includes(':') || searchQuery.includes('=')
-    const prefixResults = getCachedPrefixResults(searchQuery)
     if (!searchQuery) {
       setResults(favoriteResults.length > 0 ? favoriteResults : previousResults)
-      return
-    }
-
-    if (isLabelQuery) {
+    } else if (isLabelQuery) {
       setResults(
         cachedSearchResultsByQuery.get(
           normalizeCachedSearchQuery(searchQuery)
         ) || []
       )
-      return
+    } else {
+      const cachedResults =
+        getCachedPrefixResults(searchQuery) ??
+        (previousResults.length > 0
+          ? previousResults
+          : favoriteResults.length > 0
+            ? favoriteResults
+            : undefined)
+      setResults((currentResults) =>
+        filterResults(cachedResults || currentResults, searchQuery)
+      )
     }
-
-    const cachedResults =
-      prefixResults ??
-      (previousResults.length > 0
-        ? previousResults
-        : favoriteResults.length > 0
-          ? favoriteResults
-          : undefined)
-
-    setResults((currentResults) =>
-      filterResults(cachedResults || currentResults, searchQuery)
-    )
-  }, [favorites, filterResults, lastSearchResults, query])
+  }
 
   const performSearch = useCallback(
     async (searchQuery: string, requestId: number) => {
@@ -421,17 +428,21 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     []
   )
 
+  const [prevLoadingQuery, setPrevLoadingQuery] = useState(query)
+  if (query !== prevLoadingQuery) {
+    setPrevLoadingQuery(query)
+    setIsLoading(query.trim() !== '')
+  }
+
   useEffect(() => {
     const searchQuery = query.trim()
     if (!searchQuery) {
       searchRequestIdRef.current += 1
-      setIsLoading(false)
       return
     }
 
     const requestId = searchRequestIdRef.current + 1
     searchRequestIdRef.current = requestId
-    setIsLoading(true)
 
     const timeoutId = setTimeout(() => {
       performSearch(searchQuery, requestId)
@@ -451,21 +462,18 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   )
 
   // Clear state when dialog closes
-  useEffect(() => {
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
     if (!open) {
-      searchRequestIdRef.current += 1
       setQuery('')
       setIsLoading(false)
     }
-  }, [open])
+  }
 
   useEffect(() => {
-    if (open && query === '') {
-      const favoriteResults = favorites || []
-      const previousResults = lastSearchResults || []
-      setResults(favoriteResults.length > 0 ? favoriteResults : previousResults)
-    }
-  }, [open, query, favorites, lastSearchResults])
+    if (!open) searchRequestIdRef.current += 1
+  }, [open])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

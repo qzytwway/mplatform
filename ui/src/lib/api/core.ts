@@ -27,6 +27,7 @@ import {
 } from '@/types/api'
 import { getResourceQueryKey } from '@/lib/resource-metadata'
 import { useCluster } from '@/hooks/use-cluster'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 
 import { API_BASE_URL, apiClient } from '../api-client'
 import {
@@ -660,6 +661,7 @@ export function useResourcesWatch<T extends ResourceType>(
     enabled?: boolean
   }
 ) {
+  const { labelSelector, fieldSelector, reduce, enabled } = options ?? {}
   const [data, setData] = useState<ResourcesItems<T> | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -669,22 +671,29 @@ export function useResourcesWatch<T extends ResourceType>(
   const buildUrl = useCallback(() => {
     const ns = namespace || '_all'
     const params = new URLSearchParams()
-    if (options?.reduce !== false) params.append('reduce', 'true')
-    if (options?.labelSelector)
-      params.append('labelSelector', options.labelSelector)
-    if (options?.fieldSelector)
-      params.append('fieldSelector', options.fieldSelector)
+    if (reduce !== false) params.append('reduce', 'true')
+    if (labelSelector) params.append('labelSelector', labelSelector)
+    if (fieldSelector) params.append('fieldSelector', fieldSelector)
     appendCurrentClusterParam(params)
     return withSubPath(
       `${API_BASE_URL}/${resource}/${ns}/watch?${params.toString()}`
     )
-  }, [
+  }, [resource, namespace, reduce, labelSelector, fieldSelector])
+
+  // Start from a clean state whenever the watch restarts.
+  const watchChanged = useDepsChanged([
     resource,
     namespace,
-    options?.reduce,
-    options?.labelSelector,
-    options?.fieldSelector,
+    reduce,
+    labelSelector,
+    fieldSelector,
+    enabled,
   ])
+  if (watchChanged && enabled !== false) {
+    setData(undefined)
+    setError(null)
+    setIsConnected(false)
+  }
 
   const disconnect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -695,11 +704,8 @@ export function useResourcesWatch<T extends ResourceType>(
 
   const connect = useCallback(() => {
     disconnect()
-    setData(undefined)
-    if (options?.enabled === false) return
+    if (enabled === false) return
     const url = buildUrl()
-    setError(null)
-    setIsConnected(false)
 
     try {
       const es = new EventSource(url, { withCredentials: true })
@@ -770,23 +776,26 @@ export function useResourcesWatch<T extends ResourceType>(
       }
     } catch (err) {
       if (err instanceof Error) setError(err)
-      setIsLoading(false)
-      setIsConnected(false)
     }
-  }, [buildUrl, disconnect, options?.enabled])
+  }, [buildUrl, disconnect, enabled])
 
   const refetch = useCallback(() => {
     disconnect()
+    setData(undefined)
+    setError(null)
+    setIsConnected(false)
     setTimeout(connect, 100)
   }, [disconnect, connect])
 
   useEffect(() => {
-    if (options?.enabled === false) return
+    if (enabled === false) return
+    // connect only sets state synchronously when EventSource rejects the URL.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     connect()
     return () => {
       disconnect()
     }
-  }, [connect, disconnect, options?.enabled])
+  }, [connect, disconnect, enabled])
 
   return { data, isLoading, error, isConnected, refetch, stop: disconnect }
 }

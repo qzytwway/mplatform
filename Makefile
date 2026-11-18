@@ -148,6 +148,8 @@ lint: golangci-lint ## Run linters
 	$(GOLANGCI_LINT) run
 	@echo "Frontend linting..."
 	cd $(UI_DIR) && pnpm run lint
+	@echo "E2E linting..."
+	cd $(E2E_DIR) && pnpm run lint
 
 golangci-lint: ## Download golangci-lint locally if necessary.
 	$(GOLANGCI_LINT) version 2>/dev/null | grep -q "version $(GOLANGCI_LINT_VERSION:v%=%) " || curl -sSfL https://golangci-lint.run/install.sh | sh -s $(GOLANGCI_LINT_VERSION)

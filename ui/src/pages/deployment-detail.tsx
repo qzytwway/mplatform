@@ -16,6 +16,7 @@ import {
 } from '@/lib/api'
 import { getDeploymentStatus, toSimpleContainer } from '@/lib/k8s'
 import { translateError } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -109,32 +110,34 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
     return containerPort || 80
   }, [deployment])
 
-  useEffect(() => {
-    if (deployment) {
-      setScaleReplicas(deployment.spec?.replicas || 1)
-    }
-  }, [deployment])
+  const deploymentChanged = useDepsChanged([deployment])
+  if (deploymentChanged && deployment) {
+    setScaleReplicas(deployment.spec?.replicas || 1)
+  }
 
-  useEffect(() => {
+  if (useDepsChanged([defaultExposePort])) {
     setExposePort(defaultExposePort)
     setExposeTargetPort(defaultExposePort)
-  }, [defaultExposePort])
+  }
+
+  const deploymentStatus = deployment
+    ? getDeploymentStatus(deployment)
+    : undefined
+  const isDeploymentStable =
+    deploymentStatus === 'Available' ||
+    deploymentStatus === 'Scaled Down' ||
+    deploymentStatus === 'Paused'
+  // Poll quickly while a rollout is in progress.
+  if (deployment && !isDeploymentStable && refreshInterval !== 1000) {
+    setRefreshInterval(1000)
+  }
 
   useEffect(() => {
-    if (deployment) {
-      const status = getDeploymentStatus(deployment)
-      const isStable =
-        status === 'Available' ||
-        status === 'Scaled Down' ||
-        status === 'Paused'
-      if (isStable) {
-        const timer = setTimeout(() => setRefreshInterval(0), 2000)
-        return () => clearTimeout(timer)
-      } else {
-        setRefreshInterval(1000)
-      }
+    if (deployment && isDeploymentStable) {
+      const timer = setTimeout(() => setRefreshInterval(0), 2000)
+      return () => clearTimeout(timer)
     }
-  }, [deployment, refreshInterval])
+  }, [deployment, isDeploymentStable, refreshInterval])
 
   const handleSaveYaml = async (content: Deployment) => {
     await updateResource('deployments', name, namespace, content)

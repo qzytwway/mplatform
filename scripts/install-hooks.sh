@@ -43,8 +43,15 @@ fi
 # Store the list of staged files before running pre-commit
 STAGED_FILES=$(git diff --cached --name-only)
 
+# Skip lint when scripts/lint-gate.sh already passed it for exactly these staged changes
+PRE_COMMIT_TARGET=pre-commit
+if scripts/lint-gate.sh check 2>/dev/null; then
+    echo "ℹ️  Lint already passed for these staged changes; formatting only."
+    PRE_COMMIT_TARGET=format
+fi
+
 # Run pre-commit checks
-if ! make pre-commit; then
+if ! make "$PRE_COMMIT_TARGET"; then
     echo "❌ Pre-commit checks failed!"
     echo "Please fix the issues above and try committing again."
     echo "To skip pre-commit checks, use 'git commit --no-verify'"

@@ -26,6 +26,7 @@ import {
   defineMonacoBackgroundThemes,
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -156,46 +157,48 @@ export function LogViewer({
     normalizedFilterTermRef.current = filterTerm.toLocaleLowerCase()
   }, [filterTerm])
 
-  useEffect(() => {
-    if (podName) {
-      if (selectPodName !== podName) {
-        setSelectPodName(podName)
-      }
-      return
-    }
-    if (pods && pods.length > 0) {
-      if (
+  // Keep the selected pod valid as the props change.
+  const validPodName = podName
+    ? podName
+    : pods &&
+        pods.length > 0 &&
         selectPodName !== '_all' &&
         (!selectPodName ||
           !pods.find((p) => p.metadata?.name === selectPodName))
-      ) {
-        setSelectPodName(pods[0].metadata?.name)
-      }
-    }
-  }, [podName, pods, selectPodName])
+      ? pods[0].metadata?.name
+      : selectPodName
+  if (validPodName !== selectPodName) {
+    setSelectPodName(validPodName)
+  }
 
-  useEffect(() => {
+  // Keep the selected container valid as the props change. Compare names, not
+  // arrays: callers may pass new arrays on every render.
+  const containerNames = containers
+    .map((container) => container.name)
+    .join('\n')
+  if (useDepsChanged([containerNames, selectedContainerName])) {
     if (containers.length === 0) {
       setSelectedContainer('')
-      return
+    } else {
+      setSelectedContainer((current) => {
+        if (
+          selectedContainerName &&
+          containers.some(
+            (container) => container.name === selectedContainerName
+          )
+        ) {
+          return selectedContainerName
+        }
+        if (
+          !current ||
+          !containers.some((container) => container.name === current)
+        ) {
+          return containers[0].name
+        }
+        return current
+      })
     }
-
-    setSelectedContainer((current) => {
-      if (
-        selectedContainerName &&
-        containers.some((container) => container.name === selectedContainerName)
-      ) {
-        return selectedContainerName
-      }
-      if (
-        !current ||
-        !containers.some((container) => container.name === current)
-      ) {
-        return containers[0].name
-      }
-      return current
-    })
-  }, [containers, selectedContainerName])
+  }
 
   // Handle font size change and persist to localStorage
   const handleFontSizeChange = useCallback((size: number) => {
@@ -348,8 +351,7 @@ export function LogViewer({
     [writeLogToEditor]
   )
 
-  const cleanLog = useCallback(() => {
-    setLogCount(0)
+  const resetEditor = useCallback(() => {
     ansiStateRef.current = {}
     decorationIdsRef.current = []
     pendingLogsRef.current = []
@@ -360,6 +362,11 @@ export function LogViewer({
       }
     }
   }, [])
+
+  const cleanLog = useCallback(() => {
+    setLogCount(0)
+    resetEditor()
+  }, [resetEditor])
 
   const logsOptions = useMemo(
     () => ({
@@ -396,7 +403,9 @@ export function LogViewer({
   } = useLogsWebSocket(namespace, selectPodName || '', logsOptions)
 
   const stopStreamingRef = useRef<() => void>(stopStreaming)
-  stopStreamingRef.current = stopStreaming
+  useEffect(() => {
+    stopStreamingRef.current = stopStreaming
+  }, [stopStreaming])
 
   // Clean up WebSocket connection when component unmounts
   useEffect(() => {
@@ -407,23 +416,29 @@ export function LogViewer({
     }
   }, [])
 
+  // Show reconnecting state when parameters change
+  const streamKey = `${selectedContainer}|${selectPodName}|${tailLines}|${timestamps}|${previous}`
+  const [prevStreamKey, setPrevStreamKey] = useState<string | null>(null)
+  if (streamKey !== prevStreamKey) {
+    setPrevStreamKey(streamKey)
+    setIsReconnecting(true)
+    setLogCount(0)
+  }
+
   // Stop previous stream when critical parameters change
   useEffect(() => {
     // Clear the editor BEFORE the new stream starts. We deliberately
     // clear here (in response to a real parameter change) instead of on
     // every WebSocket onopen, so that the historical tail buffer delivered
     // by the server immediately after connect is preserved.
-    cleanLog()
-
-    // Show reconnecting state when parameters change
-    setIsReconnecting(true)
+    resetEditor()
   }, [
     selectedContainer,
     selectPodName,
     tailLines,
     timestamps,
     previous,
-    cleanLog,
+    resetEditor,
   ])
 
   // Hide reconnecting state when loading completes

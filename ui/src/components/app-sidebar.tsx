@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import icon from '@/assets/icon.svg'
 import { useAuth } from '@/contexts/auth-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
@@ -232,9 +232,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     group.items.some(isSidebarItemActive)
   )?.id
 
-  useEffect(() => {
+  const [prevActiveGroupID, setPrevActiveGroupID] = useState<string>()
+  if (activeGroupID !== prevActiveGroupID) {
+    setPrevActiveGroupID(activeGroupID)
     if (activeGroupID) setOpenGroupID(activeGroupID)
-  }, [activeGroupID])
+  }
 
   const renderSidebarItem = (item: SidebarItem): React.ReactNode => {
     const title = item.titleKey

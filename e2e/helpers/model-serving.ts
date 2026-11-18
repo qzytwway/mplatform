@@ -698,14 +698,23 @@ export function routerWorkers(namespace: string, name: string, pod?: string) {
       ])
     : serviceGet(namespace, name, '/workers')
   const body = JSON.parse(raw) as {
-    workers: Record<string, any>[]
+    workers: {
+      url: string
+      is_healthy?: boolean
+      bootstrap_port?: number | null
+      worker_type?:
+        | string
+        | Record<string, { bootstrap_port?: number | null } | undefined>
+    }[]
   }
   return body.workers.map((worker): RouterWorker => {
     const type = JSON.stringify(worker.worker_type ?? '').toLowerCase()
+    const roles =
+      typeof worker.worker_type === 'object' ? worker.worker_type : undefined
     const bootstrapPort =
       worker.bootstrap_port ??
-      worker.worker_type?.Prefill?.bootstrap_port ??
-      worker.worker_type?.prefill?.bootstrap_port ??
+      roles?.Prefill?.bootstrap_port ??
+      roles?.prefill?.bootstrap_port ??
       null
     return {
       url: worker.url,

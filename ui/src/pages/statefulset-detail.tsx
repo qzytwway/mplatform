@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { IconReload, IconScale } from '@tabler/icons-react'
 import { StatefulSet } from 'kubernetes-types/apps/v1'
 import type { Container } from 'kubernetes-types/core/v1'
@@ -12,6 +12,7 @@ import {
   useResourcesWatch,
 } from '@/lib/api'
 import { translateError } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,23 +69,20 @@ export function StatefulSetDetail(props: { namespace: string; name: string }) {
   const { data: statefulSetEvents, isLoading: isEventsLoading } =
     useResourcesEvents('statefulsets', name, namespace)
 
-  useEffect(() => {
-    if (statefulset) {
-      setScaleReplicas(statefulset.spec?.replicas || 0)
-    }
-  }, [statefulset])
+  const statefulsetChanged = useDepsChanged([statefulset])
+  if (statefulsetChanged && statefulset) {
+    setScaleReplicas(statefulset.spec?.replicas || 0)
+  }
 
-  useEffect(() => {
-    if (statefulset && refreshInterval > 0) {
-      const { status } = statefulset
-      const readyReplicas = status?.readyReplicas || 0
-      const replicas = status?.replicas || 0
-      const updatedReplicas = status?.updatedReplicas || 0
-      const isStable =
-        readyReplicas === replicas && updatedReplicas === replicas
-      if (isStable) setRefreshInterval(0)
-    }
-  }, [statefulset, refreshInterval])
+  // Stop polling once the rollout is stable.
+  if (statefulset && refreshInterval > 0) {
+    const { status } = statefulset
+    const readyReplicas = status?.readyReplicas || 0
+    const replicas = status?.replicas || 0
+    const updatedReplicas = status?.updatedReplicas || 0
+    const isStable = readyReplicas === replicas && updatedReplicas === replicas
+    if (isStable) setRefreshInterval(0)
+  }
 
   const handleSaveYaml = async (content: StatefulSet) => {
     await updateResource('statefulsets', name, namespace, content)

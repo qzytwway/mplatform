@@ -145,9 +145,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [refetchBootstrap])
 
+  const bootstrapUser = bootstrap?.user
   const user = useMemo(
-    () => (bootstrap?.user ? normalizeUser(bootstrap.user) : null),
-    [bootstrap?.user]
+    () => (bootstrapUser ? normalizeUser(bootstrapUser) : null),
+    [bootstrapUser]
   )
 
   useEffect(() => {

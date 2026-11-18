@@ -68,33 +68,32 @@ export function AccountSettingsDialog({
   const [savingMFA, setSavingMFA] = useState(false)
   const [savingPasskey, setSavingPasskey] = useState(false)
 
-  useEffect(() => {
-    if (!open) {
-      setPasswordConfirmAction(null)
-      setSecurityCurrentPassword('')
-      setSecurityMFACode('')
-      setSecurityPasswordError('')
-      return
-    }
-
-    setNickname(user?.name || '')
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmPassword('')
-    setMFASetup(null)
-    setMFACode('')
-    setPasskeys([])
-    setPasskeyName('')
+  const resetKey = `${open}|${passkeyLoginEnabled}|${user?.name ?? ''}`
+  const [prevResetKey, setPrevResetKey] = useState<string | null>(null)
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey)
     setPasswordConfirmAction(null)
     setSecurityCurrentPassword('')
     setSecurityMFACode('')
     setSecurityPasswordError('')
-    setProfileError('')
-    setPasswordError('')
-    setMFAError('')
-    setPasskeyError('')
+    if (open) {
+      setNickname(user?.name || '')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setMFASetup(null)
+      setMFACode('')
+      setPasskeys([])
+      setPasskeyName('')
+      setProfileError('')
+      setPasswordError('')
+      setMFAError('')
+      setPasskeyError('')
+    }
+  }
 
-    if (!passkeyLoginEnabled) return
+  useEffect(() => {
+    if (!open || !passkeyLoginEnabled) return
 
     let cancelled = false
     listCurrentUserPasskeys()

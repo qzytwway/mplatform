@@ -55,6 +55,7 @@ export function ProvisionDetailPage() {
     isLoading,
     error,
     refetch,
+    dataUpdatedAt,
   } = useProvision(provisionId)
   const { data: clusters } = useClusterList()
   const [confirmingCancel, setConfirmingCancel] = useState(false)
@@ -134,7 +135,7 @@ export function ProvisionDetailPage() {
     : undefined
   const endedAt = provision.finishedAt
     ? new Date(provision.finishedAt).getTime()
-    : Date.now()
+    : dataUpdatedAt
   const clusterName =
     clusters?.find((cluster) => cluster.id === provision.clusterId)?.name ??
     provision.name
@@ -242,7 +243,7 @@ export function ProvisionDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <StepTimeline steps={steps} />
+            <StepTimeline steps={steps} now={dataUpdatedAt} />
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
               {t('clusterProvision.detail.stepsNote')}
             </p>

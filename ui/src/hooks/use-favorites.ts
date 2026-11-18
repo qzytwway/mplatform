@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { SearchResult } from '@/lib/api'
 import {
@@ -10,17 +10,13 @@ import {
 } from '@/lib/favorites'
 
 export function useFavorites() {
-  const [favorites, setFavorites] = useState<SearchResult[]>([])
-  const [refreshKey, setRefreshKey] = useState(0)
-
-  // Load favorites on mount
-  useEffect(() => {
-    setFavorites(getFavoritesFromStorage())
-  }, [refreshKey])
+  const [favorites, setFavorites] = useState<SearchResult[]>(
+    getFavoritesFromStorage
+  )
 
   // Refresh favorites list
   const refreshFavorites = useCallback(() => {
-    setRefreshKey((prev) => prev + 1)
+    setFavorites(getFavoritesFromStorage())
   }, [])
 
   // Add to favorites

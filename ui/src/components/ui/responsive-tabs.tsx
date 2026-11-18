@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 
 interface TabItem {
   value: string
@@ -45,6 +46,23 @@ const LONG_PRESS_MS = 1400
 interface TabCustomization {
   order: string[]
   hidden: string[]
+}
+
+function readTabCustomization(storageKey: string): TabCustomization {
+  const empty = { order: [], hidden: [] }
+  const storedCustomization =
+    storageKey && window.localStorage.getItem(storageKey)
+  if (!storedCustomization) return empty
+
+  try {
+    const parsed = JSON.parse(storedCustomization) as Partial<TabCustomization>
+    return {
+      order: Array.isArray(parsed.order) ? parsed.order : [],
+      hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
+    }
+  } catch {
+    return empty
+  }
 }
 
 export function ResponsiveTabs({
@@ -70,29 +88,9 @@ export function ResponsiveTabs({
     ? `mplatform:responsive-tabs:${customizationKey}`
     : ''
 
-  useEffect(() => {
-    if (!storageKey) {
-      setCustomization({ order: [], hidden: [] })
-      return
-    }
-
-    const storedCustomization = window.localStorage.getItem(storageKey)
-
-    if (!storedCustomization) {
-      setCustomization({ order: [], hidden: [] })
-      return
-    }
-
-    try {
-      const parsed = JSON.parse(storedCustomization) as Partial<TabCustomization>
-      setCustomization({
-        order: Array.isArray(parsed.order) ? parsed.order : [],
-        hidden: Array.isArray(parsed.hidden) ? parsed.hidden : [],
-      })
-    } catch {
-      setCustomization({ order: [], hidden: [] })
-    }
-  }, [storageKey])
+  if (useDepsChanged([storageKey])) {
+    setCustomization(readTabCustomization(storageKey))
+  }
 
   useEffect(() => {
     return () => {

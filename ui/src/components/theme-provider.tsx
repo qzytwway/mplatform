@@ -32,36 +32,28 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   )
-  const [actualTheme, setActualTheme] = useState<Exclude<Theme, 'system'>>(
-    theme === 'system'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+  const [systemTheme, setSystemTheme] = useState<Exclude<Theme, 'system'>>(
+    () =>
+      window.matchMedia('(prefers-color-scheme: dark)').matches
         ? 'dark'
         : 'light'
-      : theme
   )
+  const actualTheme = theme === 'system' ? systemTheme : theme
 
-  // Watch for system theme changes when theme is 'system'
+  // Watch for system theme changes
   useEffect(() => {
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      const handleChange = () => {
-        const root = window.document.documentElement
-        root.classList.remove('light', 'dark')
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = () =>
+      setSystemTheme(mediaQuery.matches ? 'dark' : 'light')
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
 
-        const systemTheme = mediaQuery.matches ? 'dark' : 'light'
-        root.classList.add(systemTheme)
-        setActualTheme(systemTheme)
-      }
-
-      handleChange()
-      mediaQuery.addEventListener('change', handleChange)
-      return () => mediaQuery.removeEventListener('change', handleChange)
-    }
+  useEffect(() => {
     const root = window.document.documentElement
     root.classList.remove('light', 'dark')
-    setActualTheme(theme)
-    root.classList.add(theme)
-  }, [theme])
+    root.classList.add(actualTheme)
+  }, [actualTheme])
 
   const value = {
     theme,

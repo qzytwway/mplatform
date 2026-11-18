@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { IconEdit, IconShieldCheck, IconX } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 import { Cluster, Role } from '@/types/api'
 import { useClusterList } from '@/lib/api'
 import { resourceCatalog } from '@/lib/resource-catalog'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -190,11 +191,11 @@ export function RBACDialog({
     verbs: '',
   })
 
-  useEffect(() => {
-    if (!open) return
+  const formSourceChanged = useDepsChanged([role, open])
+  if (formSourceChanged && open) {
     setForm(roleToForm(role))
     setDrafts({ clusters: '', namespaces: '', resources: '', verbs: '' })
-  }, [role, open])
+  }
 
   const handleChange = (field: keyof Role, value: string) =>
     setForm((prev) => ({ ...(prev || {}), [field]: value }))

@@ -22,6 +22,7 @@ import { getWebSocketUrl } from '@/lib/subpath'
 import { getTerminalTheme } from '@/lib/terminal-theme'
 import { translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -102,60 +103,63 @@ export function Terminal({
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  // Reset with real timestamps when a connection opens.
   const networkStatsRef = useRef({
-    lastReset: Date.now(),
+    lastReset: 0,
     bytesReceived: 0,
     bytesSent: 0,
-    lastUpdate: Date.now(),
+    lastUpdate: 0,
   })
   const speedUpdateTimerRef = useRef<NodeJS.Timeout | null>(null)
   const { t } = useTranslation()
   const { currentCluster } = useCluster()
 
   // Keep user selection unless the current pod is no longer available.
-  useEffect(() => {
+  // Compare names, not arrays: callers may pass new arrays on every render.
+  const podNames = pods?.map((pod) => pod.metadata?.name ?? '').join('\n')
+  const containerNames = containers
+    .map((container) => container.name)
+    .join('\n')
+
+  if (useDepsChanged([podName, podNames])) {
     if (podName) {
       setSelectedPod(podName)
-      return
+    } else if (pods) {
+      setSelectedPod((current) => {
+        if (pods.length === 0) {
+          return ''
+        }
+        if (current && pods.some((pod) => pod.metadata?.name === current)) {
+          return current
+        }
+        return pods[0]?.metadata?.name || ''
+      })
     }
+  }
 
-    if (!pods) {
-      return
-    }
-
-    setSelectedPod((current) => {
-      if (pods.length === 0) {
-        return ''
-      }
-      if (current && pods.some((pod) => pod.metadata?.name === current)) {
-        return current
-      }
-      return pods[0]?.metadata?.name || ''
-    })
-  }, [podName, pods])
-
-  useEffect(() => {
+  if (useDepsChanged([containerNames, selectedContainerName])) {
     if (containers.length === 0) {
       setSelectedContainer('')
-      return
+    } else {
+      setSelectedContainer((current) => {
+        if (
+          selectedContainerName &&
+          containers.some(
+            (container) => container.name === selectedContainerName
+          )
+        ) {
+          return selectedContainerName
+        }
+        if (
+          !current ||
+          !containers.some((container) => container.name === current)
+        ) {
+          return containers[0].name
+        }
+        return current
+      })
     }
-
-    setSelectedContainer((current) => {
-      if (
-        selectedContainerName &&
-        containers.some((container) => container.name === selectedContainerName)
-      ) {
-        return selectedContainerName
-      }
-      if (
-        !current ||
-        !containers.some((container) => container.name === current)
-      ) {
-        return containers[0].name
-      }
-      return current
-    })
-  }, [containers, selectedContainerName])
+  }
 
   // Handle font size change and persist to localStorage
   const handleFontSizeChange = useCallback((size: number) => {
