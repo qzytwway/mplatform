@@ -16,6 +16,7 @@ their SHA-256 checksums match the packages the upstream repositories serve.
 | `lws-1.0.0.tgz` (chart version `v1.0.0`) | [kubernetes-sigs/lws](https://github.com/kubernetes-sigs/lws), `oci://registry.k8s.io/lws/charts/lws` | Apache-2.0 | `ea6cff664078688aeed8727afcb2e9cef481f3651919a3b49c0f6dfc50c9627b` |
 | `hami-2.11.0.tgz` | [Project-HAMi/HAMi](https://github.com/Project-HAMi/HAMi), `https://project-hami.github.io/HAMi/` | Apache-2.0 | `2530d25ba1a953a5ffa8070c308a373f756c6108c5bb39fce49943f614dd9315` |
 | `higress-core-2.2.6.tgz` | [alibaba/higress](https://github.com/alibaba/higress), `https://higress.io/helm-charts` | Apache-2.0 | `14d34483346ce52fb8bbd0b982264b25ebc5aa4000cf2ec6527e2b5328f49ffc` |
+| `fluid-1.0.8.tgz` | [fluid-cloudnative/fluid](https://github.com/fluid-cloudnative/fluid), `https://fluid-cloudnative.github.io/charts` | Apache-2.0 | `98feb1938e36b91a7bdd72dd5d6e44925bb55e0f245b4512bd5af7ddd3a7ac79` |
 | `gpu-operator-v26.7.2-mplatform.1.tgz` | [NVIDIA/gpu-operator](https://github.com/NVIDIA/gpu-operator) v26.7.2, `https://helm.ngc.nvidia.com/nvidia`, modified | Apache-2.0 | `59bae387841e2f370eb2ebe017cca2150cc78a2c1e99a55bdd4d04de686a23fe` |
 
 `gpu-operator-v26.7.2-mplatform.1.tgz` is built by `make gpu-operator-chart`

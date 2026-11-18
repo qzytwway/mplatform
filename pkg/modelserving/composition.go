@@ -23,6 +23,7 @@ const (
 	routerSuffix        = "-router"
 	ingressSuffix       = "-gateway"
 	storageSecretSuffix = "-model-storage"
+	datasetSuffix       = "-model"
 )
 
 type companion struct {
@@ -38,6 +39,8 @@ var ingressCompanion = companion{networkingv1.SchemeGroupVersion.WithKind("Ingre
 //   - the Gateway route, only once Published;
 //   - the OpenAI Service, always;
 //   - the object storage Secret, only for s3 models;
+//   - the reference to a Fluid Dataset, only for dataset models in another
+//     namespace;
 //   - the PodMonitor, only when the cluster has its CRD.
 var serviceCompanions = []companion{
 	{appsv1.SchemeGroupVersion.WithKind("Deployment"), routerSuffix},
@@ -47,6 +50,7 @@ var serviceCompanions = []companion{
 	ingressCompanion,
 	{corev1.SchemeGroupVersion.WithKind("Service"), ""},
 	{corev1.SchemeGroupVersion.WithKind("Secret"), storageSecretSuffix},
+	{datasetGVK, datasetSuffix},
 	{podMonitorGVK, ""},
 }
 
@@ -63,6 +67,9 @@ func buildServiceObjects(req *serviceRequest, served *model.ServedModel, storage
 	if storage != nil {
 		objects = append(objects, buildStorageSecret(req, storage))
 	}
+	if reference := buildDatasetReference(req, served); reference != nil {
+		objects = append(objects, reference)
+	}
 	objects = append(objects, buildService(req))
 	build := buildLeaderWorkerSet
 	if req.Mode == modePD {
@@ -74,6 +81,24 @@ func buildServiceObjects(req *serviceRequest, served *model.ServedModel, storage
 		return nil, nil, err
 	}
 	return append(objects, workload), workload, nil
+}
+
+// buildDatasetReference returns the Dataset through which a service reads a
+// dataset model kept in another namespace, as pods only mount the claims of
+// their own; nil when it needs none. Fluid creates its claim, of the same name.
+func buildDatasetReference(req *serviceRequest, served *model.ServedModel) *unstructured.Unstructured {
+	namespace, _, _ := splitDataset(served.Dataset)
+	if served.SourceType != sourceTypeDataset || namespace == req.Namespace {
+		return nil
+	}
+	reference := &unstructured.Unstructured{Object: map[string]any{
+		"spec": map[string]any{"mounts": []any{map[string]any{"mountPoint": datasetMountPrefix + served.Dataset}}},
+	}}
+	reference.SetGroupVersionKind(datasetGVK)
+	reference.SetNamespace(req.Namespace)
+	reference.SetName(datasetClaim(req, served))
+	reference.SetLabels(serviceLabels(req.Name))
+	return reference
 }
 
 // deleteServiceObjects deletes the workload with its companions. The workload
@@ -99,8 +124,10 @@ func deleteCompanion(ctx context.Context, cs *cluster.ClientSet, workload *unstr
 	object := &unstructured.Unstructured{}
 	object.SetGroupVersionKind(companion.gvk)
 	err := cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: workload.GetNamespace(), Name: name + companion.suffix}, object)
-	// Only the PodMonitor kind may be missing, in clusters without its CRD.
-	if apierrors.IsNotFound(err) || (companion.gvk == podMonitorGVK && apimeta.IsNoMatchError(err)) {
+	// Only the PodMonitor and Dataset kinds may be missing, in clusters
+	// without their CRDs.
+	optional := companion.gvk == podMonitorGVK || companion.gvk == datasetGVK
+	if apierrors.IsNotFound(err) || (optional && apimeta.IsNoMatchError(err)) {
 		return nil
 	} else if err != nil {
 		return err

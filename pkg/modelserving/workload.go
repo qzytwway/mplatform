@@ -162,7 +162,7 @@ func runtimePodTemplate(req *serviceRequest, served *model.ServedModel, storage 
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{runtimeContainer(req, served, pdRole, worker)},
 		Volumes: []corev1.Volume{
-			modelSourceVolume(served),
+			modelSourceVolume(req, served),
 			{Name: shmVolume, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}}},
 		},
 	}
@@ -385,17 +385,35 @@ func runtimeResources(req *serviceRequest) corev1.ResourceRequirements {
 }
 
 // modelSubPath is the directory of the model inside its volume; only pvc
-// models keep theirs below the volume root.
+// and dataset models keep theirs below the volume root.
 func modelSubPath(served *model.ServedModel) string {
-	if served.SourceType == sourceTypePVC {
+	if served.SourceType == sourceTypePVC || served.SourceType == sourceTypeDataset {
 		return served.Path
 	}
 	return ""
 }
 
-func modelSourceVolume(served *model.ServedModel) corev1.Volume {
-	if served.SourceType == sourceTypePVC {
-		claim := corev1.PersistentVolumeClaimVolumeSource{ClaimName: served.Claim, ReadOnly: true}
+// datasetClaim is the PVC Fluid creates for the Dataset a service reads a
+// dataset model through: the model's Dataset in its own namespace, otherwise
+// the service's reference to it.
+func datasetClaim(req *serviceRequest, served *model.ServedModel) string {
+	namespace, name, _ := splitDataset(served.Dataset)
+	if namespace == req.Namespace {
+		return name
+	}
+	return req.Name + datasetSuffix
+}
+
+func modelSourceVolume(req *serviceRequest, served *model.ServedModel) corev1.Volume {
+	claimName := ""
+	switch served.SourceType {
+	case sourceTypePVC:
+		claimName = served.Claim
+	case sourceTypeDataset:
+		claimName = datasetClaim(req, served)
+	}
+	if claimName != "" {
+		claim := corev1.PersistentVolumeClaimVolumeSource{ClaimName: claimName, ReadOnly: true}
 		return corev1.Volume{Name: modelVolume, VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &claim}}
 	}
 	hostPath := corev1.HostPathVolumeSource{Path: served.Path, Type: new(corev1.HostPathDirectory)}

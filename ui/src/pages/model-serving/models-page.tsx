@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Action, ActionTable } from '@/components/action-table'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { FluidCard } from '@/components/model-serving/fluid-card'
 import { StorageCard } from '@/components/model-serving/storage-card'
 
 export function ModelsPage() {
@@ -64,7 +65,9 @@ export function ModelsPage() {
           <span className="font-mono text-sm break-all">
             {model.sourceType === 'pvc'
               ? `${model.claim}:/${model.path}`
-              : model.path}
+              : model.sourceType === 'dataset'
+                ? `${model.dataset}:/${model.path}`
+                : model.path}
           </span>
         ),
       },
@@ -141,6 +144,7 @@ export function ModelsPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">{t('modelServing.models.title')}</h1>
       <StorageCard />
+      <FluidCard />
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">

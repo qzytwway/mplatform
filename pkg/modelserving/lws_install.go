@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/helmutil"
 	"github.com/qzytwway/mplatform/pkg/model"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
@@ -152,39 +153,58 @@ func installErrorStatus(err error) int {
 }
 
 func (h *Handler) UninstallLWS(c *gin.Context) {
+	h.uninstallComponent(c, platformComponent{"LeaderWorkerSet", lwsReleaseName, lwsNamespace, lwsActionTimeout},
+		func(ctx context.Context, cs *cluster.ClientSet) (string, error) {
+			services, err := listServices(ctx, cs)
+			if err != nil || len(services) == 0 {
+				return "", err
+			}
+			return "delete the inference services in this cluster first", nil
+		})
+}
+
+// platformComponent is a release model serving installs into a cluster.
+type platformComponent struct {
+	title, releaseName, namespace string
+	timeout                       time.Duration
+}
+
+// uninstallComponent uninstalls a component the platform installed, unless
+// inUse names what still depends on it.
+func (h *Handler) uninstallComponent(c *gin.Context, component platformComponent, inUse func(context.Context, *cluster.ClientSet) (string, error)) {
 	cs, err := h.cm.GetClientSet(c.Param("cluster"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, lwsNamespace)
+	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, component.namespace)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	installed, err := helmutil.ReleaseExists(cfg, lwsReleaseName)
+	installed, err := helmutil.ReleaseExists(cfg, component.releaseName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if !installed {
-		c.JSON(http.StatusNotFound, gin.H{"error": "LeaderWorkerSet is not installed by this platform"})
+		c.JSON(http.StatusNotFound, gin.H{"error": component.title + " is not installed by this platform"})
 		return
 	}
-	services, err := listServices(c.Request.Context(), cs)
+	reason, err := inUse(c.Request.Context(), cs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if len(services) > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "delete the inference services in this cluster first"})
+	if reason != "" {
+		c.JSON(http.StatusConflict, gin.H{"error": reason})
 		return
 	}
 	operatorID := c.MustGet("user").(model.User).ID
-	opts := helmutil.UninstallReleaseOptions{Timeout: lwsActionTimeout, Description: "Uninstalled by MPlatform model serving"}
-	if err := helmutil.UninstallPlatformRelease(cfg, cs.Name, operatorID, lwsReleaseName, lwsNamespace, opts); err != nil {
+	opts := helmutil.UninstallReleaseOptions{Timeout: component.timeout, Description: "Uninstalled by MPlatform model serving"}
+	if err := helmutil.UninstallPlatformRelease(cfg, cs.Name, operatorID, component.releaseName, component.namespace, opts); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "LeaderWorkerSet uninstalled"})
+	c.JSON(http.StatusOK, gin.H{"message": component.title + " uninstalled"})
 }

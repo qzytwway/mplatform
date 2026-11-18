@@ -2275,7 +2275,8 @@
     "sourceTypes": {
       "local": "节点本地",
       "s3": "对象存储",
-      "pvc": "共享存储 (PVC)"
+      "pvc": "共享存储 (PVC)",
+      "dataset": "Fluid 数据集"
     },
     "services": {
       "title": "推理服务",
@@ -2490,7 +2491,15 @@
         "created": "模型已添加",
         "updated": "模型已更新",
         "deleted": "模型已删除"
-      }
+      },
+      "dataset": "数据集",
+      "datasetHint": "当前集群里的 Fluid 数据集（命名空间/名称）。部署到其他命名空间的推理服务，会通过平台自动创建的只读引用来读取它；请把服务部署到有这个数据集的集群。",
+      "datasetPlaceholder": "选择数据集",
+      "datasetNotReady": "未就绪",
+      "noDatasets": "当前集群没有数据集，请先安装 Fluid 并创建数据集。",
+      "datasetPathHint": "模型在数据集内的目录，留空表示使用数据集的根目录。",
+      "claimPlaceholder": "选择 PVC",
+      "noClaims": "当前集群没有 PVC。"
     },
     "storage": {
       "title": "对象存储",
@@ -2771,6 +2780,17 @@
         "viewService": "查看推理服务",
         "editLimit": "调整限流",
         "viewAlerts": "查看告警"
+      }
+    },
+    "fluid": {
+      "title": "Fluid",
+      "description": "可选组件。Fluid 数据集可以让任意命名空间的推理服务读取放在同一个命名空间里的模型，不复制、不下载。安装后，才能登记来源为 Fluid 数据集的模型。",
+      "crdPresent": "当前集群已有 Fluid 的资源定义，但不是由本平台安装的。如果 Fluid 已通过其他方式在集群中运行，则无需安装。",
+      "installed": "Fluid 已安装",
+      "messages": {
+        "installed": "Fluid 已安装",
+        "uninstalled": "Fluid 已卸载",
+        "uninstallNote": "请先删除当前集群中的所有 Fluid 数据集，包括推理服务用来读取模型的引用数据集。"
       }
     }
   }

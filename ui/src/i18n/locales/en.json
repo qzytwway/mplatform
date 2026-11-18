@@ -2275,7 +2275,8 @@
     "sourceTypes": {
       "local": "Node local",
       "s3": "Object storage",
-      "pvc": "Shared storage (PVC)"
+      "pvc": "Shared storage (PVC)",
+      "dataset": "Fluid Dataset"
     },
     "services": {
       "title": "Inference Services",
@@ -2490,7 +2491,15 @@
         "created": "Model added",
         "updated": "Model updated",
         "deleted": "Model deleted"
-      }
+      },
+      "dataset": "Dataset",
+      "datasetHint": "A Fluid Dataset of the current cluster, as namespace/name. Inference services in other namespaces read it through a read-only reference the platform creates; deploy them to a cluster that has this Dataset.",
+      "datasetPlaceholder": "Select a Dataset",
+      "datasetNotReady": "not ready",
+      "noDatasets": "No Datasets in this cluster. Install Fluid and create one first.",
+      "datasetPathHint": "Directory of the model inside the Dataset. Leave empty to use the Dataset root.",
+      "claimPlaceholder": "Select a PVC",
+      "noClaims": "No PVCs in this cluster."
     },
     "storage": {
       "title": "Object Storage",
@@ -2771,6 +2780,17 @@
         "viewService": "View inference service",
         "editLimit": "Edit limit",
         "viewAlerts": "View alerts"
+      }
+    },
+    "fluid": {
+      "title": "Fluid",
+      "description": "Optional. Fluid Datasets let inference services in any namespace read the models kept in one namespace, without copying or downloading them. Install it to register models from Fluid Datasets.",
+      "crdPresent": "This cluster already has Fluid's resource definitions, but Fluid was not installed by this platform. If Fluid already runs in the cluster, you do not need to install it.",
+      "installed": "Fluid installed",
+      "messages": {
+        "installed": "Fluid installed",
+        "uninstalled": "Fluid uninstalled",
+        "uninstallNote": "Delete every Fluid Dataset in this cluster first, including those inference services read models through."
       }
     }
   }
