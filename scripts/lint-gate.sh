@@ -1,8 +1,9 @@
 #!/bin/bash
 # Lint gate for commits.
-#   run   - lint every language found in the tracked files (whole project, not just the
-#           diff); on success record the staged tree and save the staged diff for the
-#           commit review. Any failure, missing linter or unlintable language blocks.
+#   run   - format the staged files and restage them, then lint every language found in
+#           the tracked files (whole project, not just the diff); on success record the
+#           staged tree and save the staged diff for the commit review. Any failure,
+#           missing tool or unlintable language blocks.
 #   check - exit 0 when the record matches what is staged right now.
 # Project settings live in scripts/lint-gate.conf; the record in .lint-gate/ (git-ignored).
 
@@ -20,13 +21,67 @@ NOT_CODE=""
 FAILED=()
 MISSING=()
 UNSUPPORTED=()
+PARTIAL=()
+FORMAT_EXT="go py pyi js jsx mjs cjs ts tsx mts cts"
 
 covered() { [[ " $COVERED " == *" $1 "* ]]; }
 
 need() { # need <command> <install hint>
 	command -v "$1" >/dev/null && return 0
-	MISSING+=("$1 (install: $2)")
+	[[ " ${MISSING[*]-} " == *" $1 (install:"* ]] || MISSING+=("$1 (install: $2)")
 	return 1
+}
+
+# prettier_dir <file>: the nearest ancestor of the file (or the repo root) that has the
+# project's own prettier installed, so its config and plugins apply. Prints nothing if none.
+prettier_dir() {
+	local d=$1
+	while [[ "$d" == */* ]]; do
+		d=${d%/*}
+		[[ -x "$d/node_modules/.bin/prettier" ]] && echo "$d" && return
+	done
+	[[ -x node_modules/.bin/prettier ]] && echo .
+}
+
+format_file() { # format_file <path>: rewrite the file in place; nonzero on failure
+	case "${1##*.}" in
+	go)
+		need gofmt "comes with Go: brew install go" || return 0
+		gofmt -w "$1"
+		;;
+	py | pyi)
+		need ruff "brew install ruff" || return 0
+		ruff format -q "$1"
+		;;
+	*)
+		local dir
+		dir=$(prettier_dir "$1")
+		# shortcut: JS/TS is formatted only where the project installed prettier; without it the project has no format to keep.
+		[[ -n "$dir" ]] || return 0
+		# run from $dir so its .prettierignore applies
+		(cd "$dir" && node_modules/.bin/prettier --write --log-level warn "${1#"$dir"/}")
+		;;
+	esac
+}
+
+# Format the staged files of the languages above and restage the ones that changed.
+# A file that also has unstaged edits is left alone and blocks, since restaging it would
+# pull those edits into the commit.
+format_staged() {
+	local f before
+	while IFS= read -r -d '' f; do
+		[[ " $FORMAT_EXT " == *" ${f##*.} "* && -f "$f" ]] || continue
+		if ! git diff --quiet -- "$f"; then
+			PARTIAL+=("$f")
+			continue
+		fi
+		before=$(git hash-object -- "$f")
+		format_file "$f" </dev/null || {
+			FAILED+=("format $f")
+			continue
+		}
+		[[ "$(git hash-object -- "$f")" == "$before" ]] || git add -- "$f"
+	done < <(git diff --cached --name-only -z --diff-filter=ACMR)
 }
 
 step() { # step <label> <command...>
@@ -122,6 +177,7 @@ report() { # report <heading> <items...>
 case "${1:-}" in
 run)
 	rm -rf "$GATE_DIR"
+	format_staged
 	[[ -n "$LINT_CMD" ]] && step "project lint: $LINT_CMD" bash -c "$LINT_CMD"
 	detect_languages
 	# Built-in languages are always linted the same way; COVERED only applies to other file types.
@@ -132,7 +188,11 @@ run)
 	ok=1
 	if ((${#MISSING[@]})); then
 		ok=0
-		report "Linters not installed (ask the user before installing; then rerun):" "${MISSING[@]}"
+		report "Tools not installed (ask the user before installing; then rerun):" "${MISSING[@]}"
+	fi
+	if ((${#PARTIAL[@]})); then
+		ok=0
+		report "Staged files that also have unstaged edits (stage or stash the rest, then rerun):" "${PARTIAL[@]}"
 	fi
 	if ((${#UNSUPPORTED[@]})); then
 		ok=0

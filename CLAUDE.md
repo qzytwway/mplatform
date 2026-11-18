@@ -17,10 +17,10 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
 - Type-check the UI: `pnpm --dir ui exec tsc --noEmit -p tsconfig.app.json`
   (`tsconfig.node.json` for `ui/vite.config.ts`). Don't use the `type-check` script:
   the root tsconfig has no source files, so it checks nothing.
-- Before committing: `make pre-commit` (formats and lints the whole repo, so keep the
-  commit scoped to your change).
-- Committing as Claude: stage the files, run `scripts/lint-gate.sh run`, then
-  `git commit`. The script lints the whole project with a built-in linter for every
+- Committing as Claude: stage whole files, run `scripts/lint-gate.sh run`, then
+  `git commit`. The script formats the staged files and restages them (gofmt, ruff
+  format, and `ui/`'s own prettier for JS/TS), blocking on a staged file that still has
+  unstaged edits; then it lints the whole project with a built-in linter for every
   language in the tracked files (golangci-lint for Go, oxlint for JS/TS, ruff for
   Python, shellcheck for shell, ...), the same as in the user's other projects; it does
   not run `make lint`. On success it records the staged tree and saves the staged diff in
@@ -37,11 +37,6 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
   disable rules, commit with `-a`, or work around the hooks. Rehearse with
   `git commit --dry-run`. Write files with the edit tools rather than heredocs in
   Bash: the hooks' command matcher can mistake a heredoc command for a commit.
-- Git pre-commit hook: run `./scripts/install-hooks.sh` once per clone (git hooks
-  aren't versioned). It runs `make pre-commit` on every commit with staged changes,
-  or only `make format` when `scripts/lint-gate.sh check` shows lint already passed
-  for the staged tree; it blocks the commit on failure and re-stages staged files
-  the formatter changed. Fix the reported problems instead of using `--no-verify`.
 - Lint: `make lint` runs `go vet`, golangci-lint (`.golangci.yml`, binary fetched into
   `bin/`) and ESLint in `ui/` and `e2e/`. One part at a time: `bin/golangci-lint run`,
   `pnpm --dir ui run lint`, `pnpm --dir e2e run lint`. The e2e part needs
