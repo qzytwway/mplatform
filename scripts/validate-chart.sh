@@ -141,7 +141,6 @@ fi
 
 # Content checks for postgres rendering
 echo "📋 Verifying rendered content for postgres DSN..."
-RENDERED_PG="$TEMP_DIR/rendered-custom-postgres.yaml"
 
 echo "✅ Postgres rendered content looks correct"
 

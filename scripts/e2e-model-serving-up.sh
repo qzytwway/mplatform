@@ -85,6 +85,7 @@ kind load image-archive --name "${KIND_NAME}" "${WORK_DIR}/vllm-router.tar"
 # The PodMonitor scenario takes its CRDs from kube-prometheus-stack.
 pull_chart() {
   local pattern="$1" ref="$2" version="$3" name="$4"
+  # shellcheck disable=SC2086 # pattern is a glob and must expand
   ls "${ROOT_DIR}"/chart-packages/${pattern} >/dev/null 2>&1 && return
   echo "📦 Pulling ${ref}:${version} into chart-packages..."
   mkdir -p "${ROOT_DIR}/chart-packages" "${WORK_DIR}/${name}.d"
