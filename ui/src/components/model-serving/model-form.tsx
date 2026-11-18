@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Field, Section } from '@/components/form-layout'
+import { ClaimSelect } from '@/components/model-serving/claim-select'
 import { DatasetSelect } from '@/components/model-serving/dataset-select'
 
 const PATH_PLACEHOLDERS: Record<ModelSourceType, string> = {
@@ -177,12 +178,10 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
               label={t('modelServing.models.claim')}
               hint={t('modelServing.models.claimHint')}
             >
-              <Input
+              <ClaimSelect
                 id="served-model-claim"
                 value={claim}
-                onChange={(event) => setClaim(event.target.value)}
-                placeholder="shared-models"
-                required
+                onChange={setClaim}
               />
             </Field>
           )}
@@ -228,7 +227,11 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
         </Button>
         <Button
           type="submit"
-          disabled={isSaving || (sourceType === 'dataset' && !dataset)}
+          disabled={
+            isSaving ||
+            (sourceType === 'dataset' && !dataset) ||
+            (sourceType === 'pvc' && !claim)
+          }
         >
           {submitLabel}
         </Button>

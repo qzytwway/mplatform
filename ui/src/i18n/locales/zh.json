@@ -2497,7 +2497,9 @@
       "datasetPlaceholder": "选择数据集",
       "datasetNotReady": "未就绪",
       "noDatasets": "当前集群没有数据集，请先安装 Fluid 并创建数据集。",
-      "datasetPathHint": "模型在数据集内的目录，留空表示使用数据集的根目录。"
+      "datasetPathHint": "模型在数据集内的目录，留空表示使用数据集的根目录。",
+      "claimPlaceholder": "选择 PVC",
+      "noClaims": "当前集群没有 PVC。"
     },
     "storage": {
       "title": "对象存储",

@@ -2497,7 +2497,9 @@
       "datasetPlaceholder": "Select a Dataset",
       "datasetNotReady": "not ready",
       "noDatasets": "No Datasets in this cluster. Install Fluid and create one first.",
-      "datasetPathHint": "Directory of the model inside the Dataset. Leave empty to use the Dataset root."
+      "datasetPathHint": "Directory of the model inside the Dataset. Leave empty to use the Dataset root.",
+      "claimPlaceholder": "Select a PVC",
+      "noClaims": "No PVCs in this cluster."
     },
     "storage": {
       "title": "Object Storage",
