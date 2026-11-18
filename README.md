@@ -65,7 +65,7 @@ MPlatform 是一个轻量的 Kubernetes 管理平台，后端用 Go，前端用 
 
 ## 部署
 
-MPlatform 默认监听 `8080` 端口，默认使用 SQLite 存数据，也支持 MySQL 和 PostgreSQL。下面三种方式任选其一。
+MPlatform 默认监听 `8080` 端口，支持 PostgreSQL、MySQL 和 SQLite。生产环境用 PostgreSQL：Helm chart 默认会一起部署一个 PostgreSQL；单机直接运行或用 Docker 运行时默认用 SQLite，适合试用和开发。下面三种方式任选其一。
 
 > [!IMPORTANT]
 > 生产环境务必设置自己的 `MPLATFORM_ENCRYPT_KEY`（加密集群凭证等敏感数据）和 `JWT_SECRET`（签发登录令牌），并且部署后不要再更换加密密钥，否则已保存的凭证将无法解密。可以用 `openssl rand -hex 32` 生成。
@@ -145,20 +145,12 @@ docker compose pull && docker compose up -d
 
 适合正式使用。平台部署在它要管理的集群内时，可以直接用 In-Cluster 方式接入这个集群。
 
-1. 准备一个 values 文件，开启持久化并设置密钥：
+1. 准备一个 values 文件，设置密钥并开启应用商店的持久化：
 
    ```bash
    cat > mplatform-values.yaml <<EOF
    encryptKey: "$(openssl rand -hex 32)"
    jwtSecret: "$(openssl rand -hex 32)"
-   # SQLite 使用 ReadWriteOnce 的 PVC 时必须用 Recreate，避免新旧 Pod 抢同一个卷
-   deploymentStrategy:
-     type: Recreate
-   db:
-     sqlite:
-       persistence:
-         pvc:
-           enabled: true
    chartStore:
      persistence:
        pvc:
@@ -166,7 +158,12 @@ docker compose pull && docker compose up -d
    EOF
    ```
 
-   请妥善保存这个文件，以后执行 `helm upgrade` 时也要带上它，否则密钥会被改回默认值。使用外部数据库时，把 `db.type` 设为 `mysql` 或 `postgres`，并在 `db.dsn` 中填写连接串，例如 `mysql://user:password@tcp(host:3306)/mplatform`。
+   请妥善保存这个文件，以后执行 `helm upgrade` 时也要带上它，否则密钥会被改回默认值。
+
+   chart 默认会部署一个 PostgreSQL（StatefulSet，数据存在 8Gi 的持久卷上，密码在首次安装时自动生成，保存在 `<release>-mplatform-postgresql` 这个 Secret 里）。可以通过 `db.postgresql.*` 调整镜像、容量和存储类。想用公司已有的数据库时，在 `db.dsn` 中填写连接串，例如 `postgres://user:password@host:5432/mplatform?sslmode=require`；用 MySQL 时再把 `db.type` 设为 `mysql`。
+
+   > [!WARNING]
+   > 从 0.17 及更早版本升级时，如果原来用的是 SQLite，chart 会拒绝升级，避免切到一个空数据库。想继续用 SQLite，就设置 `db.type: sqlite`；想换到 PostgreSQL，要先自己把数据迁移过去（chart 不会自动迁移），然后设置 `db.migratedFromSqlite: true` 再升级。
 
 2. 安装。使用仓库中的 chart：
 

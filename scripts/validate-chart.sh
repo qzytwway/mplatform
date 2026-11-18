@@ -128,8 +128,7 @@ cat > "$TEMP_DIR/test-values-postgres.yaml" << EOF
 replicaCount: 1
 db:
     type: postgres
-    postgres:
-        dsn: "host=127.0.0.1 port=5432 user=test password=test dbname=mplatform sslmode=disable"
+    dsn: "host=127.0.0.1 port=5432 user=test password=test dbname=mplatform sslmode=disable"
 EOF
 
 if helm template test-release "$CHART_DIR" -f "$TEMP_DIR/test-values-postgres.yaml" > "$TEMP_DIR/rendered-custom-postgres.yaml"; then
@@ -141,8 +140,21 @@ fi
 
 # Content checks for postgres rendering
 echo "📋 Verifying rendered content for postgres DSN..."
-
+if grep -E -q "kind:\s*StatefulSet" "$TEMP_DIR/rendered-custom-postgres.yaml"; then
+    fail "built-in PostgreSQL rendered although db.dsn points to an external database"
+fi
 echo "✅ Postgres rendered content looks correct"
+
+# Default values run the built-in PostgreSQL
+echo "📋 Verifying the default built-in PostgreSQL..."
+RENDERED_DEFAULT="$TEMP_DIR/rendered.yaml"
+if ! grep -E -q "kind:\s*StatefulSet" "$RENDERED_DEFAULT"; then
+    fail "built-in PostgreSQL StatefulSet not found in default rendered output"
+fi
+if ! grep -E -q "postgres://mplatform:\\\$\(DB_PASSWORD\)@test-release-mplatform-postgresql:5432/mplatform" "$RENDERED_DEFAULT"; then
+    fail "DB_DSN for the built-in PostgreSQL not found in default rendered output"
+fi
+echo "✅ Built-in PostgreSQL rendered content looks correct"
 
 # Clean up
 rm -rf "$TEMP_DIR"
