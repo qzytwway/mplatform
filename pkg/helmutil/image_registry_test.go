@@ -71,6 +71,8 @@ spec:
               value: nvcr.io/nvidia/cloud-native/k8s-driver-manager:v0.12.1
             - name: DEFAULT_IMAGE
               value: nginx
+            - name: JUICEFS_CE_IMAGE_ENV
+              value: juicedata/mount:ce-v1.3.0
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -126,6 +128,8 @@ data:
 	env := podSpec["containers"].([]any)[0].(map[string]any)["env"].([]any)
 	require.Equal(t, "harbor.example.com/mirror/k8s-driver-manager:v0.12.1", env[0].(map[string]any)["value"])
 	require.Equal(t, "nginx", env[1].(map[string]any)["value"])
+	// Fluid hands the images of its runtimes to its controllers this way.
+	require.Equal(t, "harbor.example.com/mirror/mount:ce-v1.3.0", env[2].(map[string]any)["value"])
 	require.Equal(t,
 		"app/templates/deployment.yaml",
 		dig(t, documents[0], "metadata", "annotations")["postrenderer.helm.sh/postrender-filename"],

@@ -52,6 +52,7 @@ mplatform
 # platform is verified with are committed; uploaded charts are not.
 chart-packages/*
 !chart-packages/THIRD_PARTY_NOTICES.md
+!chart-packages/fluid-1.0.8.tgz
 !chart-packages/gpu-operator-v26.7.2-mplatform.1.tgz
 !chart-packages/hami-2.11.0.tgz
 !chart-packages/higress-core-2.2.6.tgz

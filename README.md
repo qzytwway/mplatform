@@ -237,6 +237,7 @@ kubectl rollout restart deployment/mplatform --namespace mplatform-system
 | GPU Operator | 整卡 GPU 的驱动和设备插件 | `gpu-operator`（定制版） | v26.7.2-mplatform.1 |
 | HAMi | vGPU 切分 | `hami` | 2.11.0 |
 | Higress | 推理服务网关 | `higress-core` | 2.2.6 |
+| Fluid | 跨命名空间共享模型数据集（Fluid 数据集来源） | `fluid` | 1.0.8 |
 | kube-prometheus-stack | 指标、监控面板与告警 | `kube-prometheus-stack` | 93.1.1 |
 | VictoriaLogs + Vector | 日志采集、检索与日志告警 | `victoria-logs-single`、`vector` | 0.13.12、0.61.0 |
 

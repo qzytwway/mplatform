@@ -2772,6 +2772,17 @@
         "editLimit": "调整限流",
         "viewAlerts": "查看告警"
       }
+    },
+    "fluid": {
+      "title": "Fluid",
+      "description": "可选组件。Fluid 数据集可以让任意命名空间的推理服务读取放在同一个命名空间里的模型，不复制、不下载。安装后，才能登记来源为 Fluid 数据集的模型。",
+      "crdPresent": "当前集群已有 Fluid 的资源定义，但不是由本平台安装的。如果 Fluid 已通过其他方式在集群中运行，则无需安装。",
+      "installed": "Fluid 已安装",
+      "messages": {
+        "installed": "Fluid 已安装",
+        "uninstalled": "Fluid 已卸载",
+        "uninstallNote": "请先删除当前集群中的所有 Fluid 数据集，包括推理服务用来读取模型的引用数据集。"
+      }
     }
   }
 }

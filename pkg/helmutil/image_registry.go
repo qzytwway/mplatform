@@ -34,6 +34,15 @@ var imageEnvNames = map[string]bool{
 	"VALIDATOR_IMAGE":      true,
 }
 
+// imageEnvSuffix ends the variables through which Fluid hands its runtime
+// controllers the images of the cache and FUSE pods they create, such as
+// JUICEFS_CE_IMAGE_ENV.
+const imageEnvSuffix = "_IMAGE_ENV"
+
+func isImageEnv(name string) bool {
+	return imageEnvNames[name] || strings.HasSuffix(name, imageEnvSuffix)
+}
+
 // monitoringAPIGroup resources (Prometheus, Alertmanager, ThanosRuler...)
 // carry the image of the pods the operator creates in spec.image.
 const monitoringAPIGroup = "monitoring.coreos.com/"
@@ -150,7 +159,7 @@ func visitContainer(container *yaml.Node, visit func(string) string) {
 	if env := mappingValue(container, "env"); env != nil && env.Kind == yaml.SequenceNode {
 		for _, variable := range env.Content {
 			name, value := mappingValue(variable, "name"), mappingValue(variable, "value")
-			if name != nil && value != nil && value.Kind == yaml.ScalarNode && imageEnvNames[name.Value] {
+			if name != nil && value != nil && value.Kind == yaml.ScalarNode && isImageEnv(name.Value) {
 				value.Value = visit(value.Value)
 			}
 		}

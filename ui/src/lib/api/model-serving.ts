@@ -402,6 +402,32 @@ export function uninstallLWS(cluster: string) {
   return apiClient.delete<{ message: string }>(clusterPath(cluster, '/lws'))
 }
 
+// Fluid serves the Datasets that inference services in other namespaces read
+// models from through references to them.
+export interface FluidStatus {
+  crd: boolean
+  installed: boolean
+  chart: ComponentChart
+}
+
+export function useFluidStatus() {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['model-serving-fluid', currentCluster],
+    queryFn: () =>
+      apiClient.get<FluidStatus>(clusterPath(currentCluster, '/fluid')),
+    enabled: !!currentCluster,
+  })
+}
+
+export function installFluid(cluster: string) {
+  return apiClient.post<{ message: string }>(clusterPath(cluster, '/fluid'), {})
+}
+
+export function uninstallFluid(cluster: string) {
+  return apiClient.delete<{ message: string }>(clusterPath(cluster, '/fluid'))
+}
+
 export function useInferenceServices() {
   const { currentCluster } = useCluster()
   return useQuery({
