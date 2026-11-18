@@ -63,13 +63,20 @@ const overlaps = (a: GridPos, b: GridPos) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 
 // Moves a panel up into free space above it, as Grafana's grid does, so
-// gaps in the saved positions close.
+// gaps in the saved positions close, then pushes it below any panel it still
+// overlaps, since some dashboards (e.g. the multi-cluster one) save
+// overlapping positions and rely on Grafana to resolve them.
 function compact(placed: PanelInstance[], instance: PanelInstance) {
   let gridPos = instance.gridPos
   while (gridPos.y > 0) {
     const above = { ...gridPos, y: gridPos.y - 1 }
     if (placed.some((other) => overlaps(above, other.gridPos))) break
     gridPos = above
+  }
+  let collider = placed.find((other) => overlaps(gridPos, other.gridPos))
+  while (collider) {
+    gridPos = { ...gridPos, y: collider.gridPos.y + collider.gridPos.h }
+    collider = placed.find((other) => overlaps(gridPos, other.gridPos))
   }
   return [...placed, { ...instance, gridPos }]
 }
