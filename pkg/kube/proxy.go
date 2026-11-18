@@ -13,10 +13,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// proxySandboxPolicy gives proxied pages a unique opaque origin (no
-// allow-same-origin), while still letting them run scripts and forms.
-const proxySandboxPolicy = "sandbox allow-scripts allow-forms allow-popups allow-downloads"
-
 func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxyPath string) {
 	restConfig := rest.CopyConfig(client.Configuration)
 	httpClient, err := rest.HTTPClientFor(restConfig)
@@ -57,11 +53,6 @@ func HandleProxy(c *gin.Context, client *K8sClient, kind, namespace, name, proxy
 	}()
 
 	copyHeader(c.Writer.Header(), resp.Header)
-	// The upstream page is served on the console's origin: sandbox it so its
-	// scripts can't act with the viewer's session, and keep it from setting
-	// cookies there.
-	c.Writer.Header().Del("Set-Cookie")
-	c.Writer.Header().Set("Content-Security-Policy", proxySandboxPolicy)
 	c.Writer.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
 		if !errors.Is(err, context.Canceled) {
