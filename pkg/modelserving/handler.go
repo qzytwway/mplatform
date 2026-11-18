@@ -37,6 +37,7 @@ func (h *Handler) RegisterAdminRoutes(group *gin.RouterGroup) {
 	g.GET("/clusters/:cluster/fluid", h.GetFluid)
 	g.POST("/clusters/:cluster/fluid", h.InstallFluid)
 	g.DELETE("/clusters/:cluster/fluid", h.UninstallFluid)
+	g.GET("/clusters/:cluster/datasets", h.ListDatasets)
 	g.GET("/clusters/:cluster/services", h.ListServices)
 	g.POST("/clusters/:cluster/services", h.CreateService)
 	g.POST("/clusters/:cluster/services/preview", h.PreviewService)

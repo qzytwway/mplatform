@@ -6,7 +6,7 @@ import { apiClient } from '../api-client'
 import type { ComponentChart } from './shared'
 
 export type ModelType = 'chat' | 'embedding'
-export type ModelSourceType = 'local' | 's3' | 'pvc'
+export type ModelSourceType = 'local' | 's3' | 'pvc' | 'dataset'
 export type InferenceRuntime = 'vllm' | 'sglang'
 export type DeploymentMode = 'single' | 'multi' | 'pd'
 export type GPUMode = 'whole' | 'vgpu'
@@ -46,6 +46,7 @@ export interface ServedModel {
   type: ModelType
   sourceType: ModelSourceType
   claim: string
+  dataset: string
   path: string
   description: string
   createdAt: string
@@ -57,6 +58,7 @@ export interface ServedModelRequest {
   type: ModelType
   sourceType: ModelSourceType
   claim?: string
+  dataset?: string
   path: string
   description?: string
 }
@@ -416,6 +418,25 @@ export function useFluidStatus() {
     queryKey: ['model-serving-fluid', currentCluster],
     queryFn: () =>
       apiClient.get<FluidStatus>(clusterPath(currentCluster, '/fluid')),
+    enabled: !!currentCluster,
+  })
+}
+
+// A Fluid Dataset of the current cluster that models can be kept in.
+export interface FluidDataset {
+  namespace: string
+  name: string
+  phase: string
+}
+
+export function useFluidDatasets() {
+  const { currentCluster } = useCluster()
+  return useQuery({
+    queryKey: ['model-serving-datasets', currentCluster],
+    queryFn: () =>
+      apiClient.get<{ items: FluidDataset[] }>(
+        clusterPath(currentCluster, '/datasets')
+      ),
     enabled: !!currentCluster,
   })
 }

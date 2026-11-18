@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/cluster"
@@ -189,6 +190,11 @@ func applyEdit(c *gin.Context, cs *cluster.ClientSet, crd string, workload *unst
 				return nil, err
 			}
 		}
+		if reference, ok := object.(*unstructured.Unstructured); ok && reference.GroupVersionKind() == datasetGVK {
+			if err := ensureDatasetReference(ctx, cs, reference); err != nil {
+				return nil, err
+			}
+		}
 		if monitor, ok := object.(*unstructured.Unstructured); ok && monitor.GroupVersionKind() == podMonitorGVK {
 			if err := cs.K8sClient.Create(ctx, monitor); err != nil && !apierrors.IsAlreadyExists(err) {
 				return nil, err
@@ -218,6 +224,29 @@ func applyEdit(c *gin.Context, cs *cluster.ClientSet, crd string, workload *unst
 		return nil, fmt.Errorf("prefill and decode were updated, but updating the router failed; save again to retry: %w", err)
 	}
 	return updated, nil
+}
+
+// errDatasetMoved is returned when a service's reference points at another
+// Dataset than its model now names: Fluid keeps a reference's mount once set.
+var errDatasetMoved = errors.New("the model was moved to another Fluid Dataset since this service was created; create another service for it")
+
+// ensureDatasetReference creates the reference a service reads its dataset
+// model through when it is missing, and refuses one that points elsewhere.
+func ensureDatasetReference(ctx context.Context, cs *cluster.ClientSet, reference *unstructured.Unstructured) error {
+	current := &unstructured.Unstructured{}
+	current.SetGroupVersionKind(datasetGVK)
+	err := cs.K8sClient.Get(ctx, client.ObjectKeyFromObject(reference), current)
+	if apierrors.IsNotFound(err) {
+		return cs.K8sClient.Create(ctx, reference)
+	} else if err != nil {
+		return err
+	}
+	want, _, _ := unstructured.NestedSlice(reference.Object, "spec", "mounts")
+	got, _, _ := unstructured.NestedSlice(current.Object, "spec", "mounts")
+	if !reflect.DeepEqual(want, got) {
+		return errDatasetMoved
+	}
+	return nil
 }
 
 // refreshSecret brings the storage Secret of a service up to the current

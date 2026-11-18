@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,6 @@ import (
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Fluid is installed the way its documentation does: release fluid of chart
@@ -26,6 +26,11 @@ const (
 	fluidActionTimeout = 5 * time.Minute
 	fluidDatasetCRD    = "datasets.data.fluid.io"
 	testedFluidVersion = "1.0.8"
+	// datasetBound is the phase of a Dataset whose runtime serves its data.
+	datasetBound = "Bound"
+	// datasetMountPrefix starts the mount point of a reference to a Dataset
+	// in another namespace: dataset://<namespace>/<name>.
+	datasetMountPrefix = "dataset://"
 )
 
 var datasetGVK = schema.GroupVersionKind{Group: "data.fluid.io", Version: "v1alpha1", Kind: "Dataset"}
@@ -36,19 +41,61 @@ func fluidValues(*chart.Chart) map[string]any {
 	return map[string]any{}
 }
 
-// listDatasets returns the Fluid Datasets of a namespace, or of every
-// namespace when it is empty; none when Fluid is not installed.
-func listDatasets(ctx context.Context, cs *cluster.ClientSet, namespace string) ([]unstructured.Unstructured, error) {
+// listDatasets returns the Fluid Datasets of every namespace; none when
+// Fluid is not installed.
+func listDatasets(ctx context.Context, cs *cluster.ClientSet) ([]unstructured.Unstructured, error) {
 	installed, err := crdInstalled(ctx, cs, fluidDatasetCRD)
 	if err != nil || !installed {
 		return nil, err
 	}
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(datasetGVK.GroupVersion().WithKind(datasetGVK.Kind + "List"))
-	if err := cs.K8sClient.List(ctx, list, client.InNamespace(namespace)); err != nil {
+	if err := cs.K8sClient.List(ctx, list); err != nil {
 		return nil, err
 	}
 	return list.Items, nil
+}
+
+// datasetOption is a Dataset a model can be registered from.
+type datasetOption struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Phase     string `json:"phase"`
+}
+
+// sourceDatasets returns the Datasets models can be kept in: those holding
+// data, not references to another Dataset such as services create.
+func sourceDatasets(datasets []unstructured.Unstructured) []datasetOption {
+	options := []datasetOption{}
+	for i := range datasets {
+		mounts, _, _ := unstructured.NestedSlice(datasets[i].Object, "spec", "mounts")
+		isReference := false
+		for _, mount := range mounts {
+			point, _, _ := unstructured.NestedString(mount.(map[string]any), "mountPoint")
+			isReference = isReference || strings.HasPrefix(point, datasetMountPrefix)
+		}
+		if isReference {
+			continue
+		}
+		phase, _, _ := unstructured.NestedString(datasets[i].Object, "status", "phase")
+		options = append(options, datasetOption{Namespace: datasets[i].GetNamespace(), Name: datasets[i].GetName(), Phase: phase})
+	}
+	return options
+}
+
+// ListDatasets lists the Datasets of a cluster that models can be kept in.
+func (h *Handler) ListDatasets(c *gin.Context) {
+	cs, err := h.cm.GetClientSet(c.Param("cluster"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	datasets, err := listDatasets(c.Request.Context(), cs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": sourceDatasets(datasets)})
 }
 
 func (h *Handler) GetFluid(c *gin.Context) {
@@ -123,39 +170,12 @@ func (h *Handler) InstallFluid(c *gin.Context) {
 // UninstallFluid refuses while Datasets exist: their volumes stop working
 // once the controllers that serve them are gone.
 func (h *Handler) UninstallFluid(c *gin.Context) {
-	cs, err := h.cm.GetClientSet(c.Param("cluster"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	cfg, err := helmutil.NewActionConfig(cs.K8sClient.Configuration, fluidNamespace)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	installed, err := helmutil.ReleaseExists(cfg, fluidReleaseName)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if !installed {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Fluid is not installed by this platform"})
-		return
-	}
-	datasets, err := listDatasets(c.Request.Context(), cs, "")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if len(datasets) > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "delete the Fluid Datasets in this cluster first, including those inference services reference models through"})
-		return
-	}
-	operatorID := c.MustGet("user").(model.User).ID
-	opts := helmutil.UninstallReleaseOptions{Timeout: fluidActionTimeout, Description: "Uninstalled by MPlatform model serving"}
-	if err := helmutil.UninstallPlatformRelease(cfg, cs.Name, operatorID, fluidReleaseName, fluidNamespace, opts); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Fluid uninstalled"})
+	h.uninstallComponent(c, platformComponent{"Fluid", fluidReleaseName, fluidNamespace, fluidActionTimeout},
+		func(ctx context.Context, cs *cluster.ClientSet) (string, error) {
+			datasets, err := listDatasets(ctx, cs)
+			if err != nil || len(datasets) == 0 {
+				return "", err
+			}
+			return "delete the Fluid Datasets in this cluster first, including those inference services reference models through", nil
+		})
 }

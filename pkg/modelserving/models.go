@@ -22,6 +22,7 @@ const (
 	sourceTypeLocal    = "local"
 	sourceTypeS3       = "s3"
 	sourceTypePVC      = "pvc"
+	sourceTypeDataset  = "dataset"
 
 	maxModelNameLength = 100
 )
@@ -33,6 +34,7 @@ type modelRequest struct {
 	Type        string `json:"type"`
 	SourceType  string `json:"sourceType"`
 	Claim       string `json:"claim"`
+	Dataset     string `json:"dataset"`
 	Path        string `json:"path"`
 	Description string `json:"description"`
 }
@@ -140,10 +142,27 @@ func parseModelRequest(req *modelRequest) (model.ServedModel, error) {
 		}
 		// An empty sub-path mounts the whole volume.
 		served.Path = strings.Trim(path.Clean("/"+served.Path), "/")
+	case sourceTypeDataset:
+		served.Dataset = strings.TrimSpace(req.Dataset)
+		if _, _, ok := splitDataset(served.Dataset); !ok {
+			return served, fmt.Errorf("dataset must be the <namespace>/<name> of a Fluid Dataset")
+		}
+		if slices.Contains(strings.Split(served.Path, "/"), "..") {
+			return served, fmt.Errorf("path of a dataset model must be a directory inside the dataset")
+		}
+		served.Path = strings.Trim(path.Clean("/"+served.Path), "/")
 	default:
-		return served, fmt.Errorf("sourceType must be %s, %s or %s", sourceTypeLocal, sourceTypeS3, sourceTypePVC)
+		return served, fmt.Errorf("sourceType must be %s, %s, %s or %s", sourceTypeLocal, sourceTypeS3, sourceTypePVC, sourceTypeDataset)
 	}
 	return served, nil
+}
+
+// splitDataset returns the namespace and name of a <namespace>/<name>
+// Dataset reference, and whether both are valid.
+func splitDataset(dataset string) (namespace, name string, ok bool) {
+	namespace, name, found := strings.Cut(dataset, "/")
+	ok = found && len(validation.IsDNS1123Label(namespace)) == 0 && len(validation.IsDNS1123Subdomain(name)) == 0
+	return namespace, name, ok
 }
 
 // ensureModelNameFree writes the error response and returns false when another

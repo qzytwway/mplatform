@@ -65,7 +65,9 @@ export function ModelsPage() {
           <span className="font-mono text-sm break-all">
             {model.sourceType === 'pvc'
               ? `${model.claim}:/${model.path}`
-              : model.path}
+              : model.sourceType === 'dataset'
+                ? `${model.dataset}:/${model.path}`
+                : model.path}
           </span>
         ),
       },

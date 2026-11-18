@@ -319,9 +319,38 @@ func requireServiceResources(ctx context.Context, cs *cluster.ClientSet, req *se
 	return requireModelClaim(ctx, cs, req.Namespace, served)
 }
 
+// requireModelDataset checks that the Fluid Dataset of a dataset model is in
+// this cluster and serves its data, which references to it then share.
+func requireModelDataset(ctx context.Context, cs *cluster.ClientSet, served *model.ServedModel) (int, error) {
+	installed, err := crdInstalled(ctx, cs, fluidDatasetCRD)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !installed {
+		return http.StatusBadRequest, fmt.Errorf("model %s is in Fluid Dataset %s; install Fluid in this cluster first", served.Name, served.Dataset)
+	}
+	namespace, name, _ := splitDataset(served.Dataset)
+	dataset := &unstructured.Unstructured{}
+	dataset.SetGroupVersionKind(datasetGVK)
+	err = cs.K8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dataset)
+	switch {
+	case apierrors.IsNotFound(err):
+		return http.StatusBadRequest, fmt.Errorf("the Fluid Dataset %s that model %s is kept in does not exist in this cluster", served.Dataset, served.Name)
+	case err != nil:
+		return http.StatusInternalServerError, err
+	}
+	if phase, _, _ := unstructured.NestedString(dataset.Object, "status", "phase"); phase != datasetBound {
+		return http.StatusBadRequest, fmt.Errorf("the Fluid Dataset %s is not ready (phase %q); wait until it is Bound", served.Dataset, phase)
+	}
+	return http.StatusOK, nil
+}
+
 // requireModelClaim checks that the claim of a pvc model exists in the
 // namespace of the service, as pods only mount claims of their own namespace.
 func requireModelClaim(ctx context.Context, cs *cluster.ClientSet, namespace string, served *model.ServedModel) (int, error) {
+	if served.SourceType == sourceTypeDataset {
+		return requireModelDataset(ctx, cs, served)
+	}
 	if served.SourceType != sourceTypePVC {
 		return http.StatusOK, nil
 	}
@@ -418,7 +447,7 @@ func createObjects(ctx context.Context, cs *cluster.ClientSet, objects []client.
 
 func createErrorStatus(err error) int {
 	switch {
-	case apierrors.IsAlreadyExists(err), apierrors.IsConflict(err):
+	case apierrors.IsAlreadyExists(err), apierrors.IsConflict(err), errors.Is(err, errDatasetMoved):
 		return http.StatusConflict
 	case apierrors.IsNotFound(err), apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
 		return http.StatusBadRequest

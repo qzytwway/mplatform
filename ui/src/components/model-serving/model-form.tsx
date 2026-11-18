@@ -23,12 +23,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Field, Section } from '@/components/form-layout'
+import { DatasetSelect } from '@/components/model-serving/dataset-select'
 
 const PATH_PLACEHOLDERS: Record<ModelSourceType, string> = {
   local: '/data/models/qwen2.5-7b',
   s3: 'qwen2.5-7b/',
   pvc: 'qwen2.5-7b',
+  dataset: 'qwen2.5-7b',
 }
+
+// Sources whose path is a sub-directory, empty for the volume root.
+const OPTIONAL_PATH_SOURCES: ModelSourceType[] = ['pvc', 'dataset']
 
 interface ModelFormProps {
   model: ServedModel | null
@@ -45,6 +50,7 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
     model?.sourceType ?? 'local'
   )
   const [claim, setClaim] = useState(model?.claim ?? '')
+  const [dataset, setDataset] = useState(model?.dataset ?? '')
   const [path, setPath] = useState(model?.path ?? '')
   const [description, setDescription] = useState(model?.description ?? '')
   const [isSaving, setIsSaving] = useState(false)
@@ -57,6 +63,7 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
       type,
       sourceType,
       claim: sourceType === 'pvc' ? claim.trim() : '',
+      dataset: sourceType === 'dataset' ? dataset : '',
       path: path.trim(),
       description: description.trim(),
     }
@@ -158,6 +165,9 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
                 <SelectItem value="pvc">
                   {t('modelServing.sourceTypes.pvc')}
                 </SelectItem>
+                <SelectItem value="dataset">
+                  {t('modelServing.sourceTypes.dataset')}
+                </SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -176,6 +186,19 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
               />
             </Field>
           )}
+          {sourceType === 'dataset' && (
+            <Field
+              id="served-model-dataset"
+              label={t('modelServing.models.dataset')}
+              hint={t('modelServing.models.datasetHint')}
+            >
+              <DatasetSelect
+                id="served-model-dataset"
+                value={dataset}
+                onChange={setDataset}
+              />
+            </Field>
+          )}
           <Field
             id="served-model-path"
             label={t('modelServing.models.path')}
@@ -186,7 +209,7 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
               value={path}
               onChange={(event) => setPath(event.target.value)}
               placeholder={PATH_PLACEHOLDERS[sourceType]}
-              required={sourceType !== 'pvc'}
+              required={!OPTIONAL_PATH_SOURCES.includes(sourceType)}
             />
             {sourceType === 's3' && !storageConfigured && (
               <p className="text-xs text-destructive">
@@ -203,7 +226,10 @@ export function ModelForm({ model, storageConfigured }: ModelFormProps) {
             {t('common.actions.cancel')}
           </Link>
         </Button>
-        <Button type="submit" disabled={isSaving}>
+        <Button
+          type="submit"
+          disabled={isSaving || (sourceType === 'dataset' && !dataset)}
+        >
           {submitLabel}
         </Button>
       </div>
