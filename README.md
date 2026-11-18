@@ -275,7 +275,6 @@ make build
 ## 参与贡献
 
 - 提交 PR 前请先阅读[贡献指南](./CONTRIBUTING.md)。
-- 安全问题请按[安全策略](./SECURITY.md)报告。
 
 ## 许可证
 
