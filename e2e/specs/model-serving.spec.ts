@@ -244,6 +244,7 @@ test.describe('model serving', () => {
 
   // Every other scenario needs LWS; without it they are skipped rather than
   // failing one by one.
+  // oxlint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixtures argument
   test.beforeEach(async ({}, testInfo) => {
     if (testInfo.title === installTitle) {
       return
@@ -255,6 +256,7 @@ test.describe('model serving', () => {
     )
   })
 
+  // oxlint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixtures argument
   test.afterEach(async ({}, testInfo) => {
     if (testInfo.status !== testInfo.expectedStatus) {
       for (const { name, body } of namespaceDiagnostics(namespace)) {

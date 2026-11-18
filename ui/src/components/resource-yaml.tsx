@@ -11,6 +11,7 @@ import {
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
 import { cn, translateError } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -39,47 +40,42 @@ export function ResourceYaml<T>({
   const yamlValue = useMemo(() => yaml.dump(value, { indent: 2 }), [value])
   const [editorValue, setEditorValue] = useState(yamlValue)
   const [isSaving, setIsSaving] = useState(false)
-  const [isValidYaml, setIsValidYaml] = useState(true)
   const [validationError, setValidationError] = useState<string>('')
   const { actualTheme } = useAppearance()
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null)
-  const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  )
   const themeMode = actualTheme === 'dark' ? 'dark' : 'light'
   const backgroundColor = useMonacoBackgroundColor('--card', themeMode)
 
-  useEffect(() => {
+  const yamlValueChanged = useDepsChanged([yamlValue])
+  if (yamlValueChanged && editorValue !== yamlValue) {
     setEditorValue(yamlValue)
-  }, [yamlValue])
+  }
 
-  useEffect(() => {
+  const yamlError = useMemo(() => {
     try {
       yaml.load(editorValue)
-      setIsValidYaml(true)
-      setValidationError('')
+      return null
     } catch (error) {
-      setIsValidYaml(false)
-
-      if (validationTimeoutRef.current) {
-        clearTimeout(validationTimeoutRef.current)
-      }
-
-      validationTimeoutRef.current = setTimeout(() => {
-        setValidationError(
-          error instanceof Error
-            ? error.message.split('\n')[0]
-            : t('common.messages.invalidYaml', 'Invalid YAML')
-        )
-      }, 1000)
+      return error
     }
+  }, [editorValue])
+  const isValidYaml = yamlError === null
+  if (isValidYaml && validationError) {
+    setValidationError('')
+  }
 
-    return () => {
-      if (validationTimeoutRef.current) {
-        clearTimeout(validationTimeoutRef.current)
-      }
-    }
-  }, [editorValue, t])
+  // Show the parse error only once the user pauses typing.
+  useEffect(() => {
+    if (yamlError === null) return
+    const timer = setTimeout(() => {
+      setValidationError(
+        yamlError instanceof Error
+          ? yamlError.message.split('\n')[0]
+          : t('common.messages.invalidYaml', 'Invalid YAML')
+      )
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [yamlError, t])
 
   const handleEditorChange = (value: string | undefined) => {
     const newValue = value || ''

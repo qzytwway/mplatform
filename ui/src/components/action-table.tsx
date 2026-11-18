@@ -82,6 +82,7 @@ export function ActionTable<T>({
     return columns
   }, [actions, columns, t])
 
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
   const table = useReactTable<T>({
     data,
     columns: tableColumns,

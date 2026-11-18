@@ -341,8 +341,8 @@ function getJobSelectorEntries(job: Job): Array<[string, string]> {
   }
 
   const labels = {
-    ...(job.metadata?.labels || {}),
-    ...(job.spec?.template?.metadata?.labels || {}),
+    ...job.metadata?.labels,
+    ...job.spec?.template?.metadata?.labels,
   }
   const jobNameLabel =
     labels['job-name'] || labels['batch.kubernetes.io/job-name']

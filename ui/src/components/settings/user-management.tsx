@@ -346,6 +346,7 @@ export function UserManagement() {
     return [...columns, actionColumn]
   }, [actions, columns, t])
 
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
   const table = useReactTable({
     data: data?.users ?? [],
     columns: tableColumns,

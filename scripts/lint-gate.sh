@@ -77,7 +77,7 @@ lint_python() {
 
 lint_js() {
 	need oxlint "npm install -g oxlint" || return 0
-	step "oxlint" oxlint --deny-warnings .
+	step "oxlint" oxlint --react-plugin --deny-warnings .
 }
 
 lint_shell() {
@@ -124,8 +124,9 @@ run)
 	rm -rf "$GATE_DIR"
 	[[ -n "$LINT_CMD" ]] && step "project lint: $LINT_CMD" bash -c "$LINT_CMD"
 	detect_languages
+	# Built-in languages are always linted the same way; COVERED only applies to other file types.
 	for lang in $LANGS; do
-		covered "$lang" || "lint_$lang"
+		"lint_$lang"
 	done
 
 	ok=1
