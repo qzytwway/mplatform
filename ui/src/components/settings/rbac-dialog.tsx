@@ -198,10 +198,10 @@ export function RBACDialog({
   }
 
   const handleChange = (field: keyof Role, value: string) =>
-    setForm((prev) => ({ ...(prev || {}), [field]: value }))
+    setForm((prev) => ({ ...prev, [field]: value }))
 
   const setArrayField = (field: ArrayRoleField, items: string[]) => {
-    setForm((prev) => ({ ...(prev || {}), [field]: items }))
+    setForm((prev) => ({ ...prev, [field]: items }))
   }
 
   const setDraft = (field: ArrayRoleField, value: string) => {

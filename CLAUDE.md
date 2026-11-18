@@ -20,10 +20,10 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
 - Before committing: `make pre-commit` (formats and lints the whole repo, so keep the
   commit scoped to your change).
 - Committing as Claude: stage the files, run `scripts/lint-gate.sh run`, then
-  `git commit`. The script lints the whole project: `LINT_CMD` from
-  `scripts/lint-gate.conf` (`make lint`, which covers Go and JS/TS) plus a built-in
-  linter for every other language in the tracked files (ruff for Python, shellcheck
-  for shell, ...). On success it records the staged tree and saves the staged diff in
+  `git commit`. The script lints the whole project with a built-in linter for every
+  language in the tracked files (golangci-lint for Go, oxlint for JS/TS, ruff for
+  Python, shellcheck for shell, ...), the same as in the user's other projects; it does
+  not run `make lint`. On success it records the staged tree and saves the staged diff in
   `.lint-gate/`. PreToolUse hooks in `.claude/settings.json` on `Bash(git commit*)`
   block the commit unless that record matches what is staged, and an independent
   Fable 5.2 agent reviews the saved diff and rejects the commit if it finds bugs; it

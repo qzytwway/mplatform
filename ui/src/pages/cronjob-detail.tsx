@@ -197,11 +197,11 @@ export function CronJobDetail(props: { namespace: string; name: string }) {
           namespace,
           name: `${name}-manual-${Date.now()}`,
           labels: {
-            ...(cronjob.spec.jobTemplate.metadata?.labels || {}),
+            ...cronjob.spec.jobTemplate.metadata?.labels,
             'cronjob.kubernetes.io/name': name,
           },
           annotations: {
-            ...(cronjob.spec.jobTemplate.metadata?.annotations || {}),
+            ...cronjob.spec.jobTemplate.metadata?.annotations,
             'mplatform.kubernetes.io/run-now': new Date().toISOString(),
           },
           ownerReferences: cronjob.metadata?.uid

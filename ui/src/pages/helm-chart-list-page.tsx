@@ -449,6 +449,7 @@ export function HelmChartListPage() {
     [t]
   )
 
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
   const table = useReactTable({
     data: charts,
     columns,

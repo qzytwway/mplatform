@@ -132,7 +132,7 @@ export function DeploymentCreateDialog({
         updatedVolume.sourceType = value
       } else {
         updatedVolume.options = {
-          ...(updatedVolume.options || {}),
+          ...updatedVolume.options,
           [key]: value,
         }
       }

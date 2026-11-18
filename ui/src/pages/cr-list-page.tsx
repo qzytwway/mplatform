@@ -50,6 +50,7 @@ export function CRListPage() {
   const extraToolbars = useMemo(() => {
     return [
       <Button
+        key="view-yaml"
         variant="outline"
         size="default"
         onClick={() => {
