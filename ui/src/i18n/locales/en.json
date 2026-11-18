@@ -2274,7 +2274,8 @@
     },
     "sourceTypes": {
       "local": "Node local",
-      "s3": "Object storage"
+      "s3": "Object storage",
+      "pvc": "Shared storage (PVC)"
     },
     "services": {
       "title": "Inference Services",
@@ -2466,7 +2467,7 @@
     "models": {
       "title": "Model Registry",
       "registry": "Models",
-      "description": "Register offline models stored on node disks or in object storage.",
+      "description": "Register offline models stored on node disks, in object storage, or on shared storage.",
       "create": "Add Model",
       "createTitle": "Add model",
       "editTitle": "Edit model",
@@ -2475,8 +2476,11 @@
       "nameHint": "Callers request the model by this name. Letters, digits, dots, underscores, and hyphens.",
       "source": "Source",
       "path": "Path",
+      "claim": "PersistentVolumeClaim",
+      "claimHint": "Name of a PVC on shared storage such as GPFS, Lustre, CephFS, JuiceFS or NFS. It must exist in the namespace of every inference service of this model, and needs ReadOnlyMany or ReadWriteMany access when pods run on several nodes.",
       "localPathHint": "Absolute directory of the model on the node.",
       "s3PathHint": "Key prefix of the model inside the bucket.",
+      "pvcPathHint": "Directory of the model inside the volume. Leave empty to use the volume root.",
       "storageRequired": "Object storage is not configured. Inference services cannot be created for object storage models until it is.",
       "sections": {
         "basic": "Basic Information",

@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qzytwway/mplatform/pkg/model"
 	"gorm.io/gorm"
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 	modelTypeEmbedding = "embedding"
 	sourceTypeLocal    = "local"
 	sourceTypeS3       = "s3"
+	sourceTypePVC      = "pvc"
 
 	maxModelNameLength = 100
 )
@@ -29,6 +32,7 @@ type modelRequest struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	SourceType  string `json:"sourceType"`
+	Claim       string `json:"claim"`
 	Path        string `json:"path"`
 	Description string `json:"description"`
 }
@@ -126,8 +130,18 @@ func parseModelRequest(req *modelRequest) (model.ServedModel, error) {
 		if served.Path == "" {
 			return served, fmt.Errorf("path of an s3 model must be a key prefix inside the bucket")
 		}
+	case sourceTypePVC:
+		served.Claim = strings.TrimSpace(req.Claim)
+		if errs := validation.IsDNS1123Subdomain(served.Claim); len(errs) > 0 {
+			return served, fmt.Errorf("claim must be the name of a PersistentVolumeClaim: %s", strings.Join(errs, "; "))
+		}
+		if slices.Contains(strings.Split(served.Path, "/"), "..") {
+			return served, fmt.Errorf("path of a pvc model must be a directory inside the volume")
+		}
+		// An empty sub-path mounts the whole volume.
+		served.Path = strings.Trim(path.Clean("/"+served.Path), "/")
 	default:
-		return served, fmt.Errorf("sourceType must be %s or %s", sourceTypeLocal, sourceTypeS3)
+		return served, fmt.Errorf("sourceType must be %s, %s or %s", sourceTypeLocal, sourceTypeS3, sourceTypePVC)
 	}
 	return served, nil
 }

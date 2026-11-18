@@ -40,7 +40,7 @@ func (h *Handler) PreviewService(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if _, status, err := admitService(ctx, cs, &req); err != nil {
+	if _, status, err := admitService(ctx, cs, &req, served); err != nil {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}

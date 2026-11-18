@@ -214,7 +214,7 @@ func runtimeContainer(req *serviceRequest, served *model.ServedModel, pdRole str
 		Resources:       runtimeResources(req),
 		SecurityContext: rdmaSecurityContext(req.RDMA),
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: modelVolume, MountPath: modelMountRoot + served.Name, ReadOnly: true},
+			{Name: modelVolume, MountPath: modelMountRoot + served.Name, SubPath: modelSubPath(served), ReadOnly: true},
 			{Name: shmVolume, MountPath: "/dev/shm"},
 		},
 	}
@@ -384,7 +384,20 @@ func runtimeResources(req *serviceRequest) corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{Requests: requests, Limits: limits}
 }
 
+// modelSubPath is the directory of the model inside its volume; only pvc
+// models keep theirs below the volume root.
+func modelSubPath(served *model.ServedModel) string {
+	if served.SourceType == sourceTypePVC {
+		return served.Path
+	}
+	return ""
+}
+
 func modelSourceVolume(served *model.ServedModel) corev1.Volume {
+	if served.SourceType == sourceTypePVC {
+		claim := corev1.PersistentVolumeClaimVolumeSource{ClaimName: served.Claim, ReadOnly: true}
+		return corev1.Volume{Name: modelVolume, VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &claim}}
+	}
 	hostPath := corev1.HostPathVolumeSource{Path: served.Path, Type: new(corev1.HostPathDirectory)}
 	if served.SourceType == sourceTypeS3 {
 		// The node keeps downloaded models so restarts only sync differences.

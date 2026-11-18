@@ -61,7 +61,11 @@ export function ModelsPage() {
         id: 'path',
         header: t('modelServing.models.path'),
         cell: ({ row: { original: model } }) => (
-          <span className="font-mono text-sm break-all">{model.path}</span>
+          <span className="font-mono text-sm break-all">
+            {model.sourceType === 'pvc'
+              ? `${model.claim}:/${model.path}`
+              : model.path}
+          </span>
         ),
       },
       {
