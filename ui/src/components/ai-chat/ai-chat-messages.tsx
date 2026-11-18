@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useState, type RefObject } from 'react'
 import {
   Bot,
   CheckCircle2,
@@ -72,10 +72,18 @@ function ToolCallMessage({
     return <Loader2 className="h-3 w-3 animate-spin" />
   }
 
-  useEffect(() => {
+  const [prevFormSource, setPrevFormSource] = useState({
+    inputRequest,
+    messageId: message.id,
+  })
+  if (
+    prevFormSource.inputRequest !== inputRequest ||
+    prevFormSource.messageId !== message.id
+  ) {
+    setPrevFormSource({ inputRequest, messageId: message.id })
     setFormValues(buildInputDefaults(inputRequest))
     setFormErrors({})
-  }, [inputRequest, message.id])
+  }
 
   const updateFormValue = (fieldName: string, nextValue: string | boolean) => {
     setFormValues((prev) => ({

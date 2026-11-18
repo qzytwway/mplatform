@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { IconReload } from '@tabler/icons-react'
 import { DaemonSet } from 'kubernetes-types/apps/v1'
 import type { Container } from 'kubernetes-types/core/v1'
@@ -47,16 +47,15 @@ export function DaemonSetDetail(props: { namespace: string; name: string }) {
     refetch,
   } = useResource('daemonsets', name, namespace, { refreshInterval })
 
-  useEffect(() => {
-    if (daemonset && refreshInterval > 0) {
-      const { status } = daemonset
-      const isStable =
-        (status?.numberReady || 0) === (status?.desiredNumberScheduled || 0) &&
-        (status?.currentNumberScheduled || 0) ===
-          (status?.desiredNumberScheduled || 0)
-      if (isStable) setRefreshInterval(0)
-    }
-  }, [daemonset, refreshInterval])
+  // Stop polling once the rollout is stable.
+  if (daemonset && refreshInterval > 0) {
+    const { status } = daemonset
+    const isStable =
+      (status?.numberReady || 0) === (status?.desiredNumberScheduled || 0) &&
+      (status?.currentNumberScheduled || 0) ===
+        (status?.desiredNumberScheduled || 0)
+    if (isStable) setRefreshInterval(0)
+  }
 
   const labelSelector = daemonset?.spec?.selector.matchLabels
     ? Object.entries(daemonset.spec.selector.matchLabels)

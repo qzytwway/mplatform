@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { IconAdjustments, IconBug } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Container, Pod } from 'kubernetes-types/core/v1'
@@ -18,6 +18,7 @@ import {
 } from '@/lib/resource-metadata'
 import { isVersionAtLeast, translateError } from '@/lib/utils'
 import { useCluster } from '@/hooks/use-cluster'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -76,27 +77,26 @@ export function PodDetail(props: { namespace: string; name: string }) {
   const attachContainerName =
     pod?.metadata?.annotations?.['mplatform.io/debug-container']
 
-  useEffect(() => {
+  if (useDepsChanged([pod])) {
     if (!pod || !pod?.spec?.containers?.length) {
       setSelectedContainerName(undefined)
       setResizeContainer(null)
-      return
+    } else {
+      setSelectedContainerName((prev) => prev || pod.spec?.containers[0].name)
     }
-    setSelectedContainerName((prev) => prev || pod.spec?.containers[0].name)
-  }, [pod])
+  }
 
-  useEffect(() => {
-    if (!pod || !selectedContainerName) {
-      setResizeContainer(null)
-      return
-    }
-    const container = pod.spec?.containers.find(
-      (item) => item.name === selectedContainerName
-    )
+  if (useDepsChanged([pod, selectedContainerName])) {
+    const container =
+      pod && selectedContainerName
+        ? pod.spec?.containers.find(
+            (item) => item.name === selectedContainerName
+          )
+        : undefined
     setResizeContainer(
       container ? (JSON.parse(JSON.stringify(container)) as Container) : null
     )
-  }, [pod, selectedContainerName])
+  }
 
   const handleSaveYaml = async (content: Pod) => {
     await updateResource('pods', name, namespace, content)

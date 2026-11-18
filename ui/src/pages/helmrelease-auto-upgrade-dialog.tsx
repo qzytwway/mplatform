@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -9,6 +9,7 @@ import {
   useHelmReleaseAutoUpgrade,
 } from '@/lib/api'
 import { formatDate, translateError } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -79,10 +80,8 @@ export function HelmReleaseAutoUpgradeDialog({
         !!activeChart &&
         !isChartSourceLoading))
 
-  useEffect(() => {
-    if (!open || !configQuery.data) {
-      return
-    }
+  const configChanged = useDepsChanged([configQuery.data, open])
+  if (configChanged && open && configQuery.data) {
     setEnabled(configQuery.data.enabled)
     setScheduleType(configQuery.data.scheduleType)
     setIntervalMinutes(String(configQuery.data.intervalMinutes || 60))
@@ -95,7 +94,7 @@ export function HelmReleaseAutoUpgradeDialog({
         : ''
     )
     setError('')
-  }, [configQuery.data, open])
+  }
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

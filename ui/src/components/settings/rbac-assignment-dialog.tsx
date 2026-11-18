@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { IconX } from '@tabler/icons-react'
 import { AlertTriangle, ChevronsUpDown, Loader2 } from 'lucide-react'
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Role } from '@/types/api'
 import { useUserList } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -85,15 +86,14 @@ export function RBACAssignmentDialog({
     subjectType === 'user' ? userSearch : ''
   )
 
-  useEffect(() => {
-    if (open) {
-      setSubjectType('user')
-      setSubject('')
-      setUserSelectOpen(false)
-      setUserSearch('')
-      setPendingRemoval(null)
-    }
-  }, [open])
+  const openChanged = useDepsChanged([open])
+  if (openChanged && open) {
+    setSubjectType('user')
+    setSubject('')
+    setUserSelectOpen(false)
+    setUserSearch('')
+    setPendingRemoval(null)
+  }
 
   const handleAssign = (e: React.FormEvent) => {
     e.preventDefault()

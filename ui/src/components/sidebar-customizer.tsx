@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
 import {
@@ -23,6 +23,7 @@ import {
   setGlobalSidebarPreference,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -254,9 +255,9 @@ export function SidebarCustomizer({
   const isSetAsGlobalDisabled =
     isPublishingGlobal || isClearingGlobal || isCurrentConfigGlobal
 
-  useEffect(() => {
+  if (useDepsChanged([globalSidebarPreference])) {
     setPublishedGlobalSidebarPreference(globalSidebarPreference)
-  }, [globalSidebarPreference])
+  }
 
   const handleSetAsGlobalSidebar = async () => {
     if (!config || !user?.isAdmin()) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   IconLink,
   IconMessage,
@@ -17,6 +17,7 @@ import {
   useGeneralSetting,
 } from '@/lib/api'
 import { translateError } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -78,8 +79,8 @@ export function GeneralManagement() {
     logo: '',
   })
 
-  useEffect(() => {
-    if (!data) return
+  const dataChanged = useDepsChanged([data])
+  if (dataChanged && data) {
     setFormData({
       aiAgentEnabled: data.aiAgentEnabled,
       aiProvider: data.aiProvider || 'openai',
@@ -96,7 +97,7 @@ export function GeneralManagement() {
       loginPrompt: data.loginPrompt || '',
       logo: data.logo || '',
     })
-  }, [data])
+  }
 
   const mutation = useMutation({
     mutationFn: (payload: GeneralSettingUpdateRequest) =>

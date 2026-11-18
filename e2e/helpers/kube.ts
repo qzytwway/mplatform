@@ -29,7 +29,10 @@ export interface KubeObject {
     annotations?: Record<string, string>
     ownerReferences?: { kind: string; name: string }[]
   }
+  // Shapes differ per kind; specs read the fields they need.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   spec?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   status?: any
 }
 
@@ -106,7 +109,9 @@ export function kubectl(
     })
   } catch (error) {
     const stderr = (error as { stderr?: string }).stderr ?? ''
-    throw new Error(`kubectl ${args.join(' ')} failed: ${stderr || error}`)
+    throw new Error(`kubectl ${args.join(' ')} failed: ${stderr || error}`, {
+      cause: error,
+    })
   }
 }
 
@@ -164,7 +169,7 @@ export async function waitFor<T>(
   }: { timeout?: number; interval?: number; diagnose?: () => string } = {}
 ): Promise<T> {
   const deadline = Date.now() + timeout
-  let lastError = ''
+  let lastError: string
   for (;;) {
     try {
       const value = await check()
@@ -176,7 +181,7 @@ export async function waitFor<T>(
       lastError = String(error)
     }
     if (Date.now() > deadline) {
-      let details = ''
+      let details: string
       try {
         details = diagnose?.() ?? ''
       } catch (error) {

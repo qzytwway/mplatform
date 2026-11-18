@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Container } from 'kubernetes-types/core/v1'
 import { useTranslation } from 'react-i18next'
 
@@ -27,11 +27,12 @@ export function ContainerDetailDialog({
   const { t } = useTranslation()
   const [tab, setTab] = useState('details')
 
-  useEffect(() => {
-    if (open) {
-      setTab('details')
-    }
-  }, [open, item?.container.name])
+  const tabResetKey = `${open}|${item?.container.name ?? ''}`
+  const [prevTabResetKey, setPrevTabResetKey] = useState(tabResetKey)
+  if (tabResetKey !== prevTabResetKey) {
+    setPrevTabResetKey(tabResetKey)
+    if (open) setTab('details')
+  }
 
   if (!item) {
     return null

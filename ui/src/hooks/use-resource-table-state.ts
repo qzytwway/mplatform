@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table'
 
 import { getClusterScopedStorageKey } from '@/lib/current-cluster'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 
 interface UseResourceTableStateOptions {
   storageKey: string
@@ -119,9 +120,9 @@ export function useResourceTableState({
     sessionStorage.removeItem(key)
   }, [columnFilters, storageKey])
 
-  useEffect(() => {
+  if (useDepsChanged([columnFilters, searchQuery])) {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-  }, [columnFilters, searchQuery])
+  }
 
   return {
     sorting,

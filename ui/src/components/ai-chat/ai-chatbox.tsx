@@ -86,16 +86,25 @@ export function AIChatbox({
     }
   }, [])
 
-  useEffect(() => {
-    if (isMobile) return
-    const bounds = getDesktopBounds(viewportSize.width, viewportSize.height)
-    setWidth((prev) =>
-      Math.min(bounds.maxWidth, Math.max(bounds.minWidth, prev))
-    )
-    setHeight((prev) =>
-      Math.min(bounds.maxHeight, Math.max(bounds.minHeight, prev))
-    )
-  }, [getDesktopBounds, isMobile, viewportSize.height, viewportSize.width])
+  const [prevBoundsInput, setPrevBoundsInput] = useState<{
+    isMobile: boolean
+    viewportSize: typeof viewportSize
+  } | null>(null)
+  if (
+    prevBoundsInput?.isMobile !== isMobile ||
+    prevBoundsInput.viewportSize !== viewportSize
+  ) {
+    setPrevBoundsInput({ isMobile, viewportSize })
+    if (!isMobile) {
+      const bounds = getDesktopBounds(viewportSize.width, viewportSize.height)
+      setWidth((prev) =>
+        Math.min(bounds.maxWidth, Math.max(bounds.minWidth, prev))
+      )
+      setHeight((prev) =>
+        Math.min(bounds.maxHeight, Math.max(bounds.minHeight, prev))
+      )
+    }
+  }
 
   const desktopBounds = getDesktopBounds(
     viewportSize.width,

@@ -76,12 +76,21 @@ export function useWebSocket(
   const isMountedRef = useRef(true)
 
   // Network stats tracking
+  // lastReset is set when a connection opens.
   const networkStatsRef = useRef({
-    lastReset: Date.now(),
+    lastReset: 0,
     bytesUploaded: 0,
     bytesDownloaded: 0,
     totalUploaded: 0,
     totalDownloaded: 0,
+  })
+
+  // Store callbacks in refs to avoid recreating connect function
+  const callbacksRef = useRef(callbacks)
+  const optsRef = useRef(opts)
+  useEffect(() => {
+    callbacksRef.current = callbacks
+    optsRef.current = opts
   })
 
   // Update network stats
@@ -167,11 +176,8 @@ export function useWebSocket(
     }, optsRef.current.speedUpdateInterval)
   }, [])
 
-  // Store callbacks in refs to avoid recreating connect function
-  const callbacksRef = useRef(callbacks)
-  const optsRef = useRef(opts)
-  callbacksRef.current = callbacks
-  optsRef.current = opts
+  // Lets the reconnect timer call the latest connect.
+  const connectRef = useRef<() => void>(() => {})
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -254,7 +260,7 @@ export function useWebSocket(
               console.log(
                 `Reconnecting... (attempt ${reconnectAttemptsRef.current}/${currentOptsForReconnect.maxReconnectAttempts})`
               )
-              connect()
+              connectRef.current()
             }
           }, currentOptsForReconnect.reconnectInterval)
         }
@@ -337,6 +343,10 @@ export function useWebSocket(
   }, [cleanupResources])
 
   // Manual reconnect
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
+
   const reconnect = useCallback(() => {
     reconnectAttemptsRef.current = 0
     connect()
@@ -365,6 +375,11 @@ export function useWebSocket(
     }
   }, [connect, cleanupResources])
 
+  if (!opts.enabled && (isConnected || isConnecting)) {
+    setIsConnected(false)
+    setIsConnecting(false)
+  }
+
   // Effect to handle enabled option changes
   useEffect(() => {
     if (opts.enabled && !isConnected && !isConnecting) {
@@ -374,10 +389,8 @@ export function useWebSocket(
         }
       }, 100)
       return () => clearTimeout(timer)
-    } else if (!opts.enabled && (isConnected || isConnecting)) {
+    } else if (!opts.enabled) {
       cleanupResources()
-      setIsConnected(false)
-      setIsConnecting(false)
     }
   }, [opts.enabled, isConnected, isConnecting, connect, cleanupResources])
 

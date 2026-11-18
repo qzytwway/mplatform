@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import { getSidebarIconComponent } from '@/contexts/sidebar-config-defaults'
 
 import type { SidebarItem } from '@/types/sidebar'
@@ -10,6 +11,7 @@ export function SidebarItemIcon({
   item: SidebarItem
   className?: string
 }) {
-  const Icon = getSidebarIconComponent(item.icon)
-  return <Icon className={cn('size-4 shrink-0', className)} />
+  return createElement(getSidebarIconComponent(item.icon), {
+    className: cn('size-4 shrink-0', className),
+  })
 }

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Role } from '@/types/api'
 import { assignRole, unassignRole, useRoleList } from '@/lib/api'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -28,14 +29,19 @@ export function UserRoleAssignment({ open, onOpenChange, subject }: Props) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: roles = [] } = useRoleList()
+  const { data: rolesData } = useRoleList()
+  const roles = rolesData ?? []
   const [selected, setSelected] = useState<Record<number, boolean>>({})
 
   const subjectType = subject?.type || 'user'
   const subjectName = subject?.name
 
-  useEffect(() => {
-    if (!subjectName || !roles) return
+  const assignmentSourceChanged = useDepsChanged([
+    subjectName,
+    subjectType,
+    rolesData,
+  ])
+  if (assignmentSourceChanged && subjectName && rolesData) {
     const mapping: Record<number, boolean> = {}
     roles.forEach((r) => {
       const has = r.assignments?.some(
@@ -44,7 +50,7 @@ export function UserRoleAssignment({ open, onOpenChange, subject }: Props) {
       mapping[r.id] = !!has
     })
     setSelected(mapping)
-  }, [subjectName, subjectType, roles])
+  }
 
   const toggle = async (roleId: number) => {
     if (!subjectName) return

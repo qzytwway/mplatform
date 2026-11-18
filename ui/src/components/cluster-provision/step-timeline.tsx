@@ -36,9 +36,15 @@ function stepTime(step: ProvisionStep, now: number, t: TFunction) {
     : ''
 }
 
-export function StepTimeline({ steps }: { steps: ProvisionStep[] }) {
+export function StepTimeline({
+  steps,
+  now,
+}: {
+  steps: ProvisionStep[]
+  // Time of the latest poll, used for the running step's elapsed time.
+  now: number
+}) {
   const { t } = useTranslation()
-  const now = Date.now()
 
   return (
     <ol>

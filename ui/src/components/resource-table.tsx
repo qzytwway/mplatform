@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import React, { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { ColumnDef } from '@tanstack/react-table'
 import { Box, Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -106,15 +100,14 @@ function ResourceTableContent<T>({
       ? '_all'
       : selectedNamespace
 
-  useEffect(() => {
-    if (clusterScope || selectedNamespace !== undefined) return
+  if (!clusterScope && selectedNamespace === undefined) {
     const storageKey = getClusterScopedStorageKey('selectedNamespace')
     setSelectedNamespace(
       sessionStorage.getItem(storageKey) ||
         localStorage.getItem(storageKey) ||
         'default'
     )
-  }, [clusterScope, selectedNamespace])
+  }
 
   const handleNamespaceChange = (value: string) => {
     const storageKey = getClusterScopedStorageKey('selectedNamespace')
@@ -265,11 +258,20 @@ function ResourceTableContent<T>({
     [namespaceFilteredData]
   )
 
-  useEffect(() => {
-    if (!useSSE && error && !effectiveLabelSelector) {
-      setRefreshInterval(0)
-    }
-  }, [useSSE, error, effectiveLabelSelector, setRefreshInterval])
+  // Stop polling when a plain list request fails.
+  const [prevPollState, setPrevPollState] = useState<{
+    useSSE: boolean
+    error: typeof error
+    effectiveLabelSelector: typeof effectiveLabelSelector
+  } | null>(null)
+  if (
+    prevPollState?.useSSE !== useSSE ||
+    prevPollState.error !== error ||
+    prevPollState.effectiveLabelSelector !== effectiveLabelSelector
+  ) {
+    setPrevPollState({ useSSE, error, effectiveLabelSelector })
+    if (!useSSE && error && !effectiveLabelSelector) setRefreshInterval(0)
+  }
 
   const table = useResourceTable({
     data: memoizedData,

@@ -42,6 +42,25 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
     enabled: false,
   })
 
+  // Store a new cluster list, falling back to the default cluster when none
+  // or a removed one is selected. Persisting here, before children render with
+  // the new cluster, keeps API requests from reading a stale selection.
+  const applyClusters = useCallback((nextClusters: Cluster[]) => {
+    setClusters(nextClusters)
+    const selected = getCurrentCluster()
+    if (
+      nextClusters.length === 0 ||
+      (selected && nextClusters.some((cluster) => cluster.name === selected))
+    ) {
+      return
+    }
+    const fallback =
+      nextClusters.find((cluster) => cluster.isDefault)?.name ??
+      nextClusters[0].name
+    setCurrentClusterState(fallback)
+    persistCurrentCluster(fallback)
+  }, [])
+
   const refreshClusters = useCallback(
     async (clusterNames: string[]) => {
       setPendingClusterNames((pending) => [
@@ -56,7 +75,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
         ) {
           return
         }
-        setClusters(result.data)
+        applyClusters(result.data)
         setError(null)
         setPendingClusterNames((pending) =>
           pending.filter(
@@ -65,7 +84,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
         )
       }
     },
-    [refetchClusters]
+    [applyClusters, refetchClusters]
   )
 
   useEffect(() => {
@@ -108,7 +127,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       if (result.data) {
-        setClusters(result.data)
+        applyClusters(result.data)
         setError(null)
       } else {
         setClusters([])
@@ -122,27 +141,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       cancelled = true
     }
-  }, [refetchClusters])
-
-  useEffect(() => {
-    if (clusters.length > 0 && !currentCluster) {
-      const defaultCluster = clusters.find((cluster) => cluster.isDefault)
-      const nextCluster = defaultCluster
-        ? defaultCluster.name
-        : clusters[0].name
-      setCurrentClusterState(nextCluster)
-      persistCurrentCluster(nextCluster)
-    }
-
-    if (
-      currentCluster &&
-      clusters.length > 0 &&
-      !clusters.some((cluster) => cluster.name === currentCluster)
-    ) {
-      setCurrentClusterState(null)
-      clearCurrentCluster()
-    }
-  }, [clusters, currentCluster])
+  }, [applyClusters, refetchClusters])
 
   const setCurrentCluster = async (clusterName: string) => {
     if (clusterName === currentCluster || isSwitching) {

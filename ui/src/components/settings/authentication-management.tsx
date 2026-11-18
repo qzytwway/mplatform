@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { IconAlertTriangle, IconKey } from '@tabler/icons-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +13,7 @@ import {
   useLDAPSetting,
 } from '@/lib/api'
 import { translateError } from '@/lib/utils'
+import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -75,17 +76,16 @@ export function AuthenticationManagement() {
   const [mfaEnabled, setMFAEnabled] = useState(true)
   const [passkeyLoginEnabled, setPasskeyLoginEnabled] = useState(true)
 
-  useEffect(() => {
+  if (useDepsChanged([data])) {
     setFormData(toFormData(data))
-  }, [data])
+  }
 
-  useEffect(() => {
-    if (generalSetting) {
-      setPasswordLoginEnabled(!generalSetting.passwordLoginDisabled)
-      setMFAEnabled(generalSetting.enableMFA ?? true)
-      setPasskeyLoginEnabled(generalSetting.enablePasskeyLogin ?? true)
-    }
-  }, [generalSetting])
+  const generalSettingChanged = useDepsChanged([generalSetting])
+  if (generalSettingChanged && generalSetting) {
+    setPasswordLoginEnabled(!generalSetting.passwordLoginDisabled)
+    setMFAEnabled(generalSetting.enableMFA ?? true)
+    setPasskeyLoginEnabled(generalSetting.enablePasskeyLogin ?? true)
+  }
 
   const mutation = useMutation({
     mutationFn: (params: {

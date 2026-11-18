@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useState } from 'react'
 import animatedIcon from '@/assets/icon-animated.svg'
 import { useAuth } from '@/contexts/auth-context'
 import { IconEye, IconEyeOff, IconLock, IconUser } from '@tabler/icons-react'
@@ -71,14 +71,12 @@ export function LoginPage() {
   const credentialSubmitDisabled =
     loginLoading !== null || (mfaRequired && mfaCode.length !== 6)
 
-  useEffect(() => {
-    if (
-      credentialProviders.length > 0 &&
-      !credentialProviders.includes(credentialsProvider)
-    ) {
-      setCredentialsProvider(credentialProviders[0])
-    }
-  }, [credentialProviders, credentialsProvider])
+  if (
+    credentialProviders.length > 0 &&
+    !credentialProviders.includes(credentialsProvider)
+  ) {
+    setCredentialsProvider(credentialProviders[0])
+  }
 
   if (user && !isLoading) {
     const storedHref = sessionStorage.getItem('loginRedirectHref')
