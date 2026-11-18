@@ -159,15 +159,14 @@ export function LogSearch() {
           {hitsQuery.data
             ? t('logging.search.total', { count: hitsQuery.data.total })
             : ' '}
+          <span className="ml-auto text-xs">
+            {applied.keyword ? null : t('logging.search.createAlertHint')}
+          </span>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="ml-auto"
             disabled={!applied.keyword}
-            title={
-              applied.keyword ? undefined : t('logging.search.createAlertHint')
-            }
             onClick={() => setAlertOpen(true)}
           >
             <BellPlus />
