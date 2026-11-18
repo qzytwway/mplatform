@@ -43,11 +43,12 @@ fi
 # Store the list of staged files before running pre-commit
 STAGED_FILES=$(git diff --cached --name-only)
 
-# Skip lint when scripts/lint-gate.sh already passed it for exactly these staged changes
+# When scripts/lint-gate.sh passed for exactly these staged changes it has already
+# formatted them, so only run the project's stricter `make lint` (ESLint, go vet, ...)
 PRE_COMMIT_TARGET=pre-commit
 if scripts/lint-gate.sh check 2>/dev/null; then
-    echo "ℹ️  Lint already passed for these staged changes; formatting only."
-    PRE_COMMIT_TARGET=format
+    echo "ℹ️  Commit gate already formatted these staged changes; running make lint."
+    PRE_COMMIT_TARGET=lint
 fi
 
 # Run pre-commit checks
