@@ -60,13 +60,49 @@ async function expectForbidden(response: APIResponse, expected: string[]) {
   }
 }
 
+// An empty preference means no global sidebar preference, which is a delete.
+function setGlobalSidebarPreference(
+  request: APIRequestContext,
+  preference: string
+) {
+  return preference
+    ? request.post('/api/v1/admin/sidebar_preference/global', {
+        data: { sidebar_preference: preference },
+      })
+    : request.delete('/api/v1/admin/sidebar_preference/global')
+}
+
+const clusterName = kindClusterName.startsWith('kind-')
+  ? kindClusterName
+  : `kind-${kindClusterName}`
+
+// Teardown runs in this order for whatever the test has not removed itself.
+const cleanupOrder = [
+  'pod',
+  'deniedPod',
+  'deployment',
+  'deniedDeployment',
+  'configMap',
+  'deniedConfigMap',
+  'user',
+  'role',
+  'decoyRole',
+  'apiKey',
+  'template',
+  'oauthProvider',
+  'dummyCluster',
+  'helmRepository',
+  'globalSidebar',
+  'ldapSetting',
+  'generalSetting',
+  'helmRepositoryServer',
+] as const
+
 test('backend APIs work end to end against the real test environment', async ({
   request,
-}, testInfo) => {
-  const baseURL = testInfo.project.use.baseURL
-  if (typeof baseURL !== 'string') {
-    throw new Error('Playwright baseURL is required')
-  }
+  baseURL,
+}) => {
+  expect(baseURL, 'Playwright baseURL is required').toEqual(expect.any(String))
 
   const suffix = Date.now().toString(36)
   const username = `e2e-api-user-${suffix}`
@@ -87,9 +123,6 @@ test('backend APIs work end to end against the real test environment', async ({
   const deniedPodName = `e2e-api-pod-denied-${suffix}`
   const deploymentName = `e2e-api-deployment-${suffix}`
   const deniedDeploymentName = `e2e-api-deployment-denied-${suffix}`
-  const clusterName = kindClusterName.startsWith('kind-')
-    ? kindClusterName
-    : `kind-${kindClusterName}`
   const clusterPath = `/api/v1/_clusters/${encodeURIComponent(clusterName)}`
   const configMapPath = `${clusterPath}/configmaps/default/${configMapName}`
   const deniedConfigMapPath = `${clusterPath}/configmaps/kube-system/${deniedConfigMapName}`
@@ -106,18 +139,11 @@ test('backend APIs work end to end against the real test environment', async ({
   let oauthProviderId: number | undefined
   let dummyClusterId: number | undefined
   let helmRepositoryId: number | undefined
-  let configMapCreated = false
-  let deniedConfigMapCreated = false
-  let podCreated = false
-  let deniedPodCreated = false
-  let deploymentCreated = false
-  let deniedDeploymentCreated = false
-  let originalGeneralSetting: GeneralSetting | undefined
-  let originalLDAPSetting: LDAPSetting | undefined
   let originalGlobalSidebarPreference = ''
-  let generalSettingChanged = false
-  let ldapSettingChanged = false
-  let globalSidebarChanged = false
+  const pendingCleanup = new Map<
+    (typeof cleanupOrder)[number],
+    () => Promise<unknown>
+  >()
   let anonymousRequest: APIRequestContext | undefined
   let readerRequest: APIRequestContext | undefined
   let helmRepositoryServer: ReturnType<typeof createServer> | undefined
@@ -192,6 +218,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     dummyClusterId = dummyCluster.id
+    pendingCleanup.set('dummyCluster', () =>
+      request.delete(`/api/v1/admin/clusters/${dummyClusterId}`)
+    )
     await expectStatus(
       await request.put(`/api/v1/admin/clusters/${dummyClusterId}`, {
         data: {
@@ -221,7 +250,7 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.delete(`/api/v1/admin/clusters/${dummyClusterId}`),
       200
     )
-    dummyClusterId = undefined
+    pendingCleanup.delete('dummyCluster')
     await expectStatus(
       await request.get('/api/v1/_clusters/missing/configmaps/default'),
       404
@@ -231,7 +260,6 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.get('/api/v1/admin/general-setting/'),
       200
     )
-    originalGeneralSetting = generalSetting
     expect(typeof generalSetting.kubectlEnabled).toBe('boolean')
     expect(typeof generalSetting.enableVersionCheck).toBe('boolean')
     const updatedGeneralSetting = await expectJSON<GeneralSetting>(
@@ -245,7 +273,16 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       200
     )
-    generalSettingChanged = true
+    const restoreGeneralSetting = () =>
+      request.put('/api/v1/admin/general-setting/', {
+        data: {
+          aiAgentEnabled: generalSetting.aiAgentEnabled,
+          enableMFA: generalSetting.enableMFA,
+          enablePasskeyLogin: generalSetting.enablePasskeyLogin,
+          loginPrompt: generalSetting.loginPrompt,
+        },
+      })
+    pendingCleanup.set('generalSetting', restoreGeneralSetting)
     expect(updatedGeneralSetting).toMatchObject({
       aiAgentEnabled: false,
       enableMFA: false,
@@ -259,7 +296,7 @@ test('backend APIs work end to end against the real test environment', async ({
       400
     )
 
-    originalLDAPSetting = await expectJSON<LDAPSetting>(
+    const originalLDAPSetting = await expectJSON<LDAPSetting>(
       await request.get('/api/v1/admin/ldap-setting/'),
       200
     )
@@ -273,7 +310,9 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       200
     )
-    ldapSettingChanged = true
+    const restoreLDAPSetting = () =>
+      request.put('/api/v1/admin/ldap-setting/', { data: originalLDAPSetting })
+    pendingCleanup.set('ldapSetting', restoreLDAPSetting)
     expect(updatedLDAPSetting.displayNameAttribute).toBe(`cn-${suffix}`)
 
     const oauthProvider = await expectJSON<{
@@ -295,6 +334,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     oauthProviderId = oauthProvider.provider.id
+    pendingCleanup.set('oauthProvider', () =>
+      request.delete(`/api/v1/admin/oauth-providers/${oauthProviderId}`)
+    )
     expect(oauthProvider.provider.clientSecret).toBe('***')
     const oauthProviders = await expectJSON<{
       providers: Array<{ id: number; name: string; clientSecret: string }>
@@ -355,6 +397,14 @@ test('backend APIs work end to end against the real test environment', async ({
       helmRepositoryServer!.once('error', reject)
       helmRepositoryServer!.listen(0, '127.0.0.1', resolve)
     })
+    const listeningHelmRepositoryServer = helmRepositoryServer
+    pendingCleanup.set(
+      'helmRepositoryServer',
+      () =>
+        new Promise<void>((resolve) => {
+          listeningHelmRepositoryServer.close(() => resolve())
+        })
+    )
     const helmRepositoryAddress = helmRepositoryServer.address() as AddressInfo
     const helmRepository = await expectJSON<{ id: number; name: string }>(
       await request.post('/api/v1/admin/charts/repositories', {
@@ -366,6 +416,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     helmRepositoryId = helmRepository.id
+    pendingCleanup.set('helmRepository', () =>
+      request.delete(`/api/v1/admin/charts/repositories/${helmRepositoryId}`)
+    )
     const helmRepositories = await expectJSON<
       Array<{ id: number; name: string }>
     >(await request.get(`${clusterPath}/charts/repositories`), 200)
@@ -400,14 +453,14 @@ test('backend APIs work end to end against the real test environment', async ({
       ),
       200
     )
-    helmRepositoryId = undefined
+    pendingCleanup.delete('helmRepository')
     await new Promise<void>((resolve, reject) => {
       helmRepositoryServer!.close((error) => {
         if (error) reject(error)
         else resolve()
       })
     })
-    helmRepositoryServer = undefined
+    pendingCleanup.delete('helmRepositoryServer')
 
     const template = await expectJSON<{
       id: number
@@ -424,6 +477,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     templateId = template.id
+    pendingCleanup.set('template', () =>
+      request.delete(`/api/v1/admin/templates/${templateId}`)
+    )
     expect(template.name).toBe(templateName)
     const updatedTemplate = await expectJSON<{
       id: number
@@ -453,6 +509,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     apiKeyId = apiKeyResponse.apiKey.id
+    pendingCleanup.set('apiKey', () =>
+      request.delete(`/api/v1/admin/apikeys/${apiKeyId}`)
+    )
     expect(apiKeyResponse.apiKey.username).toBe(apiKeyName)
     expect(apiKeyResponse.apiKey.apiKey).toBeTruthy()
     const apiKeys = await expectJSON<{
@@ -478,6 +537,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     userId = createdUser.id
+    pendingCleanup.set('user', () =>
+      request.delete(`/api/v1/admin/users/${userId}`)
+    )
     expect(createdUser.username).toBe(username)
     expect(createdUser.enabled).toBe(true)
     const updatedUser = await expectJSON<{ id: number; name: string }>(
@@ -515,6 +577,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     roleId = createdRole.role.id
+    pendingCleanup.set('role', () =>
+      request.delete(`/api/v1/admin/roles/${roleId}`)
+    )
     expect(createdRole.role.name).toBe(roleName)
     const fetchedRole = await expectJSON<{
       role: { id: number; name: string }
@@ -572,6 +637,9 @@ test('backend APIs work end to end against the real test environment', async ({
       201
     )
     decoyRoleId = decoyRole.role.id
+    pendingCleanup.set('decoyRole', () =>
+      request.delete(`/api/v1/admin/roles/${decoyRoleId}`)
+    )
     await expectJSON(
       await request.post(`/api/v1/admin/roles/${decoyRoleId}/assign`, {
         data: { subjectType: 'user', subject: username },
@@ -649,7 +717,9 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       201
     )
-    configMapCreated = true
+    pendingCleanup.set('configMap', () =>
+      request.delete(`${configMapPath}?wait=false`)
+    )
     expect(createdConfigMap.metadata.name).toBe(configMapName)
     expect(createdConfigMap.metadata.namespace).toBe('default')
     const deniedConfigMap = await expectJSON<{
@@ -665,7 +735,9 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       201
     )
-    deniedConfigMapCreated = true
+    pendingCleanup.set('deniedConfigMap', () =>
+      request.delete(`${deniedConfigMapPath}?wait=false`)
+    )
     expect(deniedConfigMap.metadata.namespace).toBe('kube-system')
 
     const createdPod = await expectJSON<{
@@ -691,7 +763,7 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       201
     )
-    podCreated = true
+    pendingCleanup.set('pod', () => request.delete(`${podPath}?wait=false`))
     expect(createdPod.metadata).toMatchObject({
       name: podName,
       namespace: 'default',
@@ -719,7 +791,9 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       201
     )
-    deniedPodCreated = true
+    pendingCleanup.set('deniedPod', () =>
+      request.delete(`${deniedPodPath}?wait=false`)
+    )
     expect(deniedPod.metadata.namespace).toBe('kube-system')
 
     const deploymentBody = {
@@ -753,7 +827,9 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       201
     )
-    deploymentCreated = true
+    pendingCleanup.set('deployment', () =>
+      request.delete(`${deploymentPath}?wait=false`)
+    )
     expect(createdDeployment.metadata).toMatchObject({
       name: deploymentName,
       namespace: 'default',
@@ -780,7 +856,9 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       201
     )
-    deniedDeploymentCreated = true
+    pendingCleanup.set('deniedDeployment', () =>
+      request.delete(`${deniedDeploymentPath}?wait=false`)
+    )
     expect(deniedDeployment.metadata.namespace).toBe('kube-system')
 
     await expect
@@ -1036,7 +1114,9 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.delete('/api/v1/admin/sidebar_preference/global'),
       200
     )
-    globalSidebarChanged = true
+    pendingCleanup.set('globalSidebar', () =>
+      setGlobalSidebarPreference(request, originalGlobalSidebarPreference)
+    )
     await expectStatus(
       await readerRequest.post('/api/users/sidebar_preference', {
         data: { sidebar_preference: '{"reader":true}' },
@@ -1055,20 +1135,14 @@ test('backend APIs work end to end against the real test environment', async ({
       }),
       ['sidebar customization is disabled']
     )
-    if (originalGlobalSidebarPreference) {
-      await expectStatus(
-        await request.post('/api/v1/admin/sidebar_preference/global', {
-          data: { sidebar_preference: originalGlobalSidebarPreference },
-        }),
-        200
-      )
-    } else {
-      await expectStatus(
-        await request.delete('/api/v1/admin/sidebar_preference/global'),
-        200
-      )
-    }
-    globalSidebarChanged = false
+    await expectStatus(
+      await setGlobalSidebarPreference(
+        request,
+        originalGlobalSidebarPreference
+      ),
+      200
+    )
+    pendingCleanup.delete('globalSidebar')
 
     await expectForbidden(
       await readerRequest.post('/api/users/me/mfa/setup', {
@@ -1318,17 +1392,17 @@ test('backend APIs work end to end against the real test environment', async ({
     ])
 
     await expectStatus(await request.delete(`${podPath}?wait=false`), 200)
-    podCreated = false
+    pendingCleanup.delete('pod')
     await expect
       .poll(async () => (await request.get(podPath)).status())
       .toBe(404)
     await expectStatus(await request.delete(`${deniedPodPath}?wait=false`), 200)
-    deniedPodCreated = false
+    pendingCleanup.delete('deniedPod')
     await expectStatus(
       await request.delete(`${deploymentPath}?wait=false`),
       200
     )
-    deploymentCreated = false
+    pendingCleanup.delete('deployment')
     await expect
       .poll(async () => (await request.get(deploymentPath)).status())
       .toBe(404)
@@ -1336,9 +1410,9 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.delete(`${deniedDeploymentPath}?wait=false`),
       200
     )
-    deniedDeploymentCreated = false
+    pendingCleanup.delete('deniedDeployment')
     await expectStatus(await request.delete(`${configMapPath}?wait=false`), 200)
-    configMapCreated = false
+    pendingCleanup.delete('configMap')
     await expect
       .poll(async () => (await request.get(configMapPath)).status())
       .toBe(404)
@@ -1346,7 +1420,7 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.delete(`${deniedConfigMapPath}?wait=false`),
       200
     )
-    deniedConfigMapCreated = false
+    pendingCleanup.delete('deniedConfigMap')
 
     const history = await expectJSON<{
       data: Array<{ operationType: string; success: boolean }>
@@ -1407,26 +1481,11 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.delete(`/api/v1/admin/oauth-providers/${oauthProviderId}`),
       200
     )
-    oauthProviderId = undefined
-    await expectStatus(
-      await request.put('/api/v1/admin/ldap-setting/', {
-        data: originalLDAPSetting,
-      }),
-      200
-    )
-    ldapSettingChanged = false
-    await expectStatus(
-      await request.put('/api/v1/admin/general-setting/', {
-        data: {
-          aiAgentEnabled: originalGeneralSetting.aiAgentEnabled,
-          enableMFA: originalGeneralSetting.enableMFA,
-          enablePasskeyLogin: originalGeneralSetting.enablePasskeyLogin,
-          loginPrompt: originalGeneralSetting.loginPrompt,
-        },
-      }),
-      200
-    )
-    generalSettingChanged = false
+    pendingCleanup.delete('oauthProvider')
+    await expectStatus(await restoreLDAPSetting(), 200)
+    pendingCleanup.delete('ldapSetting')
+    await expectStatus(await restoreGeneralSetting(), 200)
+    pendingCleanup.delete('generalSetting')
 
     await readerRequest.dispose()
     readerRequest = undefined
@@ -1435,128 +1494,34 @@ test('backend APIs work end to end against the real test environment', async ({
       await request.delete(`/api/v1/admin/users/${userId}`),
       200
     )
-    userId = undefined
+    pendingCleanup.delete('user')
     await expectStatus(
       await request.delete(`/api/v1/admin/roles/${roleId}`),
       200
     )
-    roleId = undefined
+    pendingCleanup.delete('role')
     await expectStatus(
       await request.delete(`/api/v1/admin/roles/${decoyRoleId}`),
       200
     )
-    decoyRoleId = undefined
+    pendingCleanup.delete('decoyRole')
     await expectStatus(
       await request.delete(`/api/v1/admin/apikeys/${apiKeyId}`),
       200
     )
-    apiKeyId = undefined
+    pendingCleanup.delete('apiKey')
     await expectStatus(
       await request.delete(`/api/v1/admin/templates/${templateId}`),
       200
     )
-    templateId = undefined
+    pendingCleanup.delete('template')
   } finally {
     await readerRequest?.dispose()
     await anonymousRequest?.dispose()
-    if (podCreated) {
-      await request.delete(`${podPath}?wait=false`).catch(() => undefined)
-    }
-    if (deniedPodCreated) {
-      await request.delete(`${deniedPodPath}?wait=false`).catch(() => undefined)
-    }
-    if (deploymentCreated) {
-      await request
-        .delete(`${deploymentPath}?wait=false`)
+    for (const key of cleanupOrder) {
+      await pendingCleanup
+        .get(key)?.()
         .catch(() => undefined)
-    }
-    if (deniedDeploymentCreated) {
-      await request
-        .delete(`${deniedDeploymentPath}?wait=false`)
-        .catch(() => undefined)
-    }
-    if (configMapCreated) {
-      await request.delete(`${configMapPath}?wait=false`).catch(() => undefined)
-    }
-    if (deniedConfigMapCreated) {
-      await request
-        .delete(`${deniedConfigMapPath}?wait=false`)
-        .catch(() => undefined)
-    }
-    if (userId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/users/${userId}`)
-        .catch(() => undefined)
-    }
-    if (roleId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/roles/${roleId}`)
-        .catch(() => undefined)
-    }
-    if (decoyRoleId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/roles/${decoyRoleId}`)
-        .catch(() => undefined)
-    }
-    if (apiKeyId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/apikeys/${apiKeyId}`)
-        .catch(() => undefined)
-    }
-    if (templateId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/templates/${templateId}`)
-        .catch(() => undefined)
-    }
-    if (oauthProviderId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/oauth-providers/${oauthProviderId}`)
-        .catch(() => undefined)
-    }
-    if (dummyClusterId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/clusters/${dummyClusterId}`)
-        .catch(() => undefined)
-    }
-    if (helmRepositoryId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/charts/repositories/${helmRepositoryId}`)
-        .catch(() => undefined)
-    }
-    if (globalSidebarChanged) {
-      if (originalGlobalSidebarPreference) {
-        await request
-          .post('/api/v1/admin/sidebar_preference/global', {
-            data: { sidebar_preference: originalGlobalSidebarPreference },
-          })
-          .catch(() => undefined)
-      } else {
-        await request
-          .delete('/api/v1/admin/sidebar_preference/global')
-          .catch(() => undefined)
-      }
-    }
-    if (ldapSettingChanged && originalLDAPSetting) {
-      await request
-        .put('/api/v1/admin/ldap-setting/', { data: originalLDAPSetting })
-        .catch(() => undefined)
-    }
-    if (generalSettingChanged && originalGeneralSetting) {
-      await request
-        .put('/api/v1/admin/general-setting/', {
-          data: {
-            aiAgentEnabled: originalGeneralSetting.aiAgentEnabled,
-            enableMFA: originalGeneralSetting.enableMFA,
-            enablePasskeyLogin: originalGeneralSetting.enablePasskeyLogin,
-            loginPrompt: originalGeneralSetting.loginPrompt,
-          },
-        })
-        .catch(() => undefined)
-    }
-    if (helmRepositoryServer?.listening) {
-      await new Promise<void>((resolve) => {
-        helmRepositoryServer!.close(() => resolve())
-      })
     }
   }
 })

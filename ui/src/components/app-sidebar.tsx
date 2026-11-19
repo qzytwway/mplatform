@@ -42,8 +42,8 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  useSidebar,
 } from '@/components/ui/sidebar'
+import { useSidebar } from '@/components/ui/sidebar-context'
 
 import { ClusterSelector } from './cluster-selector'
 import { MODEL_SERVING_ITEMS } from './model-serving-nav'

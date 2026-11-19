@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { TerminalProvider, useTerminal } from './terminal-context'
+import { useTerminal } from './terminal-context'
+import { TerminalProvider } from './terminal-provider'
 
 function createStorage() {
   let store: Record<string, string> = {}

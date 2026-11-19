@@ -1,4 +1,3 @@
-/* eslint-disable no-control-regex */
 /**
  * Simple ANSI escape sequence parser for terminal output
  * Supports basic color codes and formatting
@@ -54,6 +53,10 @@ export interface AnsiState {
   underline?: boolean
 }
 
+const ESC = String.fromCharCode(0x1b)
+// SGR ("select graphic rendition") sequence: ESC [ <codes separated by ;> m
+const SGR_PATTERN = `${ESC}\\[([0-9;]*)m`
+
 interface ParsedSegment {
   text: string
   styles: AnsiState
@@ -70,8 +73,7 @@ export function parseAnsi(
   let currentState: AnsiState = { ...initialState }
   let currentText = ''
 
-  // Regex to match ANSI escape sequences - using Unicode escape instead of hex
-  const ansiRegex = new RegExp('\u001b\\[([0-9;]*)m', 'g')
+  const ansiRegex = new RegExp(SGR_PATTERN, 'g')
   let lastIndex = 0
   let match: RegExpExecArray | null
 

@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { LogOut, Minus, Plus, UserCog, ZoomIn } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { useAppearance } from '@/hooks/use-appearance'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,7 +17,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { useAppearance } from '@/components/appearance-provider'
 
 import { AccountSettingsDialog } from './account-settings-dialog'
 import { SidebarCustomizer } from './sidebar-customizer'

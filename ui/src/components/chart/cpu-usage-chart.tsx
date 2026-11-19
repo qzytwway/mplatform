@@ -12,7 +12,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from '../ui/chart'
-import { ChartStateWrapper, isSameDay, toChartData } from './chart-utils'
+import { ChartStateWrapper } from './chart-state-wrapper'
+import { isSameDay, toChartData } from './chart-utils'
 
 interface CpuUsageChartProps {
   data: UsageDataPoint[]

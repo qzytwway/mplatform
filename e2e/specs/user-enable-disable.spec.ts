@@ -136,7 +136,7 @@ async function loginFreshContext(
   return { context, page }
 }
 
-async function loginFreshContextExpectFailure(
+async function attemptLoginFreshContext(
   browser: Browser,
   origin: string,
   username: string,
@@ -149,10 +149,6 @@ async function loginFreshContextExpectFailure(
 
   await page.goto(`${origin}/login`)
   await loginWithPasswordUi(page, username, password)
-  await expect(page).toHaveURL(/\/login/)
-  await expect(page.getByRole('alert')).toContainText(
-    'insufficient permissions'
-  )
 
   return { context, page }
 }
@@ -185,11 +181,15 @@ test('password user can be disabled, re-enabled, and deleted', async ({
   await openUsersPage(page)
   await toggleUserEnabled(page, user.username, 'Disable')
 
-  const disabledSession = await loginFreshContextExpectFailure(
+  const disabledSession = await attemptLoginFreshContext(
     browser,
     origin,
     user.username,
     user.password
+  )
+  await expect(disabledSession.page).toHaveURL(/\/login/)
+  await expect(disabledSession.page.getByRole('alert')).toContainText(
+    'insufficient permissions'
   )
   await disabledSession.context.close()
 

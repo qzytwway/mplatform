@@ -4,8 +4,8 @@ import {
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
 import { cn } from '@/lib/utils'
+import { useAppearance } from '@/hooks/use-appearance'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useAppearance } from '@/components/appearance-provider'
 
 interface TextViewerProps {
   value: string

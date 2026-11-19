@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ThemeProvider, useTheme } from './theme-provider'
+import { useTheme } from '@/hooks/use-theme'
+
+import { ThemeProvider } from './theme-provider'
 
 function createStorage() {
   let store: Record<string, string> = {}

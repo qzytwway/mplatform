@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   IconClearAll,
   IconMaximize,
@@ -21,6 +28,7 @@ import { toSimpleContainer } from '@/lib/k8s'
 import { getWebSocketUrl } from '@/lib/subpath'
 import { getTerminalTheme } from '@/lib/terminal-theme'
 import { translateError } from '@/lib/utils'
+import { useAppearance } from '@/hooks/use-appearance'
 import { useCluster } from '@/hooks/use-cluster'
 import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
@@ -39,7 +47,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-import { useAppearance } from './appearance-provider'
 import { ConnectionIndicator } from './connection-indicator'
 import { NetworkSpeedIndicator } from './network-speed-indicator'
 import { ContainerSelector } from './selector/container-selector'
@@ -219,10 +226,22 @@ export function Terminal({
     []
   )
 
+  // Read when connecting, without reconnecting when they change: font size and
+  // cursor style are applied to the live terminal by their change handlers.
+  const readConnectOptions = useEffectEvent(() => ({
+    fontSize,
+    cursorStyle,
+    hasPods: !!pods && pods.length > 0,
+  }))
+  const formatServerError = useEffectEvent((data: string) =>
+    translateError(new Error(data), t)
+  )
+
   // Unified terminal and websocket lifecycle
   useEffect(() => {
+    const { fontSize, cursorStyle, hasPods } = readConnectOptions()
     if (type === 'pod') {
-      if (!pods || pods.length === 0) if (!selectedPod) return
+      if (!hasPods) if (!selectedPod) return
       if (!selectedContainer) return
     }
     if (type === 'node' && !nodeName) return
@@ -350,7 +369,7 @@ export function Terminal({
             break
           case 'error':
             terminal.writeln(
-              `\x1b[31mError: ${translateError(new Error(message.data), t)}\x1b[0m`
+              `\x1b[31mError: ${formatServerError(message.data)}\x1b[0m`
             )
             setIsConnected(false)
             break
@@ -439,7 +458,6 @@ export function Terminal({
       if (speedUpdateTimerRef.current)
         clearInterval(speedUpdateTimerRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedPod,
     selectedContainer,

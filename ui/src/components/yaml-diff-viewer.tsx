@@ -8,6 +8,7 @@ import {
   defineMonacoBackgroundThemes,
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
+import { useAppearance } from '@/hooks/use-appearance'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,8 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-import { useAppearance } from './appearance-provider'
 
 interface YamlDiffViewerProps {
   /** Original YAML content */

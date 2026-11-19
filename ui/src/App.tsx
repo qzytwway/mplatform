@@ -10,19 +10,18 @@ import { AppSidebar } from './components/app-sidebar'
 import { ErrorBoundary } from './components/error-boundary'
 import { FloatingTerminal } from './components/floating-terminal'
 import { GlobalSearch } from './components/global-search'
-import {
-  GlobalSearchProvider,
-  useGlobalSearch,
-} from './components/global-search-provider'
+import { GlobalSearchProvider } from './components/global-search-provider'
 import { SiteHeader } from './components/site-header'
 import { Button } from './components/ui/button'
 import { SidebarInset, SidebarProvider } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
-import { AIChatProvider } from './contexts/ai-chat-context'
+import { AIChatProvider } from './contexts/ai-chat-provider'
 import { useAuth } from './contexts/auth-context'
-import { ClusterProvider } from './contexts/cluster-context'
-import { TerminalProvider, useTerminal } from './contexts/terminal-context'
+import { ClusterProvider } from './contexts/cluster-provider'
+import { useTerminal } from './contexts/terminal-context'
+import { TerminalProvider } from './contexts/terminal-provider'
 import { useCluster } from './hooks/use-cluster'
+import { useGlobalSearch } from './hooks/use-global-search'
 
 function ClusterGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation()

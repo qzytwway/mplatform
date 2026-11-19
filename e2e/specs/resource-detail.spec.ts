@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 import { kindClusterName } from '../env'
 
 const controlPlaneNodeName = `${kindClusterName}-control-plane`
+const pasteShortcut = process.platform === 'darwin' ? 'Meta+V' : 'Control+V'
 
 test.describe('resource detail navigation', () => {
   test('navigates from the services list to service detail', async ({
@@ -57,7 +58,6 @@ spec:
       ports:
         - containerPort: 80
 `
-    const pasteShortcut = process.platform === 'darwin' ? 'Meta+V' : 'Control+V'
 
     await page.goto('/')
     const origin = new URL(page.url()).origin

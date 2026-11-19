@@ -1,25 +1,10 @@
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from 'react'
+import { ReactNode, useCallback, useMemo, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 
 import { PageContext } from '@/components/ai-chat/ai-chat-types'
 import { toSingularResource } from '@/components/ai-chat/ai-chat-utils'
 
-interface AIChatContextType {
-  isOpen: boolean
-  openChat: () => void
-  closeChat: () => void
-  toggleChat: () => void
-  pageContext: PageContext
-}
-
-const AIChatContext = createContext<AIChatContextType | undefined>(undefined)
+import { AIChatContext } from './ai-chat-context'
 
 export function AIChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -94,13 +79,4 @@ export function AIChatProvider({ children }: { children: ReactNode }) {
       {children}
     </AIChatContext.Provider>
   )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useAIChatContext() {
-  const context = useContext(AIChatContext)
-  if (context === undefined) {
-    throw new Error('useAIChatContext must be used within an AIChatProvider')
-  }
-  return context
 }

@@ -31,12 +31,16 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
   - `ui/` uses the typescript-eslint and react-hooks recommended rules (React Compiler
     rules, though the compiler isn't enabled); `useReactTable` calls carry an
     `eslint-disable-next-line react-hooks/incompatible-library` comment, since TanStack
-    Table can't be memoized. To reset or sync state when props change, use
+    Table v8 can't be memoized (v9 fixes it); these five are the only lint suppressions
+    in `ui/` and `e2e/`, so don't add new ones: fix the code. Modules export either
+    components or non-components, not both (react-refresh), so hooks, contexts and
+    variants live in their own `.ts` files. To reset or sync state when props change, use
     `useDepsChanged` (`ui/src/hooks/use-deps-changed.ts`) during render instead of
     setState in an effect.
-  - `e2e/` uses the typescript-eslint and Playwright recommended rules, minus the
-    conditional/skip/expect rules (specs branch on cluster state), and `ui/`'s prettier
-    config; it has no warnings, and the commit gate blocks new ones.
+  - `e2e/` uses the typescript-eslint and Playwright recommended rules (conditional
+    `test.skip(cond, reason)` allowed) and `ui/`'s prettier config; it has no warnings,
+    and the commit gate blocks new ones. Keep branching out of test bodies: cleanup in
+    hooks, environment-derived values at module level, one assertion path per test.
 - E2E (Playwright against a local kind cluster, needs Docker + kind): `make e2e-test`
   the first time, then `make e2e-run SPEC=specs/user-access.spec.ts`.
   `external-auth.spec.ts` is skipped unless `make e2e-setup-ldap e2e-setup-dex` ran and
