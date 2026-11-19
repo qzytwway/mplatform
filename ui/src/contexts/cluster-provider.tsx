@@ -1,5 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
@@ -11,19 +10,7 @@ import {
   setCurrentCluster as persistCurrentCluster,
 } from '@/lib/current-cluster'
 
-interface ClusterContextType {
-  clusters: Cluster[]
-  currentCluster: string | null
-  setCurrentCluster: (clusterName: string) => void
-  refreshClusters: (clusterNames: string[]) => Promise<void>
-  isLoading: boolean
-  isSwitching?: boolean
-  error: Error | null
-}
-
-export const ClusterContext = createContext<ClusterContextType | undefined>(
-  undefined
-)
+import { ClusterContext, type ClusterContextType } from './cluster-context'
 
 export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   children,

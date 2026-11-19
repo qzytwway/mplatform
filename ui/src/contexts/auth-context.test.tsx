@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AuthProvider } from './auth-context'
+import { AuthProvider } from './auth-provider'
 
 const { bootstrap } = vi.hoisted(() => ({
   bootstrap: { logo: '' },
