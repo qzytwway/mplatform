@@ -3,13 +3,16 @@ import { expect, test } from '@playwright/test'
 
 import { adminUser, authFile, ensureAuthDir } from '../env'
 
-test('bootstrap a reusable admin session', async ({ page }) => {
+let kubeconfig: string
+
+test.beforeAll(() => {
   if (!process.env.KUBECONFIG) {
     throw new Error('KUBECONFIG is required for e2e tests')
   }
+  kubeconfig = readFileSync(process.env.KUBECONFIG, 'utf8')
+})
 
-  const kubeconfig = readFileSync(process.env.KUBECONFIG, 'utf8')
-
+test('bootstrap a reusable admin session', async ({ page }) => {
   await page.goto('/setup')
 
   await expect(

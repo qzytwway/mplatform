@@ -247,176 +247,178 @@ async function cleanupRepositoryFromUI(page: Page, repositoryName: string) {
 test.describe('helm mplatform lifecycle', () => {
   test.setTimeout(8 * 60 * 1000)
 
+  // Set while the test owns a release/repository; afterEach removes leftovers.
+  let releaseToCleanUp: string | undefined
+  let repositoryToCleanUp: string | undefined
+
+  test.afterEach(async ({ page }) => {
+    if (releaseToCleanUp) {
+      await cleanupReleaseFromUI(page, releaseToCleanUp)
+    }
+    if (repositoryToCleanUp) {
+      await cleanupRepositoryFromUI(page, repositoryToCleanUp)
+    }
+  })
+
   test('manages the mplatform repository and release lifecycle through the UI', async ({
     page,
   }) => {
     const suffix = Date.now().toString(36)
     const repositoryName = `e2e-mplatform-${suffix}`
     const releaseName = `e2e-mplatform-${suffix}`
-    let repositoryDeleted = false
-    let releaseDeleted = false
+    releaseToCleanUp = releaseName
+    repositoryToCleanUp = repositoryName
 
-    try {
-      await page.goto('/charts')
-      const origin = new URL(page.url()).origin
-      await page
-        .context()
-        .grantPermissions(['clipboard-read', 'clipboard-write'], { origin })
+    await page.goto('/charts')
+    const origin = new URL(page.url()).origin
+    await page
+      .context()
+      .grantPermissions(['clipboard-read', 'clipboard-write'], { origin })
 
-      await switchToRepositories(page)
-      await page.getByRole('button', { name: 'Add Repository' }).first().click()
+    await switchToRepositories(page)
+    await page.getByRole('button', { name: 'Add Repository' }).first().click()
 
-      const addRepositoryDialog = page.getByRole('dialog', {
-        name: 'Add Repository',
-      })
-      await expect(addRepositoryDialog).toBeVisible()
-      await addRepositoryDialog
-        .locator('#helm-repository-name')
-        .fill(repositoryName)
-      await addRepositoryDialog
-        .locator('#helm-repository-url')
-        .fill(repositoryURL)
-      await addRepositoryDialog.getByRole('button', { name: 'Add' }).click()
-      await expect(addRepositoryDialog).toBeHidden({ timeout: 60_000 })
+    const addRepositoryDialog = page.getByRole('dialog', {
+      name: 'Add Repository',
+    })
+    await expect(addRepositoryDialog).toBeVisible()
+    await addRepositoryDialog
+      .locator('#helm-repository-name')
+      .fill(repositoryName)
+    await addRepositoryDialog
+      .locator('#helm-repository-url')
+      .fill(repositoryURL)
+    await addRepositoryDialog.getByRole('button', { name: 'Add' }).click()
+    await expect(addRepositoryDialog).toBeHidden({ timeout: 60_000 })
 
-      await selectRepositoryFilter(page, repositoryName)
-      await page.getByPlaceholder('Search charts...').fill(chartName)
-      const chartLink = page.getByRole('link', {
-        name: chartName,
-        exact: true,
-      })
-      await expect(chartLink).toBeVisible({ timeout: 60_000 })
+    await selectRepositoryFilter(page, repositoryName)
+    await page.getByPlaceholder('Search charts...').fill(chartName)
+    const chartLink = page.getByRole('link', {
+      name: chartName,
+      exact: true,
+    })
+    await expect(chartLink).toBeVisible({ timeout: 60_000 })
 
-      await chartLink.click()
-      await page.waitForURL(
-        `**/charts/${encodeURIComponent(repositoryName)}/${chartName}`
-      )
-      await page.goto(
-        `/charts/${encodeURIComponent(repositoryName)}/${encodeURIComponent(chartName)}?version=${encodeURIComponent(installVersion)}`
-      )
+    await chartLink.click()
+    await page.waitForURL(
+      `**/charts/${encodeURIComponent(repositoryName)}/${chartName}`
+    )
+    await page.goto(
+      `/charts/${encodeURIComponent(repositoryName)}/${encodeURIComponent(chartName)}?version=${encodeURIComponent(installVersion)}`
+    )
 
-      await expect(
-        page.getByRole('heading', { name: chartName }).first()
-      ).toBeVisible({ timeout: 60_000 })
-      await expect(page.getByText(installVersion).first()).toBeVisible()
-      await page.getByRole('tab', { name: 'Values' }).click()
-      await expect(page.locator('.monaco-editor').first()).toBeVisible({
-        timeout: 60_000,
-      })
-      await page.getByRole('tab', { name: 'Versions' }).click()
-      await expect(
-        page.getByRole('link', { name: specifiedUpgradeVersion })
-      ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: chartName }).first()
+    ).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByText(installVersion).first()).toBeVisible()
+    await page.getByRole('tab', { name: 'Values' }).click()
+    await expect(page.locator('.monaco-editor').first()).toBeVisible({
+      timeout: 60_000,
+    })
+    await page.getByRole('tab', { name: 'Versions' }).click()
+    await expect(
+      page.getByRole('link', { name: specifiedUpgradeVersion })
+    ).toBeVisible()
 
-      await page.getByRole('button', { name: 'Install' }).click()
-      const installDialog = page.getByRole('dialog', { name: 'Install' })
-      await expect(installDialog).toBeVisible()
-      await installDialog.getByLabel('Release Name').fill(releaseName)
-      await fillMonacoEditor(page, installDialog, 1, baseValues)
-      await expect(
-        installDialog.getByRole('button', { name: 'Dry Run' })
-      ).toBeEnabled({ timeout: 60_000 })
-      await installDialog.getByRole('button', { name: 'Dry Run' }).click()
-      await expectDryRunPreview(installDialog)
-      await expect(
-        installDialog.getByRole('button', { name: 'Install' })
-      ).toBeEnabled({ timeout: 60_000 })
-      await installDialog.getByRole('button', { name: 'Install' }).click()
+    await page.getByRole('button', { name: 'Install' }).click()
+    const installDialog = page.getByRole('dialog', { name: 'Install' })
+    await expect(installDialog).toBeVisible()
+    await installDialog.getByLabel('Release Name').fill(releaseName)
+    await fillMonacoEditor(page, installDialog, 1, baseValues)
+    await expect(
+      installDialog.getByRole('button', { name: 'Dry Run' })
+    ).toBeEnabled({ timeout: 60_000 })
+    await installDialog.getByRole('button', { name: 'Dry Run' }).click()
+    await expectDryRunPreview(installDialog)
+    await expect(
+      installDialog.getByRole('button', { name: 'Install' })
+    ).toBeEnabled({ timeout: 60_000 })
+    await installDialog.getByRole('button', { name: 'Install' }).click()
 
-      await page.waitForURL(
-        `**/helmrelease/${namespace}/${encodeURIComponent(releaseName)}`,
-        { timeout: 120_000 }
-      )
-      await expectReleaseSummary(page, releaseName, installVersion, 1)
-      await expectReleaseValues(page, 'e2e-mode: base', 'e2e-mode: upgraded')
-      await expectAppliedPodLabel(page, releaseName, 'base')
+    await page.waitForURL(
+      `**/helmrelease/${namespace}/${encodeURIComponent(releaseName)}`,
+      { timeout: 120_000 }
+    )
+    await expectReleaseSummary(page, releaseName, installVersion, 1)
+    await expectReleaseValues(page, 'e2e-mode: base', 'e2e-mode: upgraded')
+    await expectAppliedPodLabel(page, releaseName, 'base')
 
-      await page.getByRole('button', { name: 'Upgrade', exact: true }).click()
-      const customValuesUpgradeDialog = page.getByRole('dialog', {
-        name: 'Upgrade',
-      })
-      await expect(customValuesUpgradeDialog).toBeVisible()
-      await fillMonacoEditor(page, customValuesUpgradeDialog, 1, upgradedValues)
-      await expect(
-        customValuesUpgradeDialog.getByRole('button', { name: 'Dry Run' })
-      ).toBeEnabled({ timeout: 60_000 })
-      await customValuesUpgradeDialog
-        .getByRole('button', { name: 'Dry Run' })
-        .click()
-      await expectDryRunPreview(customValuesUpgradeDialog)
-      await expect(
-        customValuesUpgradeDialog.getByText('Changed').first()
-      ).toBeVisible()
-      await expect(
-        customValuesUpgradeDialog.getByRole('button', { name: 'Upgrade' })
-      ).toBeEnabled({ timeout: 60_000 })
-      await customValuesUpgradeDialog
-        .getByRole('button', { name: 'Upgrade' })
-        .click()
-      await expect(customValuesUpgradeDialog).toBeHidden({ timeout: 120_000 })
+    await page.getByRole('button', { name: 'Upgrade', exact: true }).click()
+    const customValuesUpgradeDialog = page.getByRole('dialog', {
+      name: 'Upgrade',
+    })
+    await expect(customValuesUpgradeDialog).toBeVisible()
+    await fillMonacoEditor(page, customValuesUpgradeDialog, 1, upgradedValues)
+    await expect(
+      customValuesUpgradeDialog.getByRole('button', { name: 'Dry Run' })
+    ).toBeEnabled({ timeout: 60_000 })
+    await customValuesUpgradeDialog
+      .getByRole('button', { name: 'Dry Run' })
+      .click()
+    await expectDryRunPreview(customValuesUpgradeDialog)
+    await expect(
+      customValuesUpgradeDialog.getByText('Changed').first()
+    ).toBeVisible()
+    await expect(
+      customValuesUpgradeDialog.getByRole('button', { name: 'Upgrade' })
+    ).toBeEnabled({ timeout: 60_000 })
+    await customValuesUpgradeDialog
+      .getByRole('button', { name: 'Upgrade' })
+      .click()
+    await expect(customValuesUpgradeDialog).toBeHidden({ timeout: 120_000 })
 
-      await page.reload()
-      await expectReleaseSummary(page, releaseName, installVersion, 2)
-      await expectReleaseValues(page, 'e2e-mode: upgraded')
-      await expectAppliedPodLabel(page, releaseName, 'upgraded')
+    await page.reload()
+    await expectReleaseSummary(page, releaseName, installVersion, 2)
+    await expectReleaseValues(page, 'e2e-mode: upgraded')
+    await expectAppliedPodLabel(page, releaseName, 'upgraded')
 
-      await page.getByRole('tab', { name: 'History' }).click()
-      await expect(
-        page.getByRole('button', { name: 'Rollback' }).first()
-      ).toBeEnabled({ timeout: 60_000 })
-      await page.getByRole('button', { name: 'Rollback' }).first().click()
+    await page.getByRole('tab', { name: 'History' }).click()
+    await expect(
+      page.getByRole('button', { name: 'Rollback' }).first()
+    ).toBeEnabled({ timeout: 60_000 })
+    await page.getByRole('button', { name: 'Rollback' }).first().click()
 
-      const rollbackDialog = page.getByRole('dialog', {
-        name: 'Rollback release?',
-      })
-      await expect(rollbackDialog).toBeVisible()
-      await rollbackDialog.getByRole('button', { name: 'Rollback' }).click()
-      await expect(rollbackDialog).toBeHidden({ timeout: 120_000 })
+    const rollbackDialog = page.getByRole('dialog', {
+      name: 'Rollback release?',
+    })
+    await expect(rollbackDialog).toBeVisible()
+    await rollbackDialog.getByRole('button', { name: 'Rollback' }).click()
+    await expect(rollbackDialog).toBeHidden({ timeout: 120_000 })
 
-      await page.reload()
-      await expectReleaseSummary(page, releaseName, installVersion, 3)
-      await expectReleaseValues(page, 'e2e-mode: base', 'e2e-mode: upgraded')
-      await expectAppliedPodLabel(page, releaseName, 'base')
+    await page.reload()
+    await expectReleaseSummary(page, releaseName, installVersion, 3)
+    await expectReleaseValues(page, 'e2e-mode: base', 'e2e-mode: upgraded')
+    await expectAppliedPodLabel(page, releaseName, 'base')
 
-      await page.getByRole('button', { name: 'Upgrade', exact: true }).click()
-      const versionUpgradeDialog = page.getByRole('dialog', {
-        name: 'Upgrade',
-      })
-      await expect(versionUpgradeDialog).toBeVisible()
-      await selectUpgradeChart(page, versionUpgradeDialog, repositoryName)
-      await selectUpgradeVersion(
-        page,
-        versionUpgradeDialog,
-        specifiedUpgradeVersion
-      )
-      await fillMonacoEditor(page, versionUpgradeDialog, 1, upgradedValues)
-      await expect(
-        versionUpgradeDialog.getByRole('button', { name: 'Upgrade' })
-      ).toBeEnabled({ timeout: 60_000 })
-      await versionUpgradeDialog
-        .getByRole('button', { name: 'Upgrade' })
-        .click()
-      await expect(versionUpgradeDialog).toBeHidden({ timeout: 180_000 })
+    await page.getByRole('button', { name: 'Upgrade', exact: true }).click()
+    const versionUpgradeDialog = page.getByRole('dialog', {
+      name: 'Upgrade',
+    })
+    await expect(versionUpgradeDialog).toBeVisible()
+    await selectUpgradeChart(page, versionUpgradeDialog, repositoryName)
+    await selectUpgradeVersion(
+      page,
+      versionUpgradeDialog,
+      specifiedUpgradeVersion
+    )
+    await fillMonacoEditor(page, versionUpgradeDialog, 1, upgradedValues)
+    await expect(
+      versionUpgradeDialog.getByRole('button', { name: 'Upgrade' })
+    ).toBeEnabled({ timeout: 60_000 })
+    await versionUpgradeDialog.getByRole('button', { name: 'Upgrade' }).click()
+    await expect(versionUpgradeDialog).toBeHidden({ timeout: 180_000 })
 
-      await page.reload()
-      await expectReleaseSummary(page, releaseName, specifiedUpgradeVersion, 4)
-      await expectReleaseValues(page, 'e2e-mode: upgraded')
-      await expectAppliedPodLabel(page, releaseName, 'upgraded')
+    await page.reload()
+    await expectReleaseSummary(page, releaseName, specifiedUpgradeVersion, 4)
+    await expectReleaseValues(page, 'e2e-mode: upgraded')
+    await expectAppliedPodLabel(page, releaseName, 'upgraded')
 
-      await deleteReleaseFromCurrentPage(page, releaseName)
-      await page.getByPlaceholder(/^Search Helm Release/).fill(releaseName)
-      await expect(page.getByRole('link', { name: releaseName })).toHaveCount(0)
-      releaseDeleted = true
+    await deleteReleaseFromCurrentPage(page, releaseName)
+    await page.getByPlaceholder(/^Search Helm Release/).fill(releaseName)
+    await expect(page.getByRole('link', { name: releaseName })).toHaveCount(0)
+    releaseToCleanUp = undefined
 
-      await deleteRepositoryFromChartsPage(page, repositoryName)
-      repositoryDeleted = true
-    } finally {
-      if (!releaseDeleted) {
-        await cleanupReleaseFromUI(page, releaseName)
-      }
-      if (!repositoryDeleted) {
-        await cleanupRepositoryFromUI(page, repositoryName)
-      }
-    }
+    await deleteRepositoryFromChartsPage(page, repositoryName)
+    repositoryToCleanUp = undefined
   })
 })
