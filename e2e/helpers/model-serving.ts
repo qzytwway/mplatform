@@ -703,8 +703,7 @@ export function routerWorkers(namespace: string, name: string, pod?: string) {
       is_healthy?: boolean
       bootstrap_port?: number | null
       worker_type?:
-        | string
-        | Record<string, { bootstrap_port?: number | null } | undefined>
+        string | Record<string, { bootstrap_port?: number | null } | undefined>
     }[]
   }
   return body.workers.map((worker): RouterWorker => {

@@ -29,9 +29,7 @@ test.describe('resource detail navigation', () => {
   test('navigates from the nodes list to node detail', async ({ page }) => {
     await page.goto('/nodes')
 
-    await page
-      .getByPlaceholder(/^Search nodes/i)
-      .fill(controlPlaneNodeName)
+    await page.getByPlaceholder(/^Search nodes/i).fill(controlPlaneNodeName)
     const nodeLink = page.getByRole('link', { name: controlPlaneNodeName })
     await expect(nodeLink).toBeVisible()
     await nodeLink.click()

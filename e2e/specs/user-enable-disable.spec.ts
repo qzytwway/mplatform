@@ -1,9 +1,11 @@
-import { type Browser, type Page, expect, test } from '@playwright/test'
+import { expect, test, type Browser, type Page } from '@playwright/test'
 
 async function openUsersPage(page: Page) {
   await page.goto('/settings?tab=users')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Add Password User' })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Add Password User' })
+  ).toBeVisible()
 }
 
 async function createPasswordUser(
@@ -23,7 +25,9 @@ async function createPasswordUser(
   await dialog.getByRole('button', { name: 'Create' }).click()
 
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('row').filter({ hasText: username })).toBeVisible()
+  await expect(
+    page.getByRole('row').filter({ hasText: username })
+  ).toBeVisible()
 }
 
 async function assignViewerRole(page: Page, username: string) {
@@ -43,9 +47,9 @@ async function assignViewerRole(page: Page, username: string) {
 
   await dialog.getByRole('button', { name: 'Close' }).first().click()
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('row').filter({ hasText: username })).toContainText(
-    'viewer'
-  )
+  await expect(
+    page.getByRole('row').filter({ hasText: username })
+  ).toContainText('viewer')
 }
 
 async function toggleUserEnabled(
@@ -69,7 +73,9 @@ async function toggleUserEnabled(
 
   await responsePromise
 
-  await expect(row).toContainText(actionName === 'Disable' ? 'Disabled' : 'Enabled')
+  await expect(row).toContainText(
+    actionName === 'Disable' ? 'Disabled' : 'Enabled'
+  )
 }
 
 async function deleteUser(page: Page, username: string) {
@@ -144,7 +150,9 @@ async function loginFreshContextExpectFailure(
   await page.goto(`${origin}/login`)
   await loginWithPasswordUi(page, username, password)
   await expect(page).toHaveURL(/\/login/)
-  await expect(page.getByRole('alert')).toContainText('insufficient permissions')
+  await expect(page.getByRole('alert')).toContainText(
+    'insufficient permissions'
+  )
 
   return { context, page }
 }

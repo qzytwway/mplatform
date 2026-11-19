@@ -12,7 +12,9 @@ test.describe('cluster management', () => {
     await expect(
       page.getByRole('button', { name: 'Add Cluster' })
     ).toBeVisible()
-    await expect(page.getByRole('row').filter({ hasText: kindClusterName })).toBeVisible()
+    await expect(
+      page.getByRole('row').filter({ hasText: kindClusterName })
+    ).toBeVisible()
   })
 
   test('can update the cluster description', async ({ page }) => {
@@ -32,6 +34,8 @@ test.describe('cluster management', () => {
     await dialog.getByRole('button', { name: 'Save Changes' }).click()
 
     await expect(dialog).toBeHidden()
-    await expect(page.getByRole('row').filter({ hasText: description })).toBeVisible()
+    await expect(
+      page.getByRole('row').filter({ hasText: description })
+    ).toBeVisible()
   })
 })

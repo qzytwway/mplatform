@@ -19,21 +19,24 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
   the root tsconfig has no source files, so it checks nothing.
 - Git pre-commit hook: run `scripts/pre-commit-gate.sh install` once per clone (git
   hooks aren't versioned). On every commit, anyone's, it formats the staged files and
-  restages them, then lints only the staged files (gofmt/golangci-lint, prettier/oxlint,
-  ruff, shfmt/shellcheck; settings in `scripts/pre-commit-gate.conf`) and blocks the
-  commit on failure. It does not run `make lint` (ESLint, go vet), so run that yourself
-  before committing. Fix the reported problems instead of using `--no-verify`.
+  restages them, then lints only the staged files (gofmt/golangci-lint, ruff,
+  shfmt/shellcheck, and for JS/TS the nearest package's own prettier and ESLint, where
+  ESLint warnings block too; settings in `scripts/pre-commit-gate.conf`) and blocks the
+  commit on failure. It does not run `make lint` (go vet, whole-project ESLint), so run
+  that yourself before committing. Fix the reported problems instead of using `--no-verify`.
 - Lint: `make lint` runs `go vet`, golangci-lint (`.golangci.yml`, binary fetched into
   `bin/`) and ESLint in `ui/` and `e2e/`. One part at a time: `bin/golangci-lint run`,
   `pnpm --dir ui run lint`, `pnpm --dir e2e run lint`. The e2e part needs
   `make e2e-install` once.
   - `ui/` uses the typescript-eslint and react-hooks recommended rules (React Compiler
-    rules, though the compiler isn't enabled); the `incompatible-library` warnings on
-    TanStack Table are expected. To reset or sync state when props change, use
+    rules, though the compiler isn't enabled); `useReactTable` calls carry an
+    `eslint-disable-next-line react-hooks/incompatible-library` comment, since TanStack
+    Table can't be memoized. To reset or sync state when props change, use
     `useDepsChanged` (`ui/src/hooks/use-deps-changed.ts`) during render instead of
     setState in an effect.
-  - `e2e/` uses the typescript-eslint and Playwright recommended rules; its
-    warnings are known and don't fail the run.
+  - `e2e/` uses the typescript-eslint and Playwright recommended rules, minus the
+    conditional/skip/expect rules (specs branch on cluster state), and `ui/`'s prettier
+    config; it has no warnings, and the commit gate blocks new ones.
 - E2E (Playwright against a local kind cluster, needs Docker + kind): `make e2e-test`
   the first time, then `make e2e-run SPEC=specs/user-access.spec.ts`.
   `external-auth.spec.ts` is skipped unless `make e2e-setup-ldap e2e-setup-dex` ran and

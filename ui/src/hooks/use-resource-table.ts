@@ -29,7 +29,7 @@ export function useResourceTable<T>({
   filterOnServer = false,
   getRowId,
 }: UseResourceTableOptions<T>) {
-  // oxlint-disable-next-line react/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
   const table = useReactTable({
     data,
     columns,

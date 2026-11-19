@@ -87,7 +87,7 @@ lang_of() { # lang_of <extension>: go py rs js sh other skip unsupported
 	go) echo go ;;
 	py | pyi) echo py ;;
 	rs) echo rs ;;
-	js | jsx | mjs | cjs | ts | tsx | mts | cts) echo js ;;
+	js | jsx | mjs | cjs | ts | tsx | mts | cts | vue) echo js ;;
 	sh | bash) echo sh ;;
 	md | markdown | mdx | txt | rst | adoc | json | jsonc | json5 | yaml | yml | toml | ini | cfg | conf | \
 		env | lock | sum | mod | work | csv | tsv | xml | plist | svg | png | jpg | jpeg | gif | webp | ico | \
@@ -204,9 +204,32 @@ lint_rust() { # clippy works per crate: lint the crates that hold the staged fil
 	done | sort -u)
 }
 
+lint_js() { # the project's own ESLint, so its config and plugins (React, Vue...) apply
+	local f dir pairs files
+	pairs=$(for f in "$@"; do
+		dir=$(nearest "$f" node_modules/.bin/eslint)
+		if [[ -z "$dir" ]]; then
+			dir=$(nearest "$f" package.json)
+			echo "MISSING	${dir:-.}"
+		else
+			printf '%s\t%s\n' "$dir" "${f#"$dir"/}"
+		fi
+	done | sort -u)
+	while IFS= read -r dir; do
+		missing "eslint（在项目里安装并生成配置：cd $dir && npm init @eslint/config@latest）"
+	done < <(awk -F'\t' '$1 == "MISSING" { print $2 }' <<<"$pairs")
+	while IFS= read -r dir; do
+		files=()
+		while IFS= read -r f; do files+=("$f"); done < <(awk -F'\t' -v d="$dir" '$1 == d { print $2 }' <<<"$pairs")
+		# run from $dir so its eslint.config.js applies; warnings block too
+		# shellcheck disable=SC2016 # $1/$@ expand in the inner bash
+		step "eslint in $dir" bash -c 'cd "$1" && shift && node_modules/.bin/eslint --max-warnings 0 "$@"' _ "$dir" "${files[@]}"
+	done < <(awk -F'\t' '$1 != "MISSING" { print $1 }' <<<"$pairs" | sort -u)
+}
+
 lint_all() {
 	((${#PY[@]})) && need ruff "brew install ruff" && step "ruff check" ruff check --force-exclude "${PY[@]}"
-	((${#JS[@]})) && need oxlint "npm install -g oxlint" && step "oxlint" oxlint --react-plugin --deny-warnings "${JS[@]}"
+	((${#JS[@]})) && lint_js "${JS[@]}"
 	((${#SH[@]})) && need shellcheck "brew install shellcheck" && step "shellcheck" shellcheck "${SH[@]}"
 	((${#GO[@]})) && lint_go "${GO[@]}"
 	((${#RS[@]})) && lint_rust "${RS[@]}"

@@ -23,5 +23,7 @@ test('admin can create a password user from settings', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Create' }).click()
 
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('row').filter({ hasText: username })).toBeVisible()
+  await expect(
+    page.getByRole('row').filter({ hasText: username })
+  ).toBeVisible()
 })

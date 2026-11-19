@@ -1,4 +1,4 @@
-import { type Browser, type Page, expect, test } from '@playwright/test'
+import { expect, test, type Browser, type Page } from '@playwright/test'
 
 import { authFile } from '../env'
 
@@ -147,9 +147,7 @@ async function configureOAuthViaUI(page: Page) {
   await dialog.getByLabel('Client ID *').fill('mplatform-e2e')
   await dialog.getByLabel('Client Secret *').fill('mplatform-e2e-secret')
   await dialog.getByLabel('Issuer').fill(oauthIssuer!)
-  await dialog
-    .getByLabel('Scopes')
-    .fill('openid,profile,email,groups')
+  await dialog.getByLabel('Scopes').fill('openid,profile,email,groups')
   await dialog.getByRole('button', { name: 'Create' }).click()
 
   await expect(providerRow).toBeVisible()
@@ -322,7 +320,10 @@ async function assignViewerRoleViaUI(page: Page, groupName: string) {
   await expect(dialog).toBeVisible()
 
   if (!(await dialog.getByText(groupName).count())) {
-    await dialog.getByRole('combobox').filter({ hasText: /^User$/ }).click()
+    await dialog
+      .getByRole('combobox')
+      .filter({ hasText: /^User$/ })
+      .click()
     await page.getByRole('option', { name: 'OIDC Group' }).click()
     await dialog.getByPlaceholder('username or group name').fill(groupName)
     await dialog.getByRole('button', { name: 'Assign' }).click()
@@ -392,7 +393,9 @@ test.describe('external auth', () => {
         page.getByRole('heading', { name: 'Log in to Your Account' })
       ).toBeVisible()
       await page.getByLabel('Username').fill(oauthUser.username)
-      await page.getByLabel('Password', { exact: true }).fill(oauthUser.password)
+      await page
+        .getByLabel('Password', { exact: true })
+        .fill(oauthUser.password)
       await page.getByRole('button', { name: 'Login' }).click()
 
       await expectSignedInUser(page, oauthUser.username, oauthUser.provider)
@@ -424,7 +427,9 @@ test.describe('external auth', () => {
         page.getByRole('heading', { name: 'Log in to Your Account' })
       ).toBeVisible()
       await page.getByLabel('Username').fill(oauthUser.username)
-      await page.getByLabel('Password', { exact: true }).fill(oauthUser.password)
+      await page
+        .getByLabel('Password', { exact: true })
+        .fill(oauthUser.password)
       await page.getByRole('button', { name: 'Login' }).click()
 
       await expectSignedInUser(
@@ -464,7 +469,9 @@ test.describe('external auth', () => {
     }
   })
 
-  test('rejects Dex OAuth users without a mapped group', async ({ browser }) => {
+  test('rejects Dex OAuth users without a mapped group', async ({
+    browser,
+  }) => {
     const { context, page } = await openAnonymousPage(browser)
 
     try {
@@ -515,7 +522,9 @@ test.describe('external auth', () => {
         page.getByRole('heading', { name: 'Log in to Your Account' })
       ).toBeVisible()
       await page.getByLabel('Username').fill(oauthUser.username)
-      await page.getByLabel('Password', { exact: true }).fill(oauthUser.password)
+      await page
+        .getByLabel('Password', { exact: true })
+        .fill(oauthUser.password)
       await page.getByRole('button', { name: 'Login' }).click()
 
       await expectSignedInUser(
@@ -551,7 +560,9 @@ test.describe('external auth', () => {
         page.getByRole('heading', { name: 'Log in to Your Account' })
       ).toBeVisible()
       await page.getByLabel('Username').fill(oauthUser.username)
-      await page.getByLabel('Password', { exact: true }).fill(oauthUser.password)
+      await page
+        .getByLabel('Password', { exact: true })
+        .fill(oauthUser.password)
       await page.getByRole('button', { name: 'Login' }).click()
 
       await expectSignedInUser(

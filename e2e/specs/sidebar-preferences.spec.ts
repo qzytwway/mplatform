@@ -12,7 +12,10 @@ test('sidebar customization persists after refresh', async ({ page }) => {
 
   await expect(customizeDialog).toBeVisible()
   await expect(customizeDialog.getByText('Pods', { exact: true })).toBeVisible()
-  await customizeDialog.getByRole('button', { name: 'Pin to top' }).first().click()
+  await customizeDialog
+    .getByRole('button', { name: 'Pin to top' })
+    .first()
+    .click()
 
   await expect(customizeDialog.getByText('Pinned Items')).toBeVisible()
   await customizeDialog.getByRole('button', { name: 'Done' }).click()
