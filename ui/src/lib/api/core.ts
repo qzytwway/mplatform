@@ -775,7 +775,10 @@ export function useResourcesWatch<T extends ResourceType>(
         setIsConnected(false)
       }
     } catch (err) {
-      if (err instanceof Error) setError(err)
+      // EventSource throws only for an unparseable URL. Report it
+      // asynchronously, like every other connection failure, so connecting
+      // never sets state synchronously inside the effect that calls it.
+      if (err instanceof Error) queueMicrotask(() => setError(err))
     }
   }, [buildUrl, disconnect, enabled])
 
@@ -789,8 +792,6 @@ export function useResourcesWatch<T extends ResourceType>(
 
   useEffect(() => {
     if (enabled === false) return
-    // connect only sets state synchronously when EventSource rejects the URL.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     connect()
     return () => {
       disconnect()
