@@ -17,32 +17,12 @@ inference serving (vLLM/SGLang): a Go (gin + GORM) backend, a React/Vite fronten
 - Type-check the UI: `pnpm --dir ui exec tsc --noEmit -p tsconfig.app.json`
   (`tsconfig.node.json` for `ui/vite.config.ts`). Don't use the `type-check` script:
   the root tsconfig has no source files, so it checks nothing.
-- Committing as Claude: stage whole files, run `scripts/lint-gate.sh run`, then
-  `git commit`. The script formats the staged files and restages them (gofmt, ruff
-  format, and `ui/`'s own prettier for JS/TS), blocking on a staged file that still has
-  unstaged edits; then it lints the whole project with a built-in linter for every
-  language in the tracked files (golangci-lint for Go, oxlint for JS/TS, ruff for
-  Python, shellcheck for shell, ...), the same as in the user's other projects; it does
-  not run `make lint`. On success it records the staged tree and saves the staged diff in
-  `.lint-gate/`. PreToolUse hooks in `.claude/settings.json` on `Bash(git commit*)`
-  block the commit unless that record matches what is staged, and an independent
-  Fable 5.2 agent reviews the saved diff and rejects the commit if it finds bugs; it
-  reviews nothing until lint has passed. Restaging anything voids the record, so rerun
-  the script. When it reports a missing linter, ask the user before installing it.
-  When it reports a file type with no linter, add a command for it to `LINT_CMD` and
-  the extension to `COVERED` in `scripts/lint-gate.conf`, or, only if it is not code,
-  the extension to `NOT_CODE`. The gate comes from the user's `commit-gate` skill;
-  change it there and rerun its setup rather than editing `scripts/lint-gate.sh`
-  here. When blocked, fix the code and start over; don't
-  disable rules, commit with `-a`, or work around the hooks. Rehearse with
-  `git commit --dry-run`. Write files with the edit tools rather than heredocs in
-  Bash: the hooks' command matcher can mistake a heredoc command for a commit.
-- Git pre-commit hook: run `./scripts/install-hooks.sh` once per clone (git hooks
-  aren't versioned). On every commit with staged changes it runs `make lint` when
-  `scripts/lint-gate.sh check` shows the gate already passed (Claude's commits), and
-  `make pre-commit` (format + lint) otherwise; it blocks the commit on failure. So
-  Claude's commits must also pass `make lint`: run it before committing to save a
-  round trip. Fix the reported problems instead of using `--no-verify`.
+- Git pre-commit hook: run `scripts/pre-commit-gate.sh install` once per clone (git
+  hooks aren't versioned). On every commit, anyone's, it formats the staged files and
+  restages them, then lints only the staged files (gofmt/golangci-lint, prettier/oxlint,
+  ruff, shfmt/shellcheck; settings in `scripts/pre-commit-gate.conf`) and blocks the
+  commit on failure. It does not run `make lint` (ESLint, go vet), so run that yourself
+  before committing. Fix the reported problems instead of using `--no-verify`.
 - Lint: `make lint` runs `go vet`, golangci-lint (`.golangci.yml`, binary fetched into
   `bin/`) and ESLint in `ui/` and `e2e/`. One part at a time: `bin/golangci-lint run`,
   `pnpm --dir ui run lint`, `pnpm --dir e2e run lint`. The e2e part needs

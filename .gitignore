@@ -63,4 +63,3 @@ chart-packages/*
 
 # graphify knowledge graph output
 graphify-out/
-.lint-gate/
