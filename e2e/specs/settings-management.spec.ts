@@ -7,7 +7,9 @@ test.describe('settings management', () => {
     await page.goto('/settings?tab=apikeys')
 
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add API Key' })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Add API Key' })
+    ).toBeVisible()
 
     await page.getByRole('button', { name: 'Add API Key' }).click()
     await expect(

@@ -27,7 +27,9 @@ test('custom role grants namespaces and denies nodes', async ({
   await userDialog.locator('input').nth(2).fill(password)
   await userDialog.getByRole('button', { name: 'Create' }).click()
 
-  await expect(page.getByRole('row').filter({ hasText: username })).toBeVisible()
+  await expect(
+    page.getByRole('row').filter({ hasText: username })
+  ).toBeVisible()
 
   await page.goto('/settings?tab=rbac')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
@@ -40,22 +42,14 @@ test('custom role grants namespaces and denies nodes', async ({
   await roleDialog.getByLabel(/^Role \*$/).fill(roleName)
   await roleDialog.getByLabel('Description').fill('Namespaces read only')
 
-  await roleDialog
-    .getByPlaceholder('* or cluster-name')
-    .fill('*')
-  await roleDialog
-    .getByPlaceholder('* or cluster-name')
-    .press('Enter')
+  await roleDialog.getByPlaceholder('* or cluster-name').fill('*')
+  await roleDialog.getByPlaceholder('* or cluster-name').press('Enter')
 
   await roleDialog.getByPlaceholder('* or namespace').fill('*')
   await roleDialog.getByPlaceholder('* or namespace').press('Enter')
 
-  await roleDialog
-    .getByPlaceholder('* or pods,deployments')
-    .fill('namespaces')
-  await roleDialog
-    .getByPlaceholder('* or pods,deployments')
-    .press('Enter')
+  await roleDialog.getByPlaceholder('* or pods,deployments').fill('namespaces')
+  await roleDialog.getByPlaceholder('* or pods,deployments').press('Enter')
 
   const verbsInput = roleDialog.getByPlaceholder(/get.*create/)
   await verbsInput.fill('get')
@@ -71,10 +65,15 @@ test('custom role grants namespaces and denies nodes', async ({
   await roleRow.getByRole('button').click()
   await page.getByRole('menuitem', { name: 'Assign' }).click()
 
-  const assignDialog = page.getByRole('dialog', { name: `Assign Role - ${roleName}` })
+  const assignDialog = page.getByRole('dialog', {
+    name: `Assign Role - ${roleName}`,
+  })
   await expect(assignDialog).toBeVisible()
 
-  await assignDialog.getByRole('combobox').filter({ hasText: 'Select user' }).click()
+  await assignDialog
+    .getByRole('combobox')
+    .filter({ hasText: 'Select user' })
+    .click()
   await page.getByPlaceholder('Search users...').fill(username)
   await page.getByRole('option', { name: username }).click()
   await assignDialog.getByRole('button', { name: 'Assign' }).click()
@@ -103,9 +102,7 @@ test('custom role grants namespaces and denies nodes', async ({
     userPage.getByRole('heading', { name: 'Error loading nodes' })
   ).toBeVisible()
   await expect(userPage.getByText(new RegExp(`User ${username}`))).toBeVisible()
-  await expect(
-    userPage.getByText(/does not have permission/i)
-  ).toBeVisible()
+  await expect(userPage.getByText(/does not have permission/i)).toBeVisible()
 
   await userContext.close()
 })

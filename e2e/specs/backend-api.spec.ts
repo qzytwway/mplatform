@@ -675,7 +675,10 @@ test('backend APIs work end to end against the real test environment', async ({
         data: {
           apiVersion: 'v1',
           kind: 'Pod',
-          metadata: { name: podName, labels: { 'e2e.mplatform.io/test': suffix } },
+          metadata: {
+            name: podName,
+            labels: { 'e2e.mplatform.io/test': suffix },
+          },
           spec: {
             containers: [
               {
@@ -827,7 +830,9 @@ test('backend APIs work end to end against the real test environment', async ({
     const updatedPod = await expectJSON<{
       metadata: { annotations: Record<string, string> }
     }>(await request.put(podPath, { data: currentPod }), 200)
-    expect(updatedPod.metadata.annotations['e2e.mplatform.io/updated']).toBe('true')
+    expect(updatedPod.metadata.annotations['e2e.mplatform.io/updated']).toBe(
+      'true'
+    )
     const patchedPod = await expectJSON<{
       metadata: { labels: Record<string, string> }
     }>(
@@ -867,13 +872,15 @@ test('backend APIs work end to end against the real test environment', async ({
         annotations?: Record<string, string>
       }
     }>(await request.get(deploymentPath), 200)
-    currentDeployment.metadata.annotations = { 'e2e.mplatform.io/updated': 'true' }
+    currentDeployment.metadata.annotations = {
+      'e2e.mplatform.io/updated': 'true',
+    }
     const updatedDeployment = await expectJSON<{
       metadata: { annotations: Record<string, string> }
     }>(await request.put(deploymentPath, { data: currentDeployment }), 200)
-    expect(updatedDeployment.metadata.annotations['e2e.mplatform.io/updated']).toBe(
-      'true'
-    )
+    expect(
+      updatedDeployment.metadata.annotations['e2e.mplatform.io/updated']
+    ).toBe('true')
     const patchedDeployment = await expectJSON<{
       metadata: { labels: Record<string, string> }
     }>(

@@ -248,7 +248,7 @@ export function AuditLog() {
     [getOperationTypeLabel, showCluster, t]
   )
 
-  // oxlint-disable-next-line react/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table cannot be memoized; expected (see CLAUDE.md)
   const table = useReactTable({
     data: auditData?.data ?? [],
     columns,

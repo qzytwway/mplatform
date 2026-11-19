@@ -128,7 +128,8 @@ test('proxy path escape via encoded .. cannot bypass RBAC to read secrets', asyn
     const createdRole = await request.post('/api/v1/admin/roles/', {
       data: {
         name: roleName,
-        description: 'pods:get in default only — must NOT reach secrets/services',
+        description:
+          'pods:get in default only — must NOT reach secrets/services',
         clusters: [clusterName],
         namespaces: ['default'],
         resources: ['pods'],
@@ -150,7 +151,10 @@ test('proxy path escape via encoded .. cannot bypass RBAC to read secrets', asyn
       data: {
         apiVersion: 'v1',
         kind: 'Pod',
-        metadata: { name: podName, labels: { 'e2e.mplatform.io/test': suffix } },
+        metadata: {
+          name: podName,
+          labels: { 'e2e.mplatform.io/test': suffix },
+        },
         spec: {
           containers: [
             { name: 'pause', image: 'registry.k8s.io/pause:3.10.1' },
@@ -370,5 +374,3 @@ test('proxy path escape via encoded .. cannot bypass RBAC to read secrets', asyn
     await readerRequest?.dispose()
   }
 })
-
-

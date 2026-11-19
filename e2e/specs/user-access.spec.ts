@@ -1,11 +1,13 @@
-import { type Browser, type Page, expect, test } from '@playwright/test'
+import { expect, test, type Browser, type Page } from '@playwright/test'
 
 import { adminUser as seededAdminUser } from '../env'
 
 async function openUsersPage(page: Page) {
   await page.goto('/settings?tab=users')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Add Password User' })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Add Password User' })
+  ).toBeVisible()
 }
 
 async function createPasswordUser(
@@ -25,7 +27,9 @@ async function createPasswordUser(
   await dialog.getByRole('button', { name: 'Create' }).click()
 
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('row').filter({ hasText: username })).toBeVisible()
+  await expect(
+    page.getByRole('row').filter({ hasText: username })
+  ).toBeVisible()
 }
 
 async function assignBuiltInRole(
@@ -41,22 +45,21 @@ async function assignBuiltInRole(
 
   const dialog = page.getByRole('dialog', { name: 'Assign Roles' })
   await expect(dialog).toBeVisible()
-  const checkbox = dialog.getByRole('checkbox').nth(roleName === 'admin' ? 0 : 1)
+  const checkbox = dialog
+    .getByRole('checkbox')
+    .nth(roleName === 'admin' ? 0 : 1)
   await expect(checkbox).toBeVisible()
   await checkbox.click()
   await expect(checkbox).toBeChecked()
 
   await dialog.getByRole('button', { name: 'Close' }).first().click()
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('row').filter({ hasText: username })).toContainText(
-    roleName
-  )
+  await expect(
+    page.getByRole('row').filter({ hasText: username })
+  ).toContainText(roleName)
 }
 
-async function deleteUser(
-  page: Page,
-  username: string
-) {
+async function deleteUser(page: Page, username: string) {
   const row = page.getByRole('row').filter({ hasText: username }).first()
   await expect(row).toBeVisible()
 
@@ -68,7 +71,9 @@ async function deleteUser(
   await dialog.getByPlaceholder(username).fill(username)
   await dialog.getByRole('button', { name: 'Delete' }).click()
 
-  await expect(page.getByRole('row').filter({ hasText: username })).toHaveCount(0)
+  await expect(page.getByRole('row').filter({ hasText: username })).toHaveCount(
+    0
+  )
 }
 
 async function loginFreshContext(
