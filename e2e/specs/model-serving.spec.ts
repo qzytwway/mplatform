@@ -17,9 +17,14 @@ import {
   resetNamespace,
   waitFor,
   type Container,
+  type Deployment,
+  type DisaggregatedSet,
   type KubeObject,
+  type LeaderWorkerSet,
   type Pod,
+  type PodMonitor,
   type PodTemplate,
+  type Service,
 } from '../helpers/kube'
 import {
   argValue,
@@ -170,7 +175,7 @@ async function expectExpandedGroupArgs(
 
 /** Asserts the Service routes to the group leaders and answers /v1/models. */
 async function expectServiceServesModel(name: string, leaders: Pod[]) {
-  const svc = getObject<KubeObject>('service', namespace, name)
+  const svc = getObject<Service>('service', namespace, name)
   expect.soft(svc?.spec.selector).toEqual({
     ...managedBy,
     [serviceLabel]: name,
@@ -207,9 +212,9 @@ async function expectServiceServesModel(name: string, leaders: Pod[]) {
  * their workers to find.
  */
 function expectHeadlessServicePerGroup(name: string) {
-  const lws = getObject('leaderworkerset', namespace, name)
+  const lws = getObject<LeaderWorkerSet>('leaderworkerset', namespace, name)
   expect.soft(lws?.spec.networkConfig?.subdomainPolicy).toBe('UniquePerReplica')
-  const headless = getObject('service', namespace, `${name}-0`)
+  const headless = getObject<Service>('service', namespace, `${name}-0`)
   expect.soft(headless?.spec.clusterIP).toBe('None')
   expect.soft(headless?.spec.publishNotReadyAddresses).toBe(true)
 }
@@ -302,12 +307,14 @@ test.describe('model serving', () => {
     expect(again.status(), await again.text()).toBe(409)
 
     await waitFor('the LWS controller to be available', () => {
-      const deployment = getObject(
+      const deployment = getObject<Deployment>(
         'deployment',
         'lws-system',
         'lws-controller-manager'
       )
-      return deployment?.status?.availableReplicas >= 1 ? true : undefined
+      return (deployment?.status?.availableReplicas ?? 0) >= 1
+        ? true
+        : undefined
     })
     expect(await api.status()).toMatchObject({
       lws: true,
@@ -353,7 +360,11 @@ test.describe('model serving', () => {
         launch: ReturnType<typeof engineLaunch>
       ) => void
     ) => {
-      const lws = getObject('leaderworkerset', namespace, req.name)
+      const lws = getObject<LeaderWorkerSet>(
+        'leaderworkerset',
+        namespace,
+        req.name
+      )
       expect.soft(lws?.metadata.labels).toMatchObject({
         ...managedBy,
         [serviceLabel]: req.name,
@@ -496,8 +507,12 @@ test.describe('model serving', () => {
         dist: Awaited<ReturnType<typeof engineDist>>
       ) => void
     ) => {
-      const lws = getObject('leaderworkerset', namespace, req.name)
-      const template = lws?.spec.leaderWorkerTemplate
+      const lws = getObject<LeaderWorkerSet>(
+        'leaderworkerset',
+        namespace,
+        req.name
+      )
+      const template = lws!.spec.leaderWorkerTemplate
       expect.soft(template.size).toBe(2)
       expect.soft(template.restartPolicy).toBe('RecreateGroupOnPodRestart')
       const leaderTemplate = template.leaderTemplate as PodTemplate
@@ -610,14 +625,18 @@ test.describe('model serving', () => {
     )
     await createReadyService(api, req, { pods: 3 })
 
-    const ds = getObject('disaggregatedset', namespace, req.name)
+    const ds = getObject<DisaggregatedSet>(
+      'disaggregatedset',
+      namespace,
+      req.name
+    )
     expect
       .soft(ds?.metadata.labels)
       .toMatchObject({ ...managedBy, [serviceLabel]: req.name })
     expect
       .soft(ds?.spec.roles.map((role: { name: string }) => role.name))
       .toEqual(['prefill', 'decode'])
-    const children = kubectlJSON<{ items: KubeObject[] }>([
+    const children = kubectlJSON<{ items: LeaderWorkerSet[] }>([
       'get',
       'leaderworkersets',
       '-n',
@@ -711,7 +730,7 @@ test.describe('model serving', () => {
     expect.soft(router.spec.serviceAccountName).toBe(routerName)
     expect.soft(runtimeContainer(router).image).toBe(modelServing.routerImage)
     expect
-      .soft(getObject('service', namespace, req.name)?.spec.selector)
+      .soft(getObject<Service>('service', namespace, req.name)?.spec.selector)
       .toEqual({
         ...managedBy,
         [serviceLabel]: req.name,
@@ -816,7 +835,7 @@ test.describe('model serving', () => {
     })
     await createReadyService(api, req, { pods: 4 })
 
-    const children = kubectlJSON<{ items: KubeObject[] }>([
+    const children = kubectlJSON<{ items: LeaderWorkerSet[] }>([
       'get',
       'leaderworkersets',
       '-n',
@@ -1074,7 +1093,7 @@ test.describe('model serving', () => {
       createReadyService(api, nixl, { pods: 3 }),
     ])
     // The rendered templates, before LWS adds its own variables to the pods.
-    const roleEnv = getObject(
+    const roleEnv = getObject<DisaggregatedSet>(
       'disaggregatedset',
       namespace,
       tcp.name
@@ -1220,7 +1239,10 @@ test.describe('model serving', () => {
       .toEqual([expect.objectContaining({ name: 'default', replicas: 2 })])
     await waitForServiceReady(api, namespace, single.name, { pods: 2 })
     expect
-      .soft(getObject('leaderworkerset', namespace, single.name)?.spec.replicas)
+      .soft(
+        getObject<LeaderWorkerSet>('leaderworkerset', namespace, single.name)
+          ?.spec.replicas
+      )
       .toBe(2)
     await expectServiceServesModel(
       single.name,
@@ -1241,7 +1263,11 @@ test.describe('model serving', () => {
     )
     expect
       .soft(
-        getObject('disaggregatedset', namespace, pd.name)?.spec.roles.map(
+        getObject<DisaggregatedSet>(
+          'disaggregatedset',
+          namespace,
+          pd.name
+        )?.spec.roles.map(
           (role: { name: string; spec: { replicas: number } }) =>
             `${role.name}=${role.spec.replicas}`
         )
@@ -1295,7 +1321,7 @@ test.describe('model serving', () => {
     const req = pdService('pd-router', { routerReplicas: 2 })
     const routerName = `${req.name}-router`
     const routerReplicas = () =>
-      getObject('deployment', namespace, routerName)?.spec.replicas
+      getObject<Deployment>('deployment', namespace, routerName)?.spec.replicas
     // Every router replica finds the same workers on its own.
     const expectEachRouterFinds = async (expected: {
       prefill: number
@@ -1363,7 +1389,11 @@ test.describe('model serving', () => {
     expect.soft(missing.status(), await missing.text()).toBe(400)
     expect
       .soft(
-        getObject('disaggregatedset', namespace, req.name)?.spec.roles.map(
+        getObject<DisaggregatedSet>(
+          'disaggregatedset',
+          namespace,
+          req.name
+        )?.spec.roles.map(
           (role: { name: string; spec: { replicas: number } }) =>
             `${role.name}=${role.spec.replicas}`
         )
@@ -1389,7 +1419,7 @@ test.describe('model serving', () => {
       decode: { replicas: 1, groupSize: 1, gpuCount: 1 },
     })
     await createReadyService(api, req, { pods: 4 })
-    const monitor = getObject('podmonitor', namespace, req.name)
+    const monitor = getObject<PodMonitor>('podmonitor', namespace, req.name)
     expect(monitor).toBeTruthy()
     expect.soft(monitor?.metadata.labels).toEqual({
       ...managedBy,
@@ -1733,7 +1763,10 @@ test.describe('model serving', () => {
       200
     )
     expect
-      .soft(getObject('leaderworkerset', namespace, req.name)?.spec.replicas)
+      .soft(
+        getObject<LeaderWorkerSet>('leaderworkerset', namespace, req.name)?.spec
+          .replicas
+      )
       .toBe(2)
     const pods = await waitFor(
       'every group to be replaced by one of the new template',
@@ -1789,7 +1822,7 @@ test.describe('model serving', () => {
       .toBe(false)
     expect
       .soft(
-        getObject('leaderworkerset', namespace, req.name)?.spec
+        getObject<LeaderWorkerSet>('leaderworkerset', namespace, req.name)?.spec
           .leaderWorkerTemplate.size
       )
       .toBe(3)
@@ -1853,9 +1886,15 @@ test.describe('model serving', () => {
     const [prefill] = servicePods(namespace, req.name, `${roleLabel}=prefill`)
     expect.soft(envOf(runtimeContainer(decode)).E2E_MARK).toBe('decode-edited')
     expect.soft(envOf(runtimeContainer(prefill)).E2E_MARK).toBeUndefined()
-    const router = getObject('deployment', namespace, `${req.name}-router`)
+    const router = getObject<Deployment>(
+      'deployment',
+      namespace,
+      `${req.name}-router`
+    )
     expect
-      .soft(argValue(router?.spec.template.spec.containers[0].args, '--policy'))
+      .soft(
+        argValue(router!.spec.template.spec.containers[0].args!, '--policy')
+      )
       .toBe('round_robin')
     expect.soft(router?.spec.replicas).toBe(1)
     await waitForRouterWorkers(namespace, req.name, { prefill: 1, decode: 1 })

@@ -29,11 +29,9 @@ export interface KubeObject {
     annotations?: Record<string, string>
     ownerReferences?: { kind: string; name: string }[]
   }
-  // Shapes differ per kind; specs read the fields they need.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  spec?: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  status?: any
+  // Shapes differ per kind; per-kind types below narrow them.
+  spec?: unknown
+  status?: unknown
 }
 
 export interface Container {
@@ -91,6 +89,54 @@ export interface Pod extends KubeObject {
     hostIP?: string
     conditions?: { type: string; status: string }[]
     containerStatuses?: { name: string; restartCount: number }[]
+  }
+}
+
+export interface Service extends KubeObject {
+  spec: {
+    selector?: Record<string, string>
+    clusterIP?: string
+    publishNotReadyAddresses?: boolean
+  }
+}
+
+export interface Deployment extends KubeObject {
+  spec: { replicas: number; template: PodTemplate }
+  status?: { availableReplicas?: number }
+}
+
+export interface LeaderWorkerTemplate {
+  size: number
+  restartPolicy?: string
+  leaderTemplate?: PodTemplate
+  workerTemplate: PodTemplate
+}
+
+export interface LeaderWorkerSet extends KubeObject {
+  spec: {
+    replicas: number
+    leaderWorkerTemplate: LeaderWorkerTemplate
+    networkConfig?: { subdomainPolicy?: string }
+    rolloutStrategy: {
+      rollingUpdateConfiguration?: Record<string, unknown>
+    }
+  }
+  status?: { readyReplicas?: number }
+}
+
+export interface DisaggregatedSet extends KubeObject {
+  spec: {
+    roles: {
+      name: string
+      spec: { replicas: number; leaderWorkerTemplate: LeaderWorkerTemplate }
+    }[]
+  }
+}
+
+export interface PodMonitor extends KubeObject {
+  spec: {
+    selector: { matchLabels: Record<string, string> }
+    podMetricsEndpoints: { port?: string; path?: string }[]
   }
 }
 
