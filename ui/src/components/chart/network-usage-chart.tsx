@@ -22,12 +22,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from '../ui/chart'
-import {
-  ChartStateWrapper,
-  formatBytes,
-  isSameDay,
-  mergeDualSeries,
-} from './chart-utils'
+import { ChartStateWrapper } from './chart-state-wrapper'
+import { formatBytes, isSameDay, mergeDualSeries } from './chart-utils'
 
 interface NetworkUsageChartProps {
   networkIn: UsageDataPoint[]

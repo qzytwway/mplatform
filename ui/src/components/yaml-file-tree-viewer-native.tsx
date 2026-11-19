@@ -14,10 +14,10 @@ import {
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
 import { cn } from '@/lib/utils'
+import { useAppearance } from '@/hooks/use-appearance'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { useAppearance } from '@/components/appearance-provider'
 import { TextViewer } from '@/components/text-viewer'
 
 export interface YamlFileTreeItem {

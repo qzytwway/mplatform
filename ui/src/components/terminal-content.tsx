@@ -28,6 +28,7 @@ import { toSimpleContainer } from '@/lib/k8s'
 import { getWebSocketUrl } from '@/lib/subpath'
 import { getTerminalTheme } from '@/lib/terminal-theme'
 import { translateError } from '@/lib/utils'
+import { useAppearance } from '@/hooks/use-appearance'
 import { useCluster } from '@/hooks/use-cluster'
 import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
@@ -46,7 +47,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-import { useAppearance } from './appearance-provider'
 import { ConnectionIndicator } from './connection-indicator'
 import { NetworkSpeedIndicator } from './network-speed-indicator'
 import { ContainerSelector } from './selector/container-selector'

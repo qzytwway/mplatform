@@ -1,5 +1,6 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+import { DisplayScaleProviderContext } from '@/hooks/use-display-scale'
 
 const MIN_DISPLAY_SCALE = 80
 const MAX_DISPLAY_SCALE = 120
@@ -10,19 +11,6 @@ type DisplayScaleProviderProps = {
   defaultDisplayScale?: number
   storageKey?: string
 }
-
-type DisplayScaleProviderState = {
-  displayScale: number
-  setDisplayScale: (displayScale: number) => void
-}
-
-const initialState: DisplayScaleProviderState = {
-  displayScale: 95,
-  setDisplayScale: () => null,
-}
-
-const DisplayScaleProviderContext =
-  createContext<DisplayScaleProviderState>(initialState)
 
 function clampDisplayScale(value: number) {
   return Math.min(MAX_DISPLAY_SCALE, Math.max(MIN_DISPLAY_SCALE, value))
@@ -72,13 +60,4 @@ export function DisplayScaleProvider({
       {children}
     </DisplayScaleProviderContext.Provider>
   )
-}
-
-export const useDisplayScale = () => {
-  const context = useContext(DisplayScaleProviderContext)
-  if (context === undefined)
-    throw new Error(
-      'useDisplayScale must be used within a DisplayScaleProvider'
-    )
-  return context
 }

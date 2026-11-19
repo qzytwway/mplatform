@@ -25,6 +25,7 @@ import {
   getResourceCatalogEntry,
   getResourceIconComponent,
 } from '@/lib/resource-catalog'
+import { useAppearance } from '@/hooks/use-appearance'
 import { useCluster } from '@/hooks/use-cluster'
 import { useFavorites } from '@/hooks/use-favorites'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +45,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAppearance } from '@/components/appearance-provider'
 
 interface SidebarSearchItem {
   id: string

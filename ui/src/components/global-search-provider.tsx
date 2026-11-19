@@ -1,33 +1,6 @@
-/* eslint-disable react-refresh/only-export-components */
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react'
+import { ReactNode, useCallback, useEffect, useState } from 'react'
 
-interface GlobalSearchContextType {
-  isOpen: boolean
-  openSearch: () => void
-  closeSearch: () => void
-  toggleSearch: () => void
-}
-
-const GlobalSearchContext = createContext<GlobalSearchContextType | undefined>(
-  undefined
-)
-
-export function useGlobalSearch() {
-  const context = useContext(GlobalSearchContext)
-  if (context === undefined) {
-    throw new Error(
-      'useGlobalSearch must be used within a GlobalSearchProvider'
-    )
-  }
-  return context
-}
+import { GlobalSearchContext } from '@/hooks/use-global-search'
 
 interface GlobalSearchProviderProps {
   children: ReactNode

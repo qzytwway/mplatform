@@ -1,6 +1,7 @@
 import { Search as SearchIcon } from 'lucide-react'
 
-import { useGlobalSearch } from './global-search-provider'
+import { useGlobalSearch } from '@/hooks/use-global-search'
+
 import { Button } from './ui/button'
 
 export function Search() {

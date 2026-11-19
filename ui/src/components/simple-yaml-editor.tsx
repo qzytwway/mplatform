@@ -3,8 +3,7 @@ import {
   defineMonacoBackgroundThemes,
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
-
-import { useAppearance } from './appearance-provider'
+import { useAppearance } from '@/hooks/use-appearance'
 
 interface YamlEditorProps {
   value: string
