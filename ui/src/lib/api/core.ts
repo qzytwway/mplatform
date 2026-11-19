@@ -695,7 +695,12 @@ export function useResourcesWatch<T extends ResourceType>(
     setIsConnected(false)
   }
 
+  // Bumped on every disconnect, so a deferred report from an old connection
+  // attempt can tell it is stale.
+  const connectionRef = useRef(0)
+
   const disconnect = useCallback(() => {
+    connectionRef.current += 1
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
@@ -778,7 +783,12 @@ export function useResourcesWatch<T extends ResourceType>(
       // EventSource throws only for an unparseable URL. Report it
       // asynchronously, like every other connection failure, so connecting
       // never sets state synchronously inside the effect that calls it.
-      if (err instanceof Error) queueMicrotask(() => setError(err))
+      const connection = connectionRef.current
+      if (err instanceof Error) {
+        queueMicrotask(() => {
+          if (connectionRef.current === connection) setError(err)
+        })
+      }
     }
   }, [buildUrl, disconnect, enabled])
 
