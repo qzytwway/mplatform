@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { ColumnDef } from '@tanstack/react-table'
+import { type ColumnDef, type TableOptions } from '@tanstack/react-table'
 import { Box, Database } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -40,8 +40,7 @@ export interface ResourceTableProps<T> {
   extraToolbars?: ReactNode[]
   defaultHiddenColumns?: string[]
   resourceType?: ResourceType // Optional, used for fetching resources
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  columns: ColumnDef<T, any>[]
+  columns: TableOptions<T>['columns']
   clusterScope?: boolean // If true, don't show namespace selector
   showCreateButton?: boolean // If true, show create button
   batchActions?: ResourceTableBatchAction<T>[]
