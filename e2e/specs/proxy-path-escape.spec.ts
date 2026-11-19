@@ -83,14 +83,51 @@ async function sendRawHTTP(
   })
 }
 
-test('proxy path escape via encoded .. cannot bypass RBAC to read secrets', async ({
-  request,
-}, testInfo) => {
-  const baseURL = testInfo.project.use.baseURL
-  if (typeof baseURL !== 'string') {
+const clusterName = kindClusterName.startsWith('kind-')
+  ? kindClusterName
+  : `kind-${kindClusterName}`
+const clusterPath = `/api/v1/_clusters/${encodeURIComponent(clusterName)}`
+
+let baseURL: string
+
+// What the test created, so afterEach can clean it up even when the test fails.
+let created: {
+  userId?: number
+  roleId?: number
+  podPath?: string
+  secretPath?: string
+  readerRequest?: APIRequestContext
+} = {}
+
+test.beforeEach(({}, testInfo) => {
+  const configured = testInfo.project.use.baseURL
+  if (typeof configured !== 'string') {
     throw new Error('Playwright baseURL is required')
   }
+  baseURL = configured
+})
 
+test.afterEach(async ({ request }) => {
+  const { userId, roleId, podPath, secretPath, readerRequest } = created
+  created = {}
+  if (podPath !== undefined) {
+    await request.delete(`${podPath}?wait=false`).catch(() => undefined)
+  }
+  if (secretPath !== undefined) {
+    await request.delete(`${secretPath}?wait=false`).catch(() => undefined)
+  }
+  if (userId !== undefined) {
+    await request.delete(`/api/v1/admin/users/${userId}`).catch(() => undefined)
+  }
+  if (roleId !== undefined) {
+    await request.delete(`/api/v1/admin/roles/${roleId}`).catch(() => undefined)
+  }
+  await readerRequest?.dispose()
+})
+
+test('proxy path escape via encoded .. cannot bypass RBAC to read secrets', async ({
+  request,
+}) => {
   const suffix = Date.now().toString(36)
   const username = `e2e-proxy-${suffix}`
   const password = 'E2Eproxy!2345'
@@ -104,273 +141,240 @@ test('proxy path escape via encoded .. cannot bypass RBAC to read secrets', asyn
     'base64'
   )
 
-  const clusterName = kindClusterName.startsWith('kind-')
-    ? kindClusterName
-    : `kind-${kindClusterName}`
-  const clusterPath = `/api/v1/_clusters/${encodeURIComponent(clusterName)}`
   const podPath = `${clusterPath}/pods/default/${podName}`
   const secretPath = `${clusterPath}/secrets/kube-system/${secretName}`
 
-  let userId: number | undefined
-  let roleId: number | undefined
-  let podCreated = false
-  let secretCreated = false
-  let readerRequest: APIRequestContext | undefined
+  // --- Setup: low-privilege reader with pods:get in default only -------------
+  const createdUser = await request.post('/api/v1/admin/users/', {
+    data: { username, password, name: 'Proxy Escape Reader' },
+  })
+  expect(createdUser.status(), await createdUser.text()).toBe(201)
+  const userId = (await createdUser.json()).id as number
+  created.userId = userId
 
-  try {
-    // --- Setup: low-privilege reader with pods:get in default only -------------
-    const createdUser = await request.post('/api/v1/admin/users/', {
-      data: { username, password, name: 'Proxy Escape Reader' },
-    })
-    expect(createdUser.status(), await createdUser.text()).toBe(201)
-    userId = (await createdUser.json()).id as number
+  const createdRole = await request.post('/api/v1/admin/roles/', {
+    data: {
+      name: roleName,
+      description: 'pods:get in default only — must NOT reach secrets/services',
+      clusters: [clusterName],
+      namespaces: ['default'],
+      resources: ['pods'],
+      verbs: ['get'],
+    },
+  })
+  expect(createdRole.status(), await createdRole.text()).toBe(201)
+  const roleId = (await createdRole.json()).role.id as number
+  created.roleId = roleId
 
-    const createdRole = await request.post('/api/v1/admin/roles/', {
-      data: {
-        name: roleName,
-        description:
-          'pods:get in default only — must NOT reach secrets/services',
-        clusters: [clusterName],
-        namespaces: ['default'],
-        resources: ['pods'],
-        verbs: ['get'],
+  await expectStatus(
+    await request.post(`/api/v1/admin/roles/${roleId}/assign`, {
+      data: { subjectType: 'user', subject: username },
+    }),
+    201
+  )
+
+  // --- Setup: a pod in default the reader can legitimately "get" ------------
+  const createdPod = await request.post(`${clusterPath}/pods/default`, {
+    data: {
+      apiVersion: 'v1',
+      kind: 'Pod',
+      metadata: {
+        name: podName,
+        labels: { 'e2e.mplatform.io/test': suffix },
       },
-    })
-    expect(createdRole.status(), await createdRole.text()).toBe(201)
-    roleId = (await createdRole.json()).role.id as number
+      spec: {
+        containers: [{ name: 'pause', image: 'registry.k8s.io/pause:3.10.1' }],
+      },
+    },
+  })
+  expect(createdPod.status(), await createdPod.text()).toBe(201)
+  created.podPath = podPath
 
-    await expectStatus(
-      await request.post(`/api/v1/admin/roles/${roleId}/assign`, {
-        data: { subjectType: 'user', subject: username },
-      }),
-      201
-    )
-
-    // --- Setup: a pod in default the reader can legitimately "get" ------------
-    const createdPod = await request.post(`${clusterPath}/pods/default`, {
+  // --- Setup: a secret in kube-system the reader must NOT see ----------------
+  const createdSecret = await request.post(
+    `${clusterPath}/secrets/kube-system`,
+    {
       data: {
         apiVersion: 'v1',
-        kind: 'Pod',
-        metadata: {
-          name: podName,
-          labels: { 'e2e.mplatform.io/test': suffix },
-        },
-        spec: {
-          containers: [
-            { name: 'pause', image: 'registry.k8s.io/pause:3.10.1' },
-          ],
-        },
+        kind: 'Secret',
+        metadata: { name: secretName, namespace: 'kube-system' },
+        type: 'Opaque',
+        data: { [secretProofKey]: secretProofValue },
       },
-    })
-    expect(createdPod.status(), await createdPod.text()).toBe(201)
-    podCreated = true
-
-    // --- Setup: a secret in kube-system the reader must NOT see ----------------
-    const createdSecret = await request.post(
-      `${clusterPath}/secrets/kube-system`,
-      {
-        data: {
-          apiVersion: 'v1',
-          kind: 'Secret',
-          metadata: { name: secretName, namespace: 'kube-system' },
-          type: 'Opaque',
-          data: { [secretProofKey]: secretProofValue },
-        },
-      }
-    )
-    expect(createdSecret.status(), await createdSecret.text()).toBe(201)
-    secretCreated = true
-
-    // Wait for the pod to be reportable via get (controller-runtime cache lag).
-    await expect
-      .poll(async () => (await request.get(podPath)).status())
-      .toBe(200)
-
-    // --- Login as reader -------------------------------------------------------
-    readerRequest = await playwrightRequest.newContext({
-      baseURL,
-      storageState: { cookies: [], origins: [] },
-    })
-    await expectStatus(
-      await readerRequest.post('/api/auth/login/password', {
-        data: { username, password },
-      }),
-      204
-    )
-
-    // --- Baseline: reader CAN get the pod in default --------------------------
-    await expectStatus(await readerRequest.get(podPath), 200)
-
-    // --- Baseline: reader CANNOT list/get secrets in kube-system --------------
-    // Direct RBAC check — this is what the proxy escape must NOT bypass.
-    await expectForbidden(
-      await readerRequest.get(`${clusterPath}/secrets/kube-system`),
-      ['get secrets', 'namespace kube-system', clusterName]
-    )
-    await expectForbidden(await readerRequest.get(secretPath), [
-      'get secrets',
-      'namespace kube-system',
-      clusterName,
-    ])
-
-    // Extract the auth cookie for a raw HTTP request. Playwright's
-    // APIRequestContext may normalise %2e%2e in the URL; we need the raw
-    // bytes to reach Gin without client-side path normalization.
-    const storage = await readerRequest.storageState()
-    const cookieHeader = storage.cookies
-      .map((cookie) => `${cookie.name}=${cookie.value}`)
-      .join('; ')
-    expect(cookieHeader).toContain('auth_token=')
-
-    // --- Exploit: encoded .. to escape /proxy/ → /api/v1/namespaces/kube-system/secrets
-    //
-    // URL sent to MPlatform:
-    //   /api/v1/_clusters/<cluster>/namespaces/default/pods/<pod>/proxy/%2e%2e/%2e%2e/%2e%2e/%2e%2e/kube-system/secrets
-    //
-    // Gin exposes the decoded .. segments to kube/proxy.go, which previously
-    // called url.JoinPath(host, "api/v1/namespaces", "default", "pods", <pod>,
-    // "proxy", "/../../../../kube-system/secrets") and cleaned it to
-    //   <k8s-api-host>/api/v1/namespaces/kube-system/secrets
-    // and is sent under MPlatform's SA (cluster-admin by default chart).
-    const dotdot = '%2e%2e'
-    const escapeDepth = 4 // proxy -> pods -> default -> namespaces/
-    const exploitPath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
-      podName
-    )}/proxy/${Array(escapeDepth).fill(dotdot).join('/')}/kube-system/secrets`
-
-    const exploitResponse = await sendRawHTTP(
-      baseURL,
-      'GET',
-      exploitPath,
-      cookieHeader
-    )
-
-    // --- Assertion: the escape MUST be blocked --------------------------------
-    // On the vulnerable build this fails with status 200 and a SecretList body
-    // containing our proof secret — that failure IS the reproduction.
-    expect(
-      exploitResponse.status,
-      `Proxy path escape was not blocked.\n` +
-        `  Exploit URL path: ${exploitPath}\n` +
-        `  Expected status: >= 400 (RBAC denial or bad request)\n` +
-        `  Actual status:   ${exploitResponse.status}\n` +
-        `  Response body preview: ${exploitResponse.body.slice(0, 500)}`
-    ).toBeGreaterThanOrEqual(400)
-
-    // Defence-in-depth: even if the status check is relaxed, the proof secret
-    // must never appear in the response body.
-    expect(
-      exploitResponse.body,
-      'Proof secret value leaked through proxy path escape'
-    ).not.toContain(secretProofValue)
-    expect(
-      exploitResponse.body,
-      'Proof secret name leaked through proxy path escape'
-    ).not.toContain(secretName)
-
-    // --- Also verify escape to cluster-scoped /api/v1/secrets is blocked ------
-    // 5 levels of .. reaches /api/v1/secrets (cluster-wide secret list).
-    const clusterScopedPath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
-      podName
-    )}/proxy/${Array(escapeDepth + 1)
-      .fill(dotdot)
-      .join('/')}/secrets`
-    const clusterScopedResponse = await sendRawHTTP(
-      baseURL,
-      'GET',
-      clusterScopedPath,
-      cookieHeader
-    )
-    expect(
-      clusterScopedResponse.status,
-      `Cluster-scoped proxy escape was not blocked.\n` +
-        `  Exploit URL path: ${clusterScopedPath}\n` +
-        `  Actual status:   ${clusterScopedResponse.status}\n` +
-        `  Response body preview: ${clusterScopedResponse.body.slice(0, 500)}`
-    ).toBeGreaterThanOrEqual(400)
-    expect(clusterScopedResponse.body).not.toContain(secretProofValue)
-    expect(clusterScopedResponse.body).not.toContain(secretName)
-
-    // --- Exploit: encoded .. inside the resource name to reach another proxy -
-    // Gin matches /namespaces/:namespace/:kind/:name/proxy/*path. An attacker
-    // can put encoded .. segments into :name so that url.JoinPath cleans the
-    // proxy base to a different namespace/kind/name. The /proxy/ segment is
-    // still present, so this targets another pods/services proxy only.
-    const targetProxyPath = `${clusterPath}/namespaces/kube-system/services/http:kube-dns:metrics/proxy/metrics`
-
-    const targetResponse = await request.get(targetProxyPath)
-    const targetBody = await targetResponse.text()
-    expect(targetResponse.status(), targetBody).toBe(200)
-    expect(targetBody).toContain('# HELP')
-
-    await expectStatus(await readerRequest.get(targetProxyPath), 403)
-
-    const escapedName = [
-      '%2e%2e',
-      '%2e%2e',
-      '%2e%2e',
-      'namespaces',
-      'kube-system',
-      'services',
-      'http%3akube-dns%3ametrics',
-    ].join('%2f')
-    const nameExploitPath = `${clusterPath}/namespaces/default/pods/${escapedName}/proxy/metrics`
-    const nameExploitResponse = await sendRawHTTP(
-      baseURL,
-      'GET',
-      nameExploitPath,
-      cookieHeader
-    )
-
-    expect(
-      nameExploitResponse.status,
-      `Proxy resource-name escape was not blocked.\n` +
-        `  Exploit URL path: ${nameExploitPath}\n` +
-        `  Expected status: >= 400 (RBAC denial or bad request)\n` +
-        `  Actual status:   ${nameExploitResponse.status}\n` +
-        `  Response body preview: ${nameExploitResponse.body.slice(0, 500)}`
-    ).toBeGreaterThanOrEqual(400)
-    expect(nameExploitResponse.body).not.toContain('# HELP')
-
-    // --- Sanity: a legitimate (non-escaping) proxy path is still usable ------
-    // The pod runs pause, so Kubernetes may return an upstream 400/404/503.
-    // Verify the request was not rejected by MPlatform's proxy-path validation or
-    // RBAC before reaching Kubernetes.
-    const legitimatePath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
-      podName
-    )}/proxy/`
-    const legitimateResponse = await sendRawHTTP(
-      baseURL,
-      'GET',
-      legitimatePath,
-      cookieHeader
-    )
-    expect(
-      legitimateResponse.status,
-      `Legitimate proxy access was blocked by the fix.\n` +
-        `  Path: ${legitimatePath}\n` +
-        `  Status: ${legitimateResponse.status}\n` +
-        `  Body: ${legitimateResponse.body.slice(0, 200)}`
-    ).not.toBe(403)
-    expect(legitimateResponse.body).not.toContain('invalid proxy path')
-  } finally {
-    // --- Cleanup --------------------------------------------------------------
-    if (podCreated) {
-      await request.delete(`${podPath}?wait=false`).catch(() => undefined)
     }
-    if (secretCreated) {
-      await request.delete(`${secretPath}?wait=false`).catch(() => undefined)
-    }
-    if (userId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/users/${userId}`)
-        .catch(() => undefined)
-    }
-    if (roleId !== undefined) {
-      await request
-        .delete(`/api/v1/admin/roles/${roleId}`)
-        .catch(() => undefined)
-    }
-    await readerRequest?.dispose()
-  }
+  )
+  expect(createdSecret.status(), await createdSecret.text()).toBe(201)
+  created.secretPath = secretPath
+
+  // Wait for the pod to be reportable via get (controller-runtime cache lag).
+  await expect.poll(async () => (await request.get(podPath)).status()).toBe(200)
+
+  // --- Login as reader -------------------------------------------------------
+  const readerRequest = await playwrightRequest.newContext({
+    baseURL,
+    storageState: { cookies: [], origins: [] },
+  })
+  created.readerRequest = readerRequest
+  await expectStatus(
+    await readerRequest.post('/api/auth/login/password', {
+      data: { username, password },
+    }),
+    204
+  )
+
+  // --- Baseline: reader CAN get the pod in default --------------------------
+  await expectStatus(await readerRequest.get(podPath), 200)
+
+  // --- Baseline: reader CANNOT list/get secrets in kube-system --------------
+  // Direct RBAC check — this is what the proxy escape must NOT bypass.
+  await expectForbidden(
+    await readerRequest.get(`${clusterPath}/secrets/kube-system`),
+    ['get secrets', 'namespace kube-system', clusterName]
+  )
+  await expectForbidden(await readerRequest.get(secretPath), [
+    'get secrets',
+    'namespace kube-system',
+    clusterName,
+  ])
+
+  // Extract the auth cookie for a raw HTTP request. Playwright's
+  // APIRequestContext may normalise %2e%2e in the URL; we need the raw
+  // bytes to reach Gin without client-side path normalization.
+  const storage = await readerRequest.storageState()
+  const cookieHeader = storage.cookies
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join('; ')
+  expect(cookieHeader).toContain('auth_token=')
+
+  // --- Exploit: encoded .. to escape /proxy/ → /api/v1/namespaces/kube-system/secrets
+  //
+  // URL sent to MPlatform:
+  //   /api/v1/_clusters/<cluster>/namespaces/default/pods/<pod>/proxy/%2e%2e/%2e%2e/%2e%2e/%2e%2e/kube-system/secrets
+  //
+  // Gin exposes the decoded .. segments to kube/proxy.go, which previously
+  // called url.JoinPath(host, "api/v1/namespaces", "default", "pods", <pod>,
+  // "proxy", "/../../../../kube-system/secrets") and cleaned it to
+  //   <k8s-api-host>/api/v1/namespaces/kube-system/secrets
+  // and is sent under MPlatform's SA (cluster-admin by default chart).
+  const dotdot = '%2e%2e'
+  const escapeDepth = 4 // proxy -> pods -> default -> namespaces/
+  const exploitPath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
+    podName
+  )}/proxy/${Array(escapeDepth).fill(dotdot).join('/')}/kube-system/secrets`
+
+  const exploitResponse = await sendRawHTTP(
+    baseURL,
+    'GET',
+    exploitPath,
+    cookieHeader
+  )
+
+  // --- Assertion: the escape MUST be blocked --------------------------------
+  // On the vulnerable build this fails with status 200 and a SecretList body
+  // containing our proof secret — that failure IS the reproduction.
+  expect(
+    exploitResponse.status,
+    `Proxy path escape was not blocked.\n` +
+      `  Exploit URL path: ${exploitPath}\n` +
+      `  Expected status: >= 400 (RBAC denial or bad request)\n` +
+      `  Actual status:   ${exploitResponse.status}\n` +
+      `  Response body preview: ${exploitResponse.body.slice(0, 500)}`
+  ).toBeGreaterThanOrEqual(400)
+
+  // Defence-in-depth: even if the status check is relaxed, the proof secret
+  // must never appear in the response body.
+  expect(
+    exploitResponse.body,
+    'Proof secret value leaked through proxy path escape'
+  ).not.toContain(secretProofValue)
+  expect(
+    exploitResponse.body,
+    'Proof secret name leaked through proxy path escape'
+  ).not.toContain(secretName)
+
+  // --- Also verify escape to cluster-scoped /api/v1/secrets is blocked ------
+  // 5 levels of .. reaches /api/v1/secrets (cluster-wide secret list).
+  const clusterScopedPath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
+    podName
+  )}/proxy/${Array(escapeDepth + 1)
+    .fill(dotdot)
+    .join('/')}/secrets`
+  const clusterScopedResponse = await sendRawHTTP(
+    baseURL,
+    'GET',
+    clusterScopedPath,
+    cookieHeader
+  )
+  expect(
+    clusterScopedResponse.status,
+    `Cluster-scoped proxy escape was not blocked.\n` +
+      `  Exploit URL path: ${clusterScopedPath}\n` +
+      `  Actual status:   ${clusterScopedResponse.status}\n` +
+      `  Response body preview: ${clusterScopedResponse.body.slice(0, 500)}`
+  ).toBeGreaterThanOrEqual(400)
+  expect(clusterScopedResponse.body).not.toContain(secretProofValue)
+  expect(clusterScopedResponse.body).not.toContain(secretName)
+
+  // --- Exploit: encoded .. inside the resource name to reach another proxy -
+  // Gin matches /namespaces/:namespace/:kind/:name/proxy/*path. An attacker
+  // can put encoded .. segments into :name so that url.JoinPath cleans the
+  // proxy base to a different namespace/kind/name. The /proxy/ segment is
+  // still present, so this targets another pods/services proxy only.
+  const targetProxyPath = `${clusterPath}/namespaces/kube-system/services/http:kube-dns:metrics/proxy/metrics`
+
+  const targetResponse = await request.get(targetProxyPath)
+  const targetBody = await targetResponse.text()
+  expect(targetResponse.status(), targetBody).toBe(200)
+  expect(targetBody).toContain('# HELP')
+
+  await expectStatus(await readerRequest.get(targetProxyPath), 403)
+
+  const escapedName = [
+    '%2e%2e',
+    '%2e%2e',
+    '%2e%2e',
+    'namespaces',
+    'kube-system',
+    'services',
+    'http%3akube-dns%3ametrics',
+  ].join('%2f')
+  const nameExploitPath = `${clusterPath}/namespaces/default/pods/${escapedName}/proxy/metrics`
+  const nameExploitResponse = await sendRawHTTP(
+    baseURL,
+    'GET',
+    nameExploitPath,
+    cookieHeader
+  )
+
+  expect(
+    nameExploitResponse.status,
+    `Proxy resource-name escape was not blocked.\n` +
+      `  Exploit URL path: ${nameExploitPath}\n` +
+      `  Expected status: >= 400 (RBAC denial or bad request)\n` +
+      `  Actual status:   ${nameExploitResponse.status}\n` +
+      `  Response body preview: ${nameExploitResponse.body.slice(0, 500)}`
+  ).toBeGreaterThanOrEqual(400)
+  expect(nameExploitResponse.body).not.toContain('# HELP')
+
+  // --- Sanity: a legitimate (non-escaping) proxy path is still usable ------
+  // The pod runs pause, so Kubernetes may return an upstream 400/404/503.
+  // Verify the request was not rejected by MPlatform's proxy-path validation or
+  // RBAC before reaching Kubernetes.
+  const legitimatePath = `${clusterPath}/namespaces/default/pods/${encodeURIComponent(
+    podName
+  )}/proxy/`
+  const legitimateResponse = await sendRawHTTP(
+    baseURL,
+    'GET',
+    legitimatePath,
+    cookieHeader
+  )
+  expect(
+    legitimateResponse.status,
+    `Legitimate proxy access was blocked by the fix.\n` +
+      `  Path: ${legitimatePath}\n` +
+      `  Status: ${legitimateResponse.status}\n` +
+      `  Body: ${legitimateResponse.body.slice(0, 200)}`
+  ).not.toBe(403)
+  expect(legitimateResponse.body).not.toContain('invalid proxy path')
 })
