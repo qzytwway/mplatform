@@ -11,11 +11,11 @@ import {
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
 import { cn, translateError } from '@/lib/utils'
+import { useAppearance } from '@/hooks/use-appearance'
 import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-import { useAppearance } from './appearance-provider'
 import { ErrorBoundary } from './error-boundary'
 
 interface ResourceYamlProps<T> {

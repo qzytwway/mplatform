@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { GlobalSearchProvider, useGlobalSearch } from './global-search-provider'
+import { useGlobalSearch } from '@/hooks/use-global-search'
+
+import { GlobalSearchProvider } from './global-search-provider'
 
 function createStorage() {
   let store: Record<string, string> = {}

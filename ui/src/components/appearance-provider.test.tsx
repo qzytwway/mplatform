@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { AppearanceProvider, useAppearance } from './appearance-provider'
+import { useAppearance } from '@/hooks/use-appearance'
+
+import { AppearanceProvider } from './appearance-provider'
 
 function createStorage() {
   let store: Record<string, string> = {}

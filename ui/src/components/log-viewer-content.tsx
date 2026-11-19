@@ -26,6 +26,7 @@ import {
   defineMonacoBackgroundThemes,
   useMonacoBackgroundColor,
 } from '@/lib/monaco-theme'
+import { useAppearance } from '@/hooks/use-appearance'
 import { useDepsChanged } from '@/hooks/use-deps-changed'
 import { Button } from '@/components/ui/button'
 import {
@@ -51,7 +52,6 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-import { useAppearance } from './appearance-provider'
 import { ConnectionIndicator } from './connection-indicator'
 import { NetworkSpeedIndicator } from './network-speed-indicator'
 import { ContainerSelector } from './selector/container-selector'
