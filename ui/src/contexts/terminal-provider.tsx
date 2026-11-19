@@ -1,17 +1,6 @@
-import { createContext, ReactNode, useContext, useState } from 'react'
+import { ReactNode, useState } from 'react'
 
-interface TerminalContextType {
-  isOpen: boolean
-  isMinimized: boolean
-  openTerminal: () => void
-  closeTerminal: () => void
-  minimizeTerminal: () => void
-  toggleTerminal: () => void
-}
-
-const TerminalContext = createContext<TerminalContextType | undefined>(
-  undefined
-)
+import { TerminalContext } from './terminal-context'
 
 export function TerminalProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -59,13 +48,4 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       {children}
     </TerminalContext.Provider>
   )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useTerminal() {
-  const context = useContext(TerminalContext)
-  if (context === undefined) {
-    throw new Error('useTerminal must be used within a TerminalProvider')
-  }
-  return context
 }

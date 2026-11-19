@@ -6,8 +6,8 @@ import './index.css'
 import './i18n'
 
 import { AppearanceProvider } from './components/appearance-provider'
-import { AuthProvider } from './contexts/auth-context'
-import { SidebarConfigProvider } from './contexts/sidebar-config-context'
+import { AuthProvider } from './contexts/auth-provider'
+import { SidebarConfigProvider } from './contexts/sidebar-config-provider'
 import { QueryProvider } from './lib/query-provider'
 import { router } from './routes'
 

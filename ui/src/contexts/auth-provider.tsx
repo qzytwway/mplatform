@@ -1,12 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-} from 'react'
+import { ReactNode, useCallback, useEffect, useMemo } from 'react'
 
 import type { BootstrapCapabilities, CredentialProvider } from '@/lib/api'
 import {
@@ -19,50 +11,11 @@ import {
 } from '@/lib/api'
 import { withSubPath } from '@/lib/subpath'
 
-interface User extends AuthUser {
-  isAdmin(): boolean
-
-  Key(): string
-}
-
-interface AuthContextType {
-  mplatformVersion: string | undefined
-  logo: string
-  user: User | null
-  isLoading: boolean
-  hasGlobalSidebarPreference: boolean
-  globalSidebarPreference: string
-  credentialProviders: CredentialProvider[]
-  oauthProviders: string[]
-  loginPrompt: string
-  mfaEnabled: boolean
-  passkeyLoginEnabled: boolean
-  capabilities: BootstrapCapabilities
-  login: (provider?: string) => Promise<void>
-  loginWithCredentials: (
-    provider: CredentialProvider,
-    username: string,
-    password: string,
-    mfaCode?: string
-  ) => Promise<void>
-  logout: () => Promise<void>
-  checkAuth: () => Promise<void>
-  refreshToken: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+import { AuthContext, type User } from './auth-context'
 
 const defaultCapabilities: BootstrapCapabilities = {
   aiEnabled: false,
   kubectlEnabled: true,
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
 }
 
 interface AuthProviderProps {
