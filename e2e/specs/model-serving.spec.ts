@@ -247,6 +247,20 @@ test.describe('model serving', () => {
   // oxlint-disable-next-line no-empty-pattern -- Playwright requires a destructured fixtures argument
   test.beforeEach(async ({}, testInfo) => {
     if (testInfo.title === installTitle) {
+      // Uninstalling refuses while services exist, so start from an empty
+      // namespace; this also clears whatever a failed run left behind.
+      resetNamespace(namespace)
+      if ((await api.status()).installed) {
+        await expectJSON(await api.uninstallLWS(), 200)
+        await waitFor('the LWS release to be removed', async () =>
+          (await api.status()).installed ? undefined : true
+        )
+        await waitFor('the LWS controller to stop', () =>
+          kubectl(['get', 'pods', '-n', 'lws-system', '-o', 'name']).trim()
+            ? undefined
+            : true
+        )
+      }
       return
     }
     const status = await api.status()
@@ -275,27 +289,13 @@ test.describe('model serving', () => {
   })
 
   test(installTitle, async () => {
-    // Uninstalling refuses while services exist, so start from an empty
-    // namespace; this also clears whatever a failed run left behind.
-    resetNamespace(namespace)
-
+    // beforeEach has uninstalled LWS for this test.
     const before = await api.status()
     expect(before.chart).toEqual({
       name: 'lws',
       version: 'v1.0.0',
       image: 'registry.k8s.io/lws/lws:v1.0.0',
     })
-    if (before.installed) {
-      await expectJSON(await api.uninstallLWS(), 200)
-      await waitFor('the LWS release to be removed', async () =>
-        (await api.status()).installed ? undefined : true
-      )
-      await waitFor('the LWS controller to stop', () =>
-        kubectl(['get', 'pods', '-n', 'lws-system', '-o', 'name']).trim()
-          ? undefined
-          : true
-      )
-    }
 
     await expectJSON(await api.installLWS(), 201)
     const again = await api.installLWS()
@@ -344,7 +344,15 @@ test.describe('model serving', () => {
       createReadyService(api, sglang, { pods: 1 }),
     ])
 
-    for (const req of [vllm, sglang]) {
+    // Asserts what both runtimes share; expectLaunch checks the
+    // runtime-specific command line.
+    const expectSingleService = async (
+      req: ServiceRequest,
+      expectLaunch: (
+        container: Container,
+        launch: ReturnType<typeof engineLaunch>
+      ) => void
+    ) => {
       const lws = getObject('leaderworkerset', namespace, req.name)
       expect.soft(lws?.metadata.labels).toMatchObject({
         ...managedBy,
@@ -378,60 +386,11 @@ test.describe('model serving', () => {
       expect.soft(container.resources?.limits?.['nvidia.com/gpu']).toBe('2')
       expectServingPorts(container, true)
 
-      const { argv, env, parsed } = engineLaunch(
-        namespace,
-        pods[0].metadata.name
-      )
-      expect.soft(parsed.modelPathExists).toBe(true)
+      const launch = engineLaunch(namespace, pods[0].metadata.name)
+      expect.soft(launch.parsed.modelPathExists).toBe(true)
       await expectServiceServesModel(req.name, pods)
       expectHeadlessServicePerGroup(req.name)
-      if (req.runtime === 'vllm') {
-        expect.soft(container.command).toEqual(vllmCommand)
-        expect
-          .soft(argv)
-          .toEqual([
-            modelMount,
-            '--served-model-name',
-            modelName,
-            '--host',
-            '0.0.0.0',
-            '--port',
-            '8000',
-            '--tensor-parallel-size',
-            '2',
-            '--max-model-len',
-            '4096',
-          ])
-        expect.soft(env.E2E_MARK).toBe('single-vllm')
-        // Requests of extended resources default to their limits.
-        expect.soft(container.resources?.requests).toEqual({
-          cpu: '100m',
-          memory: '128Mi',
-          'nvidia.com/gpu': '2',
-        })
-        expect.soft(container.resources?.limits).toEqual({
-          cpu: '100m',
-          memory: '128Mi',
-          'nvidia.com/gpu': '2',
-        })
-      } else {
-        expect.soft(container.command).toEqual(sglangCommand)
-        expect
-          .soft(argv)
-          .toEqual([
-            '--model-path',
-            modelMount,
-            '--served-model-name',
-            modelName,
-            '--host',
-            '0.0.0.0',
-            '--port',
-            '8000',
-            '--enable-metrics',
-            '--tp',
-            '2',
-          ])
-      }
+      expectLaunch(container, launch)
 
       const detail = await expectJSON<InferenceService>(
         await api.getService(namespace, req.name),
@@ -452,6 +411,55 @@ test.describe('model serving', () => {
       // Only LeaderWorkerSets from before per-group Services share one.
       expect.soft(detail.sharedSubdomain).toBeUndefined()
     }
+
+    await expectSingleService(vllm, (container, { argv, env }) => {
+      expect.soft(container.command).toEqual(vllmCommand)
+      expect
+        .soft(argv)
+        .toEqual([
+          modelMount,
+          '--served-model-name',
+          modelName,
+          '--host',
+          '0.0.0.0',
+          '--port',
+          '8000',
+          '--tensor-parallel-size',
+          '2',
+          '--max-model-len',
+          '4096',
+        ])
+      expect.soft(env.E2E_MARK).toBe('single-vllm')
+      // Requests of extended resources default to their limits.
+      expect.soft(container.resources?.requests).toEqual({
+        cpu: '100m',
+        memory: '128Mi',
+        'nvidia.com/gpu': '2',
+      })
+      expect.soft(container.resources?.limits).toEqual({
+        cpu: '100m',
+        memory: '128Mi',
+        'nvidia.com/gpu': '2',
+      })
+    })
+    await expectSingleService(sglang, (container, { argv }) => {
+      expect.soft(container.command).toEqual(sglangCommand)
+      expect
+        .soft(argv)
+        .toEqual([
+          '--model-path',
+          modelMount,
+          '--served-model-name',
+          modelName,
+          '--host',
+          '0.0.0.0',
+          '--port',
+          '8000',
+          '--enable-metrics',
+          '--tp',
+          '2',
+        ])
+    })
 
     // single-sglang-0 would take the name of the first group of single-sglang.
     const clash = await tryCreateService(
@@ -478,7 +486,16 @@ test.describe('model serving', () => {
     })
     await Promise.all([createService(api, sglang), createService(api, vllm)])
 
-    for (const req of [sglang, vllm]) {
+    // Asserts what both runtimes share; expectRuns checks the
+    // runtime-specific command lines and connection.
+    const expectMultiService = async (
+      req: ServiceRequest,
+      expectRuns: (
+        leaderRun: Awaited<ReturnType<typeof expectExpandedGroupArgs>>,
+        workerRun: Awaited<ReturnType<typeof expectExpandedGroupArgs>>,
+        dist: Awaited<ReturnType<typeof engineDist>>
+      ) => void
+    ) => {
       const lws = getObject('leaderworkerset', namespace, req.name)
       const template = lws?.spec.leaderWorkerTemplate
       expect.soft(template.size).toBe(2)
@@ -511,25 +528,11 @@ test.describe('model serving', () => {
       expect
         .soft(workerRun.env.LWS_LEADER_ADDRESS)
         .toBe(leaderRun.env.LWS_LEADER_ADDRESS)
-      if (req.runtime === 'sglang') {
-        expect.soft(argValue(leaderRun.argv, '--tp')).toBe('2')
-      } else {
-        expect
-          .soft(argValue(leaderRun.argv, '--tensor-parallel-size'))
-          .toBe('1')
-        expect
-          .soft(argValue(leaderRun.argv, '--pipeline-parallel-size'))
-          .toBe('2')
-        expect.soft(workerRun.argv).toContain('--headless')
-        expect.soft(leaderRun.argv).not.toContain('--headless')
-      }
 
       // The worker reaches its leader by the address LWS gave it.
       const dist = await engineDist(namespace, worker.metadata.name)
       expect.soft(dist.resolved, JSON.stringify(dist)).toBe(leader.status.podIP)
-      if (req.runtime === 'sglang') {
-        expect.soft(dist.connected, JSON.stringify(dist)).toBe(true)
-      }
+      expectRuns(leaderRun, workerRun, dist)
 
       await waitForServiceReady(api, namespace, req.name, { pods: 2 })
       await expectServiceServesModel(req.name, [leader])
@@ -544,6 +547,19 @@ test.describe('model serving', () => {
         .soft(detail.pods?.map((pod) => pod.role))
         .toEqual(['leader', 'worker'])
     }
+
+    await expectMultiService(sglang, (leaderRun, _workerRun, dist) => {
+      expect.soft(argValue(leaderRun.argv, '--tp')).toBe('2')
+      expect.soft(dist.connected, JSON.stringify(dist)).toBe(true)
+    })
+    await expectMultiService(vllm, (leaderRun, workerRun) => {
+      expect.soft(argValue(leaderRun.argv, '--tensor-parallel-size')).toBe('1')
+      expect
+        .soft(argValue(leaderRun.argv, '--pipeline-parallel-size'))
+        .toBe('2')
+      expect.soft(workerRun.argv).toContain('--headless')
+      expect.soft(leaderRun.argv).not.toContain('--headless')
+    })
 
     // Losing a worker restarts the whole group, leader included.
     const before = leaderOf(servicePods(namespace, sglang.name))
@@ -1105,21 +1121,19 @@ test.describe('model serving', () => {
     await deleteServiceAndWaitGone(api, namespace, nixl.name)
 
     const created = await tryCreateService(api, override)
-    expect.soft(created.status, created.text).toBe(201)
-    if (created.status === 201) {
-      await waitForServiceReady(api, namespace, override.name, { pods: 3 })
-      for (const role of ['prefill', 'decode']) {
-        const [pod] = servicePods(
-          namespace,
-          override.name,
-          `${roleLabel}=${role}`
-        )
-        expect
-          .soft(engineLaunch(namespace, pod.metadata.name).env.MC_FORCE_TCP)
-          .toBe('0')
-      }
-      await deleteServiceAndWaitGone(api, namespace, override.name)
+    expect(created.status, created.text).toBe(201)
+    await waitForServiceReady(api, namespace, override.name, { pods: 3 })
+    for (const role of ['prefill', 'decode']) {
+      const [pod] = servicePods(
+        namespace,
+        override.name,
+        `${roleLabel}=${role}`
+      )
+      expect
+        .soft(engineLaunch(namespace, pod.metadata.name).env.MC_FORCE_TCP)
+        .toBe('0')
     }
+    await deleteServiceAndWaitGone(api, namespace, override.name)
   })
 
   test('deleting a pd service of an s3 model removes everything created for it', async () => {
