@@ -100,7 +100,7 @@ user. Data is not migrated by the chart.
 {{- range (dig "spec" "template" "spec" "containers" list $deployment) }}
 {{- range (.env | default list) }}
 {{- if and (eq .name "DB_TYPE") (eq (.value | default "") "sqlite") }}
-{{- fail "This release stores its data in SQLite. Set db.type=sqlite to keep it, or migrate the data to the new database first and then set db.migratedFromSqlite=true (see the chart README)." }}
+{{- fail "This release stores its data in SQLite. Set db.type=sqlite to keep it, or migrate the data to the new database first and then set db.migratedFromSqlite=true." }}
 {{- end }}
 {{- end }}
 {{- end }}
