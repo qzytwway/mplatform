@@ -19,7 +19,7 @@ MPlatform 是一个轻量的 Kubernetes 管理平台，后端用 Go，前端用 
     <td width="33%"><img src="docs/images/logs.png" alt="日志检索"></td>
   </tr>
   <tr>
-    <td align="center">问题优先工作台（原型图）</td>
+    <td align="center">问题优先工作台（示例数据）</td>
     <td align="center">Prometheus 监控面板</td>
     <td align="center">日志检索</td>
   </tr>
@@ -102,9 +102,10 @@ MPlatform 默认监听 `8080` 端口，支持 PostgreSQL、MySQL 和 SQLite。�
    git clone https://github.com/qzytwway/mplatform.git
    cd mplatform
    docker build -t mplatform:local .
+   cd ..
    ```
 
-3. 打开 `http://<服务器地址>:8080`，创建第一个管理员账号，然后按引导接入集群。平台在集群外运行时，用“上传 kubeconfig”或“Cluster Agent”方式接入；kubeconfig 里的 API Server 地址必须能从容器内访问（`127.0.0.1` 这类本机地址不行）。
+3. 打开 `http://<服务器地址>:8080`，创建第一个管理员账号，然后按引导接入集群。平台在集群外运行时，用“Kubeconfig”或“Cluster Agent”方式接入；kubeconfig 里的 API Server 地址必须能从容器内访问（`127.0.0.1` 这类本机地址不行）。
 
 数据库、上传的 chart 包都保存在 `data/` 目录里，升级时拉取新镜像、删除旧容器后用同样的命令重新启动即可。
 
@@ -160,10 +161,7 @@ docker compose pull && docker compose up -d
 
    请妥善保存这个文件，以后执行 `helm upgrade` 时也要带上它，否则密钥会被改回默认值。
 
-   chart 默认会部署一个 PostgreSQL（StatefulSet，数据存在 8Gi 的持久卷上，密码在首次安装时自动生成，保存在 `<release>-mplatform-postgresql` 这个 Secret 里）。可以通过 `db.postgresql.*` 调整镜像、容量和存储类。想用公司已有的数据库时，在 `db.dsn` 中填写连接串，例如 `postgres://user:password@host:5432/mplatform?sslmode=require`；用 MySQL 时再把 `db.type` 设为 `mysql`。
-
-   > [!WARNING]
-   > 从 0.17 及更早版本升级时，如果原来用的是 SQLite，chart 会拒绝升级，避免切到一个空数据库。想继续用 SQLite，就设置 `db.type: sqlite`；想换到 PostgreSQL，要先自己把数据迁移过去（chart 不会自动迁移），然后设置 `db.migratedFromSqlite: true` 再升级。
+   chart 默认会部署一个 PostgreSQL（StatefulSet，数据存在 8Gi 的持久卷上，密码在首次安装时自动生成，保存在 `mplatform-postgresql` 这个 Secret 里）。可以通过 `db.postgresql.*` 调整镜像、容量和存储类。想用公司已有的数据库时，在 `db.dsn` 中填写连接串，例如 `postgres://user:password@host:5432/mplatform?sslmode=require`；用 MySQL 时再把 `db.type` 设为 `mysql`。
 
 2. 安装。使用仓库中的 chart：
 
@@ -190,10 +188,18 @@ docker compose pull && docker compose up -d
 
    长期使用可在 values 里开启 `ingress`（或 Gateway API 的 `gateway`）配置域名。首次打开时创建管理员账号，接入集群时选择 In-Cluster。
 
-升级：
+升级时先拉取最新代码，再用新版 chart 升级：
 
 ```bash
+git -C mplatform pull
 helm upgrade mplatform ./mplatform/charts/mplatform \
+  --namespace mplatform-system -f mplatform-values.yaml
+```
+
+用已发布的 OCI chart 安装的，这样升级：
+
+```bash
+helm upgrade mplatform oci://ghcr.io/qzytwway/charts/mplatform \
   --namespace mplatform-system -f mplatform-values.yaml
 ```
 
