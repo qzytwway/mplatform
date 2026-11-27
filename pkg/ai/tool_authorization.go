@@ -194,6 +194,9 @@ func AuthorizeTool(c *gin.Context, cs *cluster.ClientSet, toolName string, args 
 	if !ok {
 		return "Error: authenticated user not found in context", true
 	}
+	if result, isError := authorizeAdminOnlyTool(user, toolName); isError {
+		return result, true
+	}
 
 	permissions, err := requiredToolPermissions(c.Request.Context(), cs, toolName, args)
 	if err != nil {
@@ -236,6 +239,10 @@ func ExecuteTool(ctx context.Context, c *gin.Context, cs *cluster.ClientSet, too
 		return executeExecInPod(ctx, cs, user, args)
 	case "get_cluster_overview":
 		return executeGetClusterOverview(ctx, cs)
+	case listInferenceServicesTool:
+		return executeListInferenceServices(ctx, cs)
+	case describeInferenceServiceTool:
+		return executeDescribeInferenceService(ctx, cs, args)
 	case "create_resource":
 		return executeCreateResource(ctx, cs, user, args)
 	case "apply_resource":

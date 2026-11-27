@@ -61,17 +61,11 @@ func (h *Handler) ListServices(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Namespace != items[j].Namespace {
-			return items[i].Namespace < items[j].Namespace
-		}
-		return items[i].Name < items[j].Name
-	})
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-// ListInferenceServices describes every inference service in the cluster, in
-// no particular order.
+// ListInferenceServices describes every inference service in the cluster,
+// sorted by namespace and name.
 func ListInferenceServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceService, error) {
 	workloads, err := listWorkloads(ctx, cs, "")
 	if err != nil {
@@ -85,6 +79,12 @@ func ListInferenceServices(ctx context.Context, cs *cluster.ClientSet) ([]infere
 		}
 		items = append(items, service)
 	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Namespace != items[j].Namespace {
+			return items[i].Namespace < items[j].Namespace
+		}
+		return items[i].Name < items[j].Name
+	})
 	return items, nil
 }
 
