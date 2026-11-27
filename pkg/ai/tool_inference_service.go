@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -131,7 +132,7 @@ func executeDescribeInferenceService(ctx context.Context, cs *cluster.ClientSet,
 		if pod.Ready && pod.Restarts == 0 {
 			continue
 		}
-		if lines := engineLogErrors(ctx, cs, detail.Namespace, pod.Name, pod.Restarts > 0); len(lines) > 0 {
+		if lines := podLogErrors(ctx, cs, detail.Namespace, pod.Name, pod.Restarts > 0); len(lines) > 0 {
 			diagnosis.EngineLogErrors[pod.Name] = lines
 		}
 	}
@@ -178,13 +179,36 @@ func eventTime(event *corev1.Event) time.Time {
 	}
 }
 
-// engineLogErrors returns the last error lines of a pod's Engine log, of the
-// container that ran before the last restart when previous is set. A log that
-// cannot be read, as of a pod still pending, is reported as its only line.
-func engineLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, pod string, previous bool) []string {
+// podLogErrors returns the error lines of the log that explains a pod that
+// is not ready: of its init container that has not finished, such as the
+// model downloader, while it initializes, and otherwise of its Engine.
+func podLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, name string, restarted bool) []string {
+	var pod corev1.Pod
+	if err := cs.K8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &pod); err != nil {
+		klog.Warningf("Reading pod %s/%s for its init containers: %v", namespace, name, err)
+	}
+	for _, status := range pod.Status.InitContainerStatuses {
+		// An init container is ready once it exited 0.
+		if status.Ready {
+			continue
+		}
+		lines := engineLogErrors(ctx, cs, namespace, name, status.Name, status.RestartCount > 0)
+		for i, line := range lines {
+			lines[i] = "init container " + status.Name + ": " + line
+		}
+		return lines
+	}
+	return engineLogErrors(ctx, cs, namespace, name, "", restarted)
+}
+
+// engineLogErrors returns the last error lines of a pod's log, of container
+// or else its Engine, and of the run before the last restart when previous
+// is set. A log that cannot be read, as of a pod still pending, is reported
+// as its only line.
+func engineLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, pod, container string, previous bool) []string {
 	tailLines := int64(engineLogTailLines)
 	stream, err := cs.K8sClient.ClientSet.CoreV1().Pods(namespace).
-		GetLogs(pod, &corev1.PodLogOptions{TailLines: &tailLines, Previous: previous}).Stream(ctx)
+		GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &tailLines, Previous: previous}).Stream(ctx)
 	if err != nil {
 		return []string{"logs unavailable: " + err.Error()}
 	}
