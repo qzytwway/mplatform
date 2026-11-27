@@ -238,6 +238,7 @@ func toolDefinitions(cs *cluster.ClientSet) []agentToolDefinition {
 		})
 	}
 
+	tools = append(tools, inferenceServiceToolDefinitions()...)
 	return tools
 }
 
