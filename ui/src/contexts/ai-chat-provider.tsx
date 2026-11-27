@@ -1,6 +1,7 @@
 import { ReactNode, useCallback, useMemo, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 
+import { MODEL_SERVING_PATHS } from '@/lib/model-serving-paths'
 import { PageContext } from '@/components/ai-chat/ai-chat-types'
 import { toSingularResource } from '@/components/ai-chat/ai-chat-utils'
 
@@ -42,6 +43,21 @@ export function AIChatProvider({ children }: { children: ReactNode }) {
     const name = params.name || ''
     const namespace = params.namespace || ''
     const normalizedKind = toSingularResource(resource)
+
+    if (name && path.startsWith(`${MODEL_SERVING_PATHS.services}/`)) {
+      const view =
+        path === MODEL_SERVING_PATHS.serviceEdit(namespace, name)
+          ? 'edit'
+          : path === MODEL_SERVING_PATHS.serviceScale(namespace, name)
+            ? 'scale'
+            : 'detail'
+      return {
+        page: `inferenceservice-${view}`,
+        namespace,
+        resourceName: name,
+        resourceKind: 'inferenceservice',
+      }
+    }
 
     let page = 'overview'
     if (path === '/' || path === '/dashboard') {
