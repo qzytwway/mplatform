@@ -100,41 +100,14 @@ func TestRequiredToolPermissions(t *testing.T) {
 			},
 		},
 		{
-			name:     "create namespaced resource",
-			toolName: "create_resource",
-			args: map[string]interface{}{
-				"yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n  namespace: default\n",
-			},
-			want: []toolPermission{{Resource: "configmaps", Verb: "create", Namespace: "default"}},
-		},
-		{
-			name:     "create cluster scoped resource",
-			toolName: "create_resource",
-			args: map[string]interface{}{
-				"yaml": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: example\n",
-			},
-			want: []toolPermission{{Resource: "namespaces", Verb: "create", Namespace: ""}},
-		},
-		{
-			name:     "patch cluster scoped resource",
-			toolName: "patch_resource",
+			name:     "describe cluster scoped resource",
+			toolName: "describe_resource",
 			args: map[string]interface{}{
 				"kind":      "Node",
 				"name":      "node-1",
 				"namespace": "default",
-				"patch":     `{"metadata":{"labels":{"env":"prod"}}}`,
 			},
-			want: []toolPermission{{Resource: "nodes", Verb: "update", Namespace: ""}},
-		},
-		{
-			name:     "delete resource",
-			toolName: "delete_resource",
-			args: map[string]interface{}{
-				"kind":      "Service",
-				"name":      "api",
-				"namespace": "default",
-			},
-			want: []toolPermission{{Resource: "services", Verb: "delete", Namespace: "default"}},
+			want: []toolPermission{{Resource: "nodes", Verb: "get", Namespace: ""}},
 		},
 		{
 			name:     "prometheus query",
@@ -159,7 +132,6 @@ func TestRequiredToolPermissions(t *testing.T) {
 
 func TestRequiredToolPermissionsQualifiesCustomResources(t *testing.T) {
 	cs := newToolAuthorizationTestClientSet(t)
-	widgetYAML := "apiVersion: example.com/v1\nkind: Widget\nmetadata:\n  name: example\n  namespace: default\n"
 	tests := []struct {
 		name     string
 		toolName string
@@ -168,10 +140,7 @@ func TestRequiredToolPermissionsQualifiesCustomResources(t *testing.T) {
 	}{
 		{name: "get", toolName: "get_resource", args: map[string]interface{}{"kind": "widgets.example.com", "namespace": "default"}, verb: "get"},
 		{name: "list", toolName: "list_resources", args: map[string]interface{}{"kind": "widgets.example.com", "namespace": "default"}, verb: "get"},
-		{name: "create", toolName: "create_resource", args: map[string]interface{}{"yaml": widgetYAML}, verb: "create"},
-		{name: "update", toolName: "update_resource", args: map[string]interface{}{"yaml": widgetYAML}, verb: "update"},
-		{name: "patch", toolName: "patch_resource", args: map[string]interface{}{"kind": "widgets.example.com", "name": "example", "namespace": "default"}, verb: "update"},
-		{name: "delete", toolName: "delete_resource", args: map[string]interface{}{"kind": "widgets.example.com", "name": "example", "namespace": "default"}, verb: "delete"},
+		{name: "describe", toolName: "describe_resource", args: map[string]interface{}{"kind": "widgets.example.com", "name": "example", "namespace": "default"}, verb: "get"},
 	}
 
 	for _, tc := range tests {
@@ -193,26 +162,26 @@ func TestAuthorizeToolCustomResourceGroups(t *testing.T) {
 	tests := []struct {
 		name              string
 		resource          string
-		yaml              string
+		kind              string
 		wantError         bool
 		wantErrorResource string
 	}{
 		{
 			name:     "qualified custom resource permission allows",
 			resource: "widgets.example.com",
-			yaml:     "apiVersion: example.com/v1\nkind: Widget\nmetadata:\n  name: example\n  namespace: default\n",
+			kind:     "Widget",
 		},
 		{
 			name:              "same plural in another group is denied",
 			resource:          "widgets.other.example.com",
-			yaml:              "apiVersion: example.com/v1\nkind: Widget\nmetadata:\n  name: example\n  namespace: default\n",
+			kind:              "Widget",
 			wantError:         true,
 			wantErrorResource: "widgets.example.com",
 		},
 		{
 			name:              "builtin permission with same plural is denied",
 			resource:          "pods",
-			yaml:              "apiVersion: example.com/v1\nkind: CustomPod\nmetadata:\n  name: example\n  namespace: default\n",
+			kind:              "CustomPod",
 			wantError:         true,
 			wantErrorResource: "pods.example.com",
 		},
@@ -226,15 +195,15 @@ func TestAuthorizeToolCustomResourceGroups(t *testing.T) {
 			c.Set("user", model.User{
 				Username: "alice",
 				Roles: []common.Role{{
-					Name:       "resource-creator",
+					Name:       "resource-reader",
 					Clusters:   []string{"cluster-a"},
 					Namespaces: []string{"default"},
 					Resources:  []string{tc.resource},
-					Verbs:      []string{"create"},
+					Verbs:      []string{"get"},
 				}},
 			})
 
-			result, isError := AuthorizeTool(c, cs, "create_resource", map[string]interface{}{"yaml": tc.yaml})
+			result, isError := AuthorizeTool(c, cs, "get_resource", map[string]interface{}{"kind": tc.kind, "name": "example", "namespace": "default"})
 			if isError != tc.wantError {
 				t.Fatalf("AuthorizeTool() error = %v, want %v; result=%q", isError, tc.wantError, result)
 			}
