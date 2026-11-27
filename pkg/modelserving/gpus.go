@@ -41,6 +41,28 @@ type gpuNode struct {
 	Ready       bool  `json:"ready"`
 }
 
+// GPUPod is an unfinished pod requesting whole GPUs or vGPUs, following
+// the mode.
+type GPUPod struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Mode      string `json:"mode"`
+	GPUs      int64  `json:"gpus"`
+}
+
+// GPUNode is a GPU node as the GPUs page shows it, with the pods on it
+// requesting GPUs.
+type GPUNode struct {
+	gpuNode
+	Pods []GPUPod `json:"pods,omitempty"`
+}
+
+// GPUAllocation is the GPU nodes and the unscheduled pods requesting GPUs.
+type GPUAllocation struct {
+	Nodes   []GPUNode
+	Pending []GPUPod
+}
+
 type gpuModeRequest struct {
 	Mode string `json:"mode"`
 }
@@ -65,16 +87,21 @@ func (h *Handler) ListGPUNodes(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	items, err := ListGPUAllocation(c.Request.Context(), cs)
+	allocation, err := ListGPUAllocation(c.Request.Context(), cs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	items := make([]gpuNode, 0, len(allocation.Nodes))
+	for _, node := range allocation.Nodes {
+		items = append(items, node.gpuNode)
+	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-// ListGPUAllocation lists the GPU nodes as the GPUs page shows them.
-func ListGPUAllocation(ctx context.Context, cs *cluster.ClientSet) ([]gpuNode, error) {
+// ListGPUAllocation lists the GPU nodes as the GPUs page shows them, and
+// which pods hold or wait for GPUs.
+func ListGPUAllocation(ctx context.Context, cs *cluster.ClientSet) (*GPUAllocation, error) {
 	var nodes corev1.NodeList
 	if err := cs.K8sClient.List(ctx, &nodes); err != nil {
 		return nil, err
@@ -87,8 +114,20 @@ func ListGPUAllocation(ctx context.Context, cs *cluster.ClientSet) ([]gpuNode, e
 		gpuResource:  allocatedGPUs(pods.Items, gpuResource),
 		vgpuResource: allocatedGPUs(pods.Items, vgpuResource),
 	}
+	allocation := &GPUAllocation{}
+	holders := map[string][]GPUPod{}
+	for i := range pods.Items {
+		pod, ok := gpuPod(&pods.Items[i])
+		node := pods.Items[i].Spec.NodeName
+		switch {
+		case !ok:
+		case node == "":
+			allocation.Pending = append(allocation.Pending, pod)
+		default:
+			holders[node] = append(holders[node], pod)
+		}
+	}
 
-	items := []gpuNode{}
 	for _, node := range nodes.Items {
 		gpus, vgpus := node.Status.Capacity[gpuResource], node.Status.Capacity[vgpuResource]
 		if node.Labels[gpuPresentLabel] != "true" && gpus.Value() <= 0 && vgpus.Value() <= 0 {
@@ -98,7 +137,7 @@ func ListGPUAllocation(ctx context.Context, cs *cluster.ClientSet) ([]gpuNode, e
 		resourceName := modeResource(mode)
 		capacity := node.Status.Capacity[resourceName]
 		allocatable := node.Status.Allocatable[resourceName]
-		items = append(items, gpuNode{
+		allocation.Nodes = append(allocation.Nodes, GPUNode{Pods: holders[node.Name], gpuNode: gpuNode{
 			Name:        node.Name,
 			Product:     node.Labels[gpuProductLabel],
 			Mode:        mode,
@@ -106,23 +145,47 @@ func ListGPUAllocation(ctx context.Context, cs *cluster.ClientSet) ([]gpuNode, e
 			Allocatable: allocatable.Value(),
 			Allocated:   allocated[resourceName][node.Name],
 			Ready:       nodeReady(&node),
-		})
+		}})
 	}
-	return items, nil
+	return allocation, nil
+}
+
+// gpuPod reports the GPUs an unfinished pod requests, if any.
+func gpuPod(pod *corev1.Pod) (GPUPod, bool) {
+	if podFinished(pod) {
+		return GPUPod{}, false
+	}
+	for _, mode := range []string{gpuModeWhole, gpuModeVGPU} {
+		if gpus := podGPUs(pod, modeResource(mode)); gpus > 0 {
+			return GPUPod{Namespace: pod.Namespace, Name: pod.Name, Mode: mode, GPUs: gpus}, true
+		}
+	}
+	return GPUPod{}, false
+}
+
+func podFinished(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed
+}
+
+// podGPUs sums the requests of a GPU resource of a pod's containers.
+func podGPUs(pod *corev1.Pod, resourceName corev1.ResourceName) int64 {
+	var gpus int64
+	for _, container := range pod.Spec.Containers {
+		request := container.Resources.Requests[resourceName]
+		gpus += request.Value()
+	}
+	return gpus
 }
 
 // allocatedGPUs sums the requests of a GPU resource of unfinished pods per
 // node.
 func allocatedGPUs(pods []corev1.Pod, resourceName corev1.ResourceName) map[string]int64 {
 	allocated := map[string]int64{}
-	for _, pod := range pods {
-		if pod.Spec.NodeName == "" || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+	for i := range pods {
+		if pods[i].Spec.NodeName == "" || podFinished(&pods[i]) {
 			continue
 		}
-		for _, container := range pod.Spec.Containers {
-			request := container.Resources.Requests[resourceName]
-			allocated[pod.Spec.NodeName] += request.Value()
-		}
+		allocated[pods[i].Spec.NodeName] += podGPUs(&pods[i], resourceName)
 	}
 	return allocated
 }

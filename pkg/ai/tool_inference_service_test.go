@@ -78,6 +78,7 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 		mapper.Add(gvk, meta.RESTScopeNamespace)
 	}
 	mapper.Add(corev1.SchemeGroupVersion.WithKind("Pod"), meta.RESTScopeNamespace)
+	mapper.Add(corev1.SchemeGroupVersion.WithKind("Node"), meta.RESTScopeRoot)
 	mapper.Add(appsv1.SchemeGroupVersion.WithKind("Deployment"), meta.RESTScopeNamespace)
 	mapper.Add(apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"), meta.RESTScopeRoot)
 	objects = append(objects,
@@ -141,6 +142,7 @@ func TestInferenceServiceToolsAreAdminOnly(t *testing.T) {
 	}{
 		{toolName: "list_inference_services", args: map[string]interface{}{}},
 		{toolName: "describe_inference_service", args: map[string]interface{}{"namespace": "default", "name": "qwen"}},
+		{toolName: "get_inference_service_gpus", args: map[string]interface{}{"namespace": "default", "name": "qwen"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.toolName, func(t *testing.T) {
@@ -383,6 +385,7 @@ func TestToolDefinitionsOfferInferenceServiceTools(t *testing.T) {
 	for name, want := range map[string][]string{
 		"list_inference_services":    nil,
 		"describe_inference_service": {"namespace", "name"},
+		"get_inference_service_gpus": {"namespace", "name"},
 	} {
 		got, ok := required[name]
 		if !ok || !reflect.DeepEqual(got, want) {
