@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/monitoring"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 func inferenceServiceMetricsToolDefinition() agentToolDefinition {
 	return agentToolDefinition{
 		Name:        inferenceServiceMetricsTool,
-		Description: "Read the inference metrics of one Inference Service over the last 30 minutes, from the panels of the built-in Inference Services monitoring dashboard: time to first token, inter-token latency (time per output token), token throughput, running and queued requests, and KV cache usage, per Role. Each series gives its value at the start of the window, its latest value, min and max. A panel without series has no data, such as the latency of a service that got no requests. Use this to tell whether an Inference Service is slow or overloaded. Admin only.",
+		Description: "Read the inference metrics of one Inference Service over the last 30 minutes, from the panels of the built-in Inference Services monitoring dashboard: time to first token, inter-token latency (time per output token), token throughput, running and queued requests, and KV cache usage, per Role. Each series gives its value at the start of the window, its latest value, min and max. A panel without series has no data, such as the latency of a service that got no requests, unless it has an error, which means its Prometheus query failed and says nothing about the service. Use this to tell whether an Inference Service is slow or overloaded. Admin only.",
 		Properties: map[string]any{
 			"namespace": map[string]any{"type": "string", "description": "The namespace of the Inference Service."},
 			"name":      map[string]any{"type": "string", "description": "The name of the Inference Service."},
@@ -48,6 +49,7 @@ type inferenceMetricsPanel struct {
 	Title       string                   `json:"title"`
 	Description string                   `json:"description"`
 	Unit        string                   `json:"unit"`
+	Error       string                   `json:"error,omitempty"`
 	Series      []inferenceMetricsSeries `json:"series"`
 }
 
@@ -99,31 +101,71 @@ func executeInferenceServiceMetrics(ctx context.Context, cs *cluster.ClientSet, 
 		"$role", ".*",
 		"$__rate_interval", inferenceMetricsRateInterval,
 	)
-	end := time.Now()
-	window := v1.Range{Start: end.Add(-inferenceMetricsWindow), End: end, Step: inferenceMetricsStep}
+	results, firstErr := queryDashboard(ctx, cs, &dashboard, variables)
 	metrics := inferenceMetrics{Namespace: detail.Namespace, Name: detail.Name, Window: "30m"}
-	hasData := false
-	for _, panel := range dashboard.Panels {
+	hasData, queries, failed := false, 0, 0
+	for i, panel := range dashboard.Panels {
 		out := inferenceMetricsPanel{Title: panel.Title, Description: panel.Description, Unit: panel.FieldConfig.Defaults.Unit, Series: []inferenceMetricsSeries{}}
-		for _, target := range panel.Targets {
-			value, _, err := cs.PromClient.QueryRange(ctx, variables.Replace(target.Expr), window)
-			if err != nil {
-				return fmt.Sprintf("Error querying Prometheus for the inference metrics of %s/%s: %v", detail.Namespace, detail.Name, err), true
+		var errs []string
+		for _, result := range results[i] {
+			queries++
+			if result.err != nil {
+				failed++
+				errs = append(errs, result.err.Error())
+				continue
 			}
-			matrix, _ := value.(model.Matrix)
-			for _, stream := range matrix {
-				if series, ok := summarizeSeries(stream, target.LegendFormat); ok {
-					out.Series = append(out.Series, series)
-					hasData = true
-				}
-			}
+			out.Series = append(out.Series, result.series...)
 		}
+		if len(errs) > 0 {
+			out.Error = "query failed: " + strings.Join(errs, "; ")
+		}
+		hasData = hasData || len(out.Series) > 0
 		metrics.Panels = append(metrics.Panels, out)
 	}
-	if !hasData {
+	if failed > 0 && failed == queries {
+		return fmt.Sprintf("Error querying Prometheus for the inference metrics of %s/%s: %v", detail.Namespace, detail.Name, firstErr), true
+	}
+	if !hasData && failed == 0 {
 		return fmt.Sprintf("Prometheus has no inference metrics of %s/%s in the last 30 minutes: its pods have not been scraped yet, or its Engine does not expose metrics.", detail.Namespace, detail.Name), false
 	}
 	return toolJSON(metrics)
+}
+
+type dashboardQueryResult struct {
+	series []inferenceMetricsSeries
+	err    error
+}
+
+// queryDashboard runs the queries of every panel over the last half hour,
+// concurrently, and returns their results by panel and target, with the
+// first error. A failed query does not stop the others.
+func queryDashboard(ctx context.Context, cs *cluster.ClientSet, dashboard *inferenceDashboard, variables *strings.Replacer) ([][]dashboardQueryResult, error) {
+	end := time.Now()
+	window := v1.Range{Start: end.Add(-inferenceMetricsWindow), End: end, Step: inferenceMetricsStep}
+	// Each query fills its own slot, so the panels keep the dashboard's order.
+	results := make([][]dashboardQueryResult, len(dashboard.Panels))
+	var group errgroup.Group
+	group.SetLimit(maxConcurrentReads)
+	for i, panel := range dashboard.Panels {
+		results[i] = make([]dashboardQueryResult, len(panel.Targets))
+		for j, target := range panel.Targets {
+			group.Go(func() error {
+				value, _, err := cs.PromClient.QueryRange(ctx, variables.Replace(target.Expr), window)
+				if err != nil {
+					results[i][j].err = err
+					return err
+				}
+				matrix, _ := value.(model.Matrix)
+				for _, stream := range matrix {
+					if series, ok := summarizeSeries(stream, target.LegendFormat); ok {
+						results[i][j].series = append(results[i][j].series, series)
+					}
+				}
+				return nil
+			})
+		}
+	}
+	return results, group.Wait()
 }
 
 // summarizeSeries names a series by the panel's legend and reduces it to its

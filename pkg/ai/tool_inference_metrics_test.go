@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 )
 
 // fakePrometheus answers every range query with the series that matrix returns
-// for it, and records the queries it got.
+// for it, or an error when fails reports one, and records the queries it got.
 type fakePrometheus struct {
+	mu      sync.Mutex
 	queries []string
 	matrix  func(query string) []map[string]any
+	fails   func(query string) bool
 }
 
 func newFakePrometheus(t *testing.T, matrix func(query string) []map[string]any) (*fakePrometheus, *prometheus.Client) {
@@ -26,12 +29,20 @@ func newFakePrometheus(t *testing.T, matrix func(query string) []map[string]any)
 	fp := &fakePrometheus{matrix: matrix}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.FormValue("query")
+		fp.mu.Lock()
 		fp.queries = append(fp.queries, query)
+		fails := fp.fails != nil && fp.fails(query)
+		fp.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if fails {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"status":"error","errorType":"execution","error":"query timed out in expression evaluation"}`))
+			return
+		}
 		result := []map[string]any{}
 		if fp.matrix != nil {
 			result = fp.matrix(query)
 		}
-		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status": "success",
 			"data":   map[string]any{"resultType": "matrix", "result": result},
@@ -64,6 +75,7 @@ type metricsResult struct {
 	Panels []struct {
 		Title  string `json:"title"`
 		Unit   string `json:"unit"`
+		Error  string `json:"error"`
 		Series []struct {
 			Legend string  `json:"legend"`
 			Start  float64 `json:"start"`
@@ -148,11 +160,16 @@ func TestInferenceServiceMetricsRunsTheDashboardQueries(t *testing.T) {
 		t.Fatalf("unexpected error: %s", result)
 	}
 
+	// The queries run concurrently, in any order.
+	slices.Sort(fp.queries)
+	slices.Sort(want)
 	if !slices.Equal(fp.queries, want) {
 		t.Fatalf("queries:\n%s\nwant:\n%s", strings.Join(fp.queries, "\n"), strings.Join(want, "\n"))
 	}
-	if !strings.Contains(fp.queries[0], `namespace="default", inference_service=~"qwen\\.v2", inference_role=~".*"`) {
-		t.Fatalf("first query does not select the service: %s", fp.queries[0])
+	for _, query := range fp.queries {
+		if !strings.Contains(query, `namespace="default", inference_service=~"qwen\\.v2", inference_role=~".*"`) {
+			t.Fatalf("query does not select the service: %s", query)
+		}
 	}
 }
 
@@ -193,5 +210,43 @@ func TestInferenceServiceMetricsWithoutData(t *testing.T) {
 				t.Fatalf("want a result starting %q, got isError=%v result=%q", tc.want, isError, result)
 			}
 		})
+	}
+}
+
+func TestInferenceServiceMetricsReportsAFailedPanelAndKeepsTheOthers(t *testing.T) {
+	fc := newInferenceServiceCluster(t, lwsService("qwen", "single", 1, 1, 1))
+	fp, client := newFakePrometheus(t, decodeSeries)
+	fp.fails = func(query string) bool { return strings.Contains(query, "kv_cache_usage_perc") }
+	fc.cs.PromClient = client
+
+	result, isError := ExecuteTool(context.Background(), toolContext(adminUser()), fc.cs,
+		"get_inference_service_metrics", map[string]interface{}{"namespace": "default", "name": "qwen"})
+
+	if isError {
+		t.Fatalf("unexpected error: %s", result)
+	}
+	var metrics metricsResult
+	if err := json.Unmarshal([]byte(result), &metrics); err != nil {
+		t.Fatalf("result is not JSON: %v\n%s", err, result)
+	}
+	for _, panel := range metrics.Panels {
+		failed := panel.Title == "KV Cache Usage"
+		if failed != strings.Contains(panel.Error, "query timed out") || failed != (len(panel.Series) == 0) {
+			t.Errorf("%s: error %q with %d series", panel.Title, panel.Error, len(panel.Series))
+		}
+	}
+}
+
+func TestInferenceServiceMetricsFailsWhenEveryQueryFails(t *testing.T) {
+	fc := newInferenceServiceCluster(t, lwsService("qwen", "single", 1, 1, 1))
+	fp, client := newFakePrometheus(t, decodeSeries)
+	fp.fails = func(string) bool { return true }
+	fc.cs.PromClient = client
+
+	result, isError := ExecuteTool(context.Background(), toolContext(adminUser()), fc.cs,
+		"get_inference_service_metrics", map[string]interface{}{"namespace": "default", "name": "qwen"})
+
+	if !isError || !strings.HasPrefix(result, "Error querying Prometheus for the inference metrics of default/qwen: ") {
+		t.Fatalf("want a Prometheus error, got isError=%v result=%q", isError, result)
 	}
 }

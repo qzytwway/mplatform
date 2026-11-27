@@ -221,6 +221,20 @@ func TestInferenceDashboardMetrics(t *testing.T) {
 	}
 }
 
+func TestInferenceServiceDashboardIsTheBuiltinOne(t *testing.T) {
+	definition, err := InferenceServiceDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, builtins, err := builtinDashboards()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(definition) != string(builtins[inferenceDashboardUID]) {
+		t.Fatalf("InferenceServiceDashboard() is not the built-in dashboard %s", inferenceDashboardUID)
+	}
+}
+
 // TestLoadDashboardsListsBuiltins loads the dashboards the way the metrics
 // page does, from a local kube-prometheus-stack chart with one dashboard.
 func TestLoadDashboardsListsBuiltins(t *testing.T) {
