@@ -13,7 +13,7 @@ const inferenceServiceGPUsTool = "get_inference_service_gpus"
 func inferenceServiceGPUsToolDefinition() agentToolDefinition {
 	return agentToolDefinition{
 		Name:        inferenceServiceGPUsTool,
-		Description: "Read the GPU allocation of an Inference Service as the console's GPUs page shows it: for the nodes its Pods run on, or every GPU node while one of its Pods is Pending, each node's GPU model, mode (whole GPUs from the GPU Operator, or vGPU shares from HAMi), total and allocated GPUs and the Pods holding them, and for its Pending Pods the GPUs they request and the shortfall on the freest node. Use this to tell whether an Inference Service is short of GPUs. Admin only.",
+		Description: "Read the GPU allocation of an Inference Service as the console's GPUs page shows it: for the nodes its Pods run on, or every GPU node while one of its Pods is Pending, each node's GPU model, mode (whole GPUs from the GPU Operator, or vGPU shares from HAMi), total and allocated GPUs and the Pods holding them, and for its Pending Pods the GPUs they request and the shortfall on the freest node; a shortfall of 0 means the GPU count is not what blocks the Pod, and its FailedScheduling events in describe_inference_service say what does. Use this to tell whether an Inference Service is short of GPUs. Admin only.",
 		Properties: map[string]any{
 			"namespace": map[string]any{"type": "string", "description": "The namespace of the Inference Service."},
 			"name":      map[string]any{"type": "string", "description": "The name of the Inference Service."},
