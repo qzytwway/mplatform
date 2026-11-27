@@ -118,8 +118,8 @@ values/templates.
 `graphify-out/graph.json` is a knowledge graph of the repo (a hook in
 `.claude/settings.json` asks for it before Grep/Read). Start code questions with
 `graphify query "<question>"`, `graphify explain "<concept>"` or
-`graphify path "<A>" "<B>"`, and run `graphify update .` after code changes. The
-committed `graph.json` is rewritten whole on every build, so its large diffs are expected.
+`graphify path "<A>" "<B>"`, and run `graphify update .` after code changes.
+`graphify-out/` is gitignored: the graph is local to each clone and never committed.
 
 ## Agent skills
 
