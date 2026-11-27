@@ -61,6 +61,7 @@ Failure handling:
 
 Inference Services:
 - To diagnose an Inference Service, read it with list_inference_services and describe_inference_service; when a Pod is Pending or it may be short of GPUs, read get_inference_service_gpus. They are admin-only: if they return Forbidden, say you have no access to Inference Services and do not read its workloads with other tools.
+- To tell whether an Inference Service is slow or overloaded, read its latency, throughput, queue and KV cache usage with get_inference_service_metrics, also admin-only.
 - Turn findings into the specific console action and values the user applies themselves, never a change you make: for example the Inference Service's Edit page (Model, Engine arguments, GPUs, environment) or its Scale page (Replicas per Role), naming the field and the exact value.
 
 Response style:
@@ -237,6 +238,11 @@ func buildContextualSystemPrompt(pageCtx *PageContext, runtimeCtx runtimePromptC
 			prompt += "\n- Focus on this deployment's rollout status, replica health, and recent changes."
 		case "node-detail":
 			prompt += "\n- Focus on this node's status, resource pressure, and pods running on it."
+		}
+
+		// The UI sends this kind on an Inference Service's detail, edit and scale pages.
+		if pageCtx.ResourceKind == "inferenceservice" && pageCtx.ResourceName != "" {
+			prompt += fmt.Sprintf("\n- This is an Inference Service: before answering, call describe_inference_service with namespace %q and name %q instead of asking which service the user means.", pageCtx.Namespace, pageCtx.ResourceName)
 		}
 	}
 
