@@ -355,3 +355,47 @@ func TestCreateServiceChecksGroupNames(t *testing.T) {
 		})
 	}
 }
+
+func TestGetServiceHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	created := parseTestRequest(t, pdBody())
+	workload, router := scaledPDService(t, &created)
+	cs := newFakeClientSet(t, interceptor.Funcs{}, crdObject(lwsCRD), crdObject(disaggregatedSetCRD), workload, router)
+	handler := &Handler{cm: testClusters{"test": cs}}
+	engine := gin.New()
+	engine.GET("/clusters/:cluster/services/:namespace/:name", handler.GetService)
+	tests := []struct {
+		name   string
+		path   string
+		status int
+		body   string
+	}{
+		{name: "missing service", path: "/clusters/test/services/default/missing", status: http.StatusNotFound, body: `{"error":"inference service not found"}`},
+		{name: "missing cluster", path: "/clusters/other/services/default/qwen-pd", status: http.StatusBadRequest, body: `{"error":"cluster not found: other"}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+
+			engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, tc.path, nil))
+
+			require.Equal(t, tc.status, recorder.Code)
+			assert.JSONEq(t, tc.body, recorder.Body.String())
+		})
+	}
+	t.Run("describes a pd service", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+
+		engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/clusters/test/services/default/qwen-pd", nil))
+
+		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+		var got map[string]any
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &got))
+		assert.Equal(t, "qwen-pd", got["name"])
+		assert.Equal(t, "pd", got["mode"])
+		assert.Len(t, got["roles"], 3)
+		assert.Equal(t, []any{}, got["pods"])
+		assert.NotNil(t, got["deployment"])
+		assert.Equal(t, true, got["editable"])
+	})
+}

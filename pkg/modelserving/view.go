@@ -58,7 +58,8 @@ type servicePod struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
-type serviceDetail struct {
+// ServiceDetail is an inference service with its pods and deployment settings.
+type ServiceDetail struct {
 	inferenceService
 	Pods            []servicePod      `json:"pods"`
 	Deployment      *deploymentConfig `json:"deployment"`

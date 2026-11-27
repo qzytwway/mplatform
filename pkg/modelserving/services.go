@@ -56,7 +56,7 @@ func (h *Handler) ListServices(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	items, err := listServices(c.Request.Context(), cs)
+	items, err := ListInferenceServices(c.Request.Context(), cs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -70,7 +70,9 @@ func (h *Handler) ListServices(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-func listServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceService, error) {
+// ListInferenceServices describes every inference service in the cluster, in
+// no particular order.
+func ListInferenceServices(ctx context.Context, cs *cluster.ClientSet) ([]inferenceService, error) {
 	workloads, err := listWorkloads(ctx, cs, "")
 	if err != nil {
 		return nil, err
@@ -161,41 +163,60 @@ func (h *Handler) loadService(c *gin.Context) (*cluster.ClientSet, *unstructured
 }
 
 func (h *Handler) GetService(c *gin.Context) {
-	cs, workload, _, ok := h.loadService(c)
-	if !ok {
+	cs, err := h.cm.GetClientSet(c.Param("cluster"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ctx := c.Request.Context()
+	detail, err := GetServiceDetail(c.Request.Context(), cs, c.Param("namespace"), c.Param("name"))
+	if errors.Is(err, ErrServiceNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, detail)
+}
+
+// ErrServiceNotFound reports that there is no inference service of a name.
+var ErrServiceNotFound = errors.New("inference service not found")
+
+// GetServiceDetail describes an inference service as its detail page shows
+// it, returning ErrServiceNotFound when there is no such service.
+func GetServiceDetail(ctx context.Context, cs *cluster.ClientSet, namespace, name string) (*ServiceDetail, error) {
+	workload, _, err := findWorkload(ctx, cs, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+	if workload == nil {
+		return nil, ErrServiceNotFound
+	}
 	var router *appsv1.Deployment
-	var err error
 	if isDisaggregated(workload) {
 		if router, err = getRouter(ctx, cs, workload); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+			return nil, err
 		}
 	}
 	service, err := describeService(ctx, cs, workload, router)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, err
 	}
-	pods, err := listServicePods(ctx, cs, workload.GetNamespace(), workload.GetName())
+	pods, err := listServicePods(ctx, cs, namespace, name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, err
 	}
 	config, err := readDeploymentConfig(workload, router)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, err
 	}
-	c.JSON(http.StatusOK, serviceDetail{
+	return &ServiceDetail{
 		inferenceService: service,
 		Pods:             pods,
 		Deployment:       config,
 		SharedSubdomain:  sharedSubdomain(workload),
 		Editable:         workload.GetAnnotations()[requestAnnotation] != "",
-	})
+	}, nil
 }
 
 func (h *Handler) CreateService(c *gin.Context) {
