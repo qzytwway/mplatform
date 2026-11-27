@@ -50,13 +50,13 @@ func resolveStaticResourceInfo(kind string) resourceInfo {
 }
 
 func resolveResourceInfo(ctx context.Context, cs *cluster.ClientSet, kind string) resourceInfo {
-	if info, ok := resolveResourceInfoFromDiscovery(ctx, cs, kind, ""); ok {
+	if info, ok := resolveResourceInfoFromDiscovery(ctx, cs, kind); ok {
 		return info
 	}
 	return resolveStaticResourceInfo(kind)
 }
 
-func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet, kind, apiVersion string) (resourceInfo, bool) {
+func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet, kind string) (resourceInfo, bool) {
 	input := strings.ToLower(strings.TrimSpace(kind))
 	if input == "" || cs == nil || cs.K8sClient == nil || cs.K8sClient.ClientSet == nil {
 		return resourceInfo{}, false
@@ -68,18 +68,7 @@ func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet
 		default:
 		}
 	}
-	discoveryClient := cs.K8sClient.ClientSet.Discovery()
-
-	if gv, ok := parseGroupVersion(apiVersion); ok {
-		resourceList, err := discoveryClient.ServerResourcesForGroupVersion(gv.String())
-		if err != nil {
-			klog.V(2).Infof("AI tool discovery failed for %s: %v", gv.String(), err)
-		} else if info, found := findResourceInfoInList(input, gv, resourceList.APIResources); found {
-			return info, true
-		}
-	}
-
-	resourceLists, err := discoveryClient.ServerPreferredResources()
+	resourceLists, err := cs.K8sClient.ClientSet.Discovery().ServerPreferredResources()
 	if err != nil && !discovery.IsGroupDiscoveryFailedError(err) {
 		klog.V(2).Infof("AI tool preferred discovery failed: %v", err)
 		return resourceInfo{}, false
@@ -99,18 +88,6 @@ func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet
 	}
 
 	return resourceInfo{}, false
-}
-
-func parseGroupVersion(apiVersion string) (schema.GroupVersion, bool) {
-	apiVersion = strings.TrimSpace(apiVersion)
-	if apiVersion == "" {
-		return schema.GroupVersion{}, false
-	}
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		return schema.GroupVersion{}, false
-	}
-	return gv, true
 }
 
 func findResourceInfoInList(input string, gv schema.GroupVersion, apiResources []metav1.APIResource) (resourceInfo, bool) {
