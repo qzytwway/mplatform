@@ -67,6 +67,7 @@ type inferenceServiceCluster struct {
 	eventsStatus   int
 	eventSelectors []string
 	logs           map[string]string
+	podGetErr      error
 }
 
 func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferenceServiceCluster {
@@ -107,6 +108,9 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				count()
+				if _, isPod := obj.(*corev1.Pod); isPod && fc.podGetErr != nil {
+					return fc.podGetErr
+				}
 				return c.Get(ctx, key, obj, opts...)
 			},
 			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {

@@ -18,7 +18,8 @@ import (
 
 const (
 	inferenceServiceMetricsTool = "get_inference_service_metrics"
-	inferenceMetricsWindow      = 30 * time.Minute
+	inferenceMetricsMinutes     = 30
+	inferenceMetricsWindow      = inferenceMetricsMinutes * time.Minute
 	inferenceMetricsStep        = time.Minute
 	// inferenceMetricsRateInterval is the $__rate_interval the console's
 	// dashboard renderer derives for a 1m step (ui/src/components/observability/dashboard/variables.ts).
@@ -28,7 +29,7 @@ const (
 func inferenceServiceMetricsToolDefinition() agentToolDefinition {
 	return agentToolDefinition{
 		Name:        inferenceServiceMetricsTool,
-		Description: "Read the inference metrics of one Inference Service over the last 30 minutes, from the panels of the built-in Inference Services monitoring dashboard: time to first token, inter-token latency (time per output token), token throughput, running and queued requests, and KV cache usage, per Role. Each series gives its value at the start of the window, its latest value, min and max. A panel without series has no data, such as the latency of a service that got no requests, unless it has an error, which means its Prometheus query failed and says nothing about the service. Use this to tell whether an Inference Service is slow or overloaded. Admin only.",
+		Description: fmt.Sprintf("Read the inference metrics of one Inference Service over the last %d minutes, from the panels of the built-in Inference Services monitoring dashboard: time to first token, inter-token latency (time per output token), token throughput, running and queued requests, and KV cache usage, per Role. Each series gives its value at the start of the window, its latest value, min and max. A panel without series has no data, such as the latency of a service that got no requests, unless it has an error, which means its Prometheus query failed and says nothing about the service. Use this to tell whether an Inference Service is slow or overloaded. Admin only.", inferenceMetricsMinutes),
 		Properties: map[string]any{
 			"namespace": map[string]any{"type": "string", "description": "The namespace of the Inference Service."},
 			"name":      map[string]any{"type": "string", "description": "The name of the Inference Service."},
@@ -102,7 +103,7 @@ func executeInferenceServiceMetrics(ctx context.Context, cs *cluster.ClientSet, 
 		"$__rate_interval", inferenceMetricsRateInterval,
 	)
 	results, firstErr := queryDashboard(ctx, cs, &dashboard, variables)
-	metrics := inferenceMetrics{Namespace: detail.Namespace, Name: detail.Name, Window: "30m"}
+	metrics := inferenceMetrics{Namespace: detail.Namespace, Name: detail.Name, Window: fmt.Sprintf("%dm", inferenceMetricsMinutes)}
 	hasData, queries, failed := false, 0, 0
 	for i, panel := range dashboard.Panels {
 		out := inferenceMetricsPanel{Title: panel.Title, Description: panel.Description, Unit: panel.FieldConfig.Defaults.Unit, Series: []inferenceMetricsSeries{}}
@@ -126,7 +127,7 @@ func executeInferenceServiceMetrics(ctx context.Context, cs *cluster.ClientSet, 
 		return fmt.Sprintf("Error querying Prometheus for the inference metrics of %s/%s: %v", detail.Namespace, detail.Name, firstErr), true
 	}
 	if !hasData && failed == 0 {
-		return fmt.Sprintf("Prometheus has no inference metrics of %s/%s in the last 30 minutes: its pods have not been scraped yet, or its Engine does not expose metrics.", detail.Namespace, detail.Name), false
+		return fmt.Sprintf("Prometheus has no inference metrics of %s/%s in the last %d minutes: its pods have not been scraped yet, or its Engine does not expose metrics.", detail.Namespace, detail.Name, inferenceMetricsMinutes), false
 	}
 	return toolJSON(metrics)
 }

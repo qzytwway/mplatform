@@ -41,12 +41,12 @@ func inferenceServiceToolDefinitions() []agentToolDefinition {
 	return []agentToolDefinition{
 		{
 			Name:        listInferenceServicesTool,
-			Description: "List the Inference Services (model serving) in the current cluster with their Model, Engine (runtime), Deployment Mode and each Role's desired and ready Replicas. Admin only.",
+			Description: "List the Inference Services (model serving) in the current cluster with their Model, Engine (vLLM or SGLang), Deployment Mode and each Role's desired and ready Replicas. Admin only.",
 			Properties:  map[string]any{},
 		},
 		{
 			Name:        describeInferenceServiceTool,
-			Description: "Describe one Inference Service as its console detail page shows it: Model, Engine (runtime), Deployment Mode, each Role's desired and ready Replicas, its Pods (Leader pod / Worker pod), deployment settings, recent events of its Pods and of the workload objects that create them (keyed <kind>/<name>: LeaderWorkerSet, DisaggregatedSet, router Deployment, their StatefulSets and ReplicaSets, which report quota and admission failures such as FailedCreate when Pods are missing), and the error lines of the logs of Pods that are not ready or restarted (of the model downloader init container while a Pod is stuck initializing, otherwise of the Engine). eventsError says when events could not be read. Use this to diagnose why an Inference Service is unhealthy. Admin only.",
+			Description: "Describe one Inference Service as its console detail page shows it: Model, Engine (vLLM or SGLang), Deployment Mode, each Role's desired and ready Replicas, its Pods (Leader pod / Worker pod), deployment settings, recent events of its Pods and of the workload objects that create them (keyed <kind>/<name>: LeaderWorkerSet, DisaggregatedSet, router Deployment, their StatefulSets and ReplicaSets, which report quota and admission failures such as FailedCreate when Pods are missing), and the error lines of the logs of Pods that are not ready or restarted (of the model downloader init container while a Pod is stuck initializing, otherwise of the Engine). eventsError says when events could not be read. Use this to diagnose why an Inference Service is unhealthy. Admin only.",
 			Properties: map[string]any{
 				"namespace": map[string]any{"type": "string", "description": "The namespace of the Inference Service."},
 				"name":      map[string]any{"type": "string", "description": "The name of the Inference Service."},
@@ -222,6 +222,8 @@ func podLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, name st
 	var pod corev1.Pod
 	if err := cs.K8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &pod); err != nil {
 		klog.Warningf("Reading pod %s/%s for its init containers: %v", namespace, name, err)
+		note := "pod could not be read, so its init containers are unknown: " + err.Error()
+		return append([]string{note}, engineLogErrors(ctx, cs, namespace, name, "", restarted)...)
 	}
 	for _, status := range pod.Status.InitContainerStatuses {
 		// An init container is ready once it exited 0.

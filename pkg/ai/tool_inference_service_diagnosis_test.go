@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -26,6 +27,22 @@ func TestDescribeReportsAnInitContainerWithoutErrorLines(t *testing.T) {
 
 	assertJSON(t, got, "engineLogErrors", map[string]any{"qwen-0": []any{
 		"init container model-downloader: running, 0 restarts, no error lines in its log",
+	}})
+}
+
+func TestDescribeSaysWhenAPodCannotBeReadForItsInitContainers(t *testing.T) {
+	fc := newInferenceServiceCluster(t,
+		lwsService("qwen", "single", 1, 1, 0),
+		servicePod("qwen-0", "qwen", "0", "0", false, 0),
+	)
+	fc.podGetErr = errors.New("pods is forbidden")
+	fc.logs["qwen-0"] = "RuntimeError: CUDA error: no kernel image is available\n"
+
+	got := describeInferenceService(t, fc, "qwen")
+
+	assertJSON(t, got, "engineLogErrors", map[string]any{"qwen-0": []any{
+		"pod could not be read, so its init containers are unknown: pods is forbidden",
+		"RuntimeError: CUDA error: no kernel image is available",
 	}})
 }
 
