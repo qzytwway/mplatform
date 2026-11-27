@@ -66,3 +66,9 @@ _Avoid_: Quota, TPM limit
 **Quota**:
 A Caller's total token budget, which rejects its requests once used up and never refills on its own.
 _Avoid_: Rate limit, credit, balance
+
+### AI Assistant
+
+**AI Assistant**:
+The console's built-in chat agent that diagnoses problems from cluster state and tells the user exactly where in the console to change what, never beyond what that user may see. It never changes anything itself; the only thing it runs is a command in a Pod, each one approved by the user first. Its language model is chosen by an administrator: an external provider or one of the platform's own published Inference Services.
+_Avoid_: AI chat, copilot, agent
