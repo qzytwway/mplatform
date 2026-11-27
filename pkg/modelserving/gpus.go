@@ -1,6 +1,7 @@
 package modelserving
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -64,16 +65,23 @@ func (h *Handler) ListGPUNodes(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ctx := c.Request.Context()
-	var nodes corev1.NodeList
-	if err := cs.K8sClient.List(ctx, &nodes); err != nil {
+	items, err := ListGPUAllocation(c.Request.Context(), cs)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// ListGPUAllocation lists the GPU nodes as the GPUs page shows them.
+func ListGPUAllocation(ctx context.Context, cs *cluster.ClientSet) ([]gpuNode, error) {
+	var nodes corev1.NodeList
+	if err := cs.K8sClient.List(ctx, &nodes); err != nil {
+		return nil, err
+	}
 	var pods corev1.PodList
 	if err := cs.K8sClient.List(ctx, &pods); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		return nil, err
 	}
 	allocated := map[corev1.ResourceName]map[string]int64{
 		gpuResource:  allocatedGPUs(pods.Items, gpuResource),
@@ -100,7 +108,7 @@ func (h *Handler) ListGPUNodes(c *gin.Context) {
 			Ready:       nodeReady(&node),
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"items": items})
+	return items, nil
 }
 
 // allocatedGPUs sums the requests of a GPU resource of unfinished pods per
