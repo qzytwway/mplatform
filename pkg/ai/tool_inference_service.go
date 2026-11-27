@@ -30,6 +30,7 @@ const (
 var adminOnlyTools = map[string]bool{
 	listInferenceServicesTool:    true,
 	describeInferenceServiceTool: true,
+	inferenceServiceGPUsTool:     true,
 	inferenceServiceMetricsTool:  true,
 }
 
@@ -49,6 +50,7 @@ func inferenceServiceToolDefinitions() []agentToolDefinition {
 			},
 			Required: []string{"namespace", "name"},
 		},
+		inferenceServiceGPUsToolDefinition(),
 		inferenceServiceMetricsToolDefinition(),
 	}
 }
