@@ -7,13 +7,11 @@ import (
 
 	"github.com/qzytwway/mplatform/pkg/cluster"
 	"github.com/qzytwway/mplatform/pkg/common"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/yaml"
 )
 
 type resourceInfo struct {
@@ -52,37 +50,13 @@ func resolveStaticResourceInfo(kind string) resourceInfo {
 }
 
 func resolveResourceInfo(ctx context.Context, cs *cluster.ClientSet, kind string) resourceInfo {
-	if info, ok := resolveResourceInfoFromDiscovery(ctx, cs, kind, ""); ok {
+	if info, ok := resolveResourceInfoFromDiscovery(ctx, cs, kind); ok {
 		return info
 	}
 	return resolveStaticResourceInfo(kind)
 }
 
-func resolveResourceInfoForObject(ctx context.Context, cs *cluster.ClientSet, obj *unstructured.Unstructured) resourceInfo {
-	if info, ok := resolveResourceInfoFromDiscovery(ctx, cs, obj.GetKind(), obj.GetAPIVersion()); ok {
-		return info
-	}
-	gvk := obj.GroupVersionKind()
-	if cs != nil && cs.K8sClient != nil {
-		if mapping, err := cs.K8sClient.RESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version); err == nil {
-			return resourceInfo{
-				Kind:          gvk.Kind,
-				Resource:      mapping.Resource.Resource,
-				Group:         mapping.Resource.Group,
-				Version:       mapping.Resource.Version,
-				ClusterScoped: mapping.Scope.Name() == meta.RESTScopeNameRoot,
-			}
-		}
-	}
-	info := resolveStaticResourceInfo(obj.GetKind())
-	info.Group = gvk.Group
-	if gvk.Version != "" {
-		info.Version = gvk.Version
-	}
-	return info
-}
-
-func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet, kind, apiVersion string) (resourceInfo, bool) {
+func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet, kind string) (resourceInfo, bool) {
 	input := strings.ToLower(strings.TrimSpace(kind))
 	if input == "" || cs == nil || cs.K8sClient == nil || cs.K8sClient.ClientSet == nil {
 		return resourceInfo{}, false
@@ -94,18 +68,7 @@ func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet
 		default:
 		}
 	}
-	discoveryClient := cs.K8sClient.ClientSet.Discovery()
-
-	if gv, ok := parseGroupVersion(apiVersion); ok {
-		resourceList, err := discoveryClient.ServerResourcesForGroupVersion(gv.String())
-		if err != nil {
-			klog.V(2).Infof("AI tool discovery failed for %s: %v", gv.String(), err)
-		} else if info, found := findResourceInfoInList(input, gv, resourceList.APIResources); found {
-			return info, true
-		}
-	}
-
-	resourceLists, err := discoveryClient.ServerPreferredResources()
+	resourceLists, err := cs.K8sClient.ClientSet.Discovery().ServerPreferredResources()
 	if err != nil && !discovery.IsGroupDiscoveryFailedError(err) {
 		klog.V(2).Infof("AI tool preferred discovery failed: %v", err)
 		return resourceInfo{}, false
@@ -125,18 +88,6 @@ func resolveResourceInfoFromDiscovery(ctx context.Context, cs *cluster.ClientSet
 	}
 
 	return resourceInfo{}, false
-}
-
-func parseGroupVersion(apiVersion string) (schema.GroupVersion, bool) {
-	apiVersion = strings.TrimSpace(apiVersion)
-	if apiVersion == "" {
-		return schema.GroupVersion{}, false
-	}
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		return schema.GroupVersion{}, false
-	}
-	return gv, true
 }
 
 func findResourceInfoInList(input string, gv schema.GroupVersion, apiResources []metav1.APIResource) (resourceInfo, bool) {
@@ -223,28 +174,7 @@ func getRequiredString(args map[string]interface{}, key string) (string, error) 
 	return value, nil
 }
 
-func parseResourceYAML(args map[string]interface{}) (*unstructured.Unstructured, error) {
-	yamlStr, err := getRequiredString(args, "yaml")
-	if err != nil {
-		return nil, err
-	}
-
-	obj := &unstructured.Unstructured{}
-	if err := yaml.Unmarshal([]byte(yamlStr), &obj.Object); err != nil {
-		return nil, fmt.Errorf("parsing YAML failed: %w", err)
-	}
-	if obj.GetKind() == "" || obj.GetName() == "" {
-		return nil, fmt.Errorf("yaml must include kind and metadata.name")
-	}
-	return obj, nil
-}
-
-// MutationTools is the set of tools that modify cluster state and require confirmation.
+// MutationTools is the set of tools that need the user's confirmation before they run.
 var MutationTools = map[string]bool{
-	"create_resource": true,
-	"apply_resource":  true,
-	"update_resource": true,
-	"patch_resource":  true,
-	"delete_resource": true,
-	"exec_in_pod":     true,
+	"exec_in_pod": true,
 }
