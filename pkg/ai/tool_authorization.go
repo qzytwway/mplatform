@@ -167,6 +167,8 @@ func ExecuteTool(ctx context.Context, c *gin.Context, cs *cluster.ClientSet, too
 		return executeListInferenceServices(ctx, cs)
 	case describeInferenceServiceTool:
 		return executeDescribeInferenceService(ctx, cs, args)
+	case inferenceServiceMetricsTool:
+		return executeInferenceServiceMetrics(ctx, cs, args)
 	case "query_prometheus":
 		return executeQueryPrometheus(ctx, cs, args)
 	default:
