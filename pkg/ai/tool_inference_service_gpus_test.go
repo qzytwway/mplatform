@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -107,6 +108,36 @@ func TestInferenceServiceGPUsShowsTheShortfallOfVGPUs(t *testing.T) {
 	assertJSON(t, got, "pendingPods", []any{
 		map[string]any{"namespace": "default", "name": "qwen-0", "mode": "vgpu", "gpus": 2.0, "shortfall": 1.0},
 	})
+}
+
+// TestInferenceServiceGPUsSaysTheShortfallCountsGPUsOnly keeps the AI from
+// clearing the GPUs of a pod that fits by count but not by vGPU memory.
+func TestInferenceServiceGPUsSaysTheShortfallCountsGPUsOnly(t *testing.T) {
+	fc := newInferenceServiceCluster(t,
+		lwsService("qwen", "single", 1, 1, 0),
+		holdingGPUs(servicePod("qwen-0", "qwen", "0", "0", false, 0), "", "nvidia.com/vgpu", 1),
+		gpuNode("gpu-v", "NVIDIA-L40S", map[string]string{"model-serving.mplatform.io/gpu-mode": "vgpu"}, "nvidia.com/vgpu", 4),
+	)
+
+	got := readInferenceServiceGPUs(t, fc, "qwen")
+
+	assertJSON(t, got, "pendingPods", []any{
+		map[string]any{"namespace": "default", "name": "qwen-0", "mode": "vgpu", "gpus": 1.0, "shortfall": 0.0},
+	})
+	var description string
+	for _, def := range toolDefinitions(nil) {
+		if def.Name == "get_inference_service_gpus" {
+			description = def.Description
+		}
+	}
+	note, _ := got["shortfallNote"].(string)
+	for _, text := range map[string]string{"shortfallNote": note, "description": description} {
+		for _, want := range []string{"counts GPUs only", "vGPU memory", "node selectors", "FailedScheduling"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%q does not say %q", text, want)
+			}
+		}
+	}
 }
 
 func TestInferenceServiceGPUsShowsOnlyTheNodesOfScheduledPods(t *testing.T) {

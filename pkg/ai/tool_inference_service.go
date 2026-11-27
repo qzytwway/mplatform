@@ -16,9 +16,12 @@ import (
 	pkgmodel "github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/modelserving"
 	"github.com/qzytwway/mplatform/pkg/rbac"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -43,7 +46,7 @@ func inferenceServiceToolDefinitions() []agentToolDefinition {
 		},
 		{
 			Name:        describeInferenceServiceTool,
-			Description: "Describe one Inference Service as its console detail page shows it: Model, Engine (runtime), Deployment Mode, each Role's desired and ready Replicas, its Pods (Leader pod / Worker pod), deployment settings, recent Pod events and the error lines of the Engine logs of Pods that are not ready or restarted. Use this to diagnose why an Inference Service is unhealthy. Admin only.",
+			Description: "Describe one Inference Service as its console detail page shows it: Model, Engine (runtime), Deployment Mode, each Role's desired and ready Replicas, its Pods (Leader pod / Worker pod), deployment settings, recent events of its Pods and of the workload objects that create them (keyed <kind>/<name>: LeaderWorkerSet, DisaggregatedSet, router Deployment, their StatefulSets and ReplicaSets, which report quota and admission failures such as FailedCreate when Pods are missing), and the error lines of the logs of Pods that are not ready or restarted (of the model downloader init container while a Pod is stuck initializing, otherwise of the Engine). eventsError says when events could not be read. Use this to diagnose why an Inference Service is unhealthy. Admin only.",
 			Properties: map[string]any{
 				"namespace": map[string]any{"type": "string", "description": "The namespace of the Inference Service."},
 				"name":      map[string]any{"type": "string", "description": "The name of the Inference Service."},
@@ -92,7 +95,8 @@ func executeListInferenceServices(ctx context.Context, cs *cluster.ClientSet) (s
 }
 
 const (
-	maxPodEvents          = 10
+	maxObjectEvents       = 10
+	maxConcurrentReads    = 8
 	engineLogTailLines    = 500
 	maxEngineLogBytes     = 256 * 1024
 	maxEngineLogErrors    = 20
@@ -111,11 +115,15 @@ type podEvent struct {
 }
 
 // inferenceServiceDiagnosis is the detail page's view of a service with the
-// recent events of its pods and the error lines in the Engine logs of pods
-// that are not ready or restarted, both keyed by pod name.
+// recent events of its pods, keyed by pod name, and of the workload objects
+// that create them, keyed <kind>/<name>, and the error lines in the logs of
+// pods that are not ready or restarted, keyed by pod name. EventsError says
+// why events are missing.
 type inferenceServiceDiagnosis struct {
 	*modelserving.ServiceDetail
 	Events          map[string][]podEvent `json:"events,omitempty"`
+	WorkloadEvents  map[string][]podEvent `json:"workloadEvents,omitempty"`
+	EventsError     string                `json:"eventsError,omitempty"`
 	EngineLogErrors map[string][]string   `json:"engineLogErrors,omitempty"`
 }
 
@@ -125,44 +133,73 @@ func executeDescribeInferenceService(ctx context.Context, cs *cluster.ClientSet,
 		return result, true
 	}
 	diagnosis := inferenceServiceDiagnosis{ServiceDetail: detail, EngineLogErrors: map[string][]string{}}
-	pods := map[string]bool{}
 	for _, pod := range detail.Pods {
-		pods[pod.Name] = true
 		if pod.Ready && pod.Restarts == 0 {
 			continue
 		}
-		if lines := engineLogErrors(ctx, cs, detail.Namespace, pod.Name, pod.Restarts > 0); len(lines) > 0 {
+		if lines := podLogErrors(ctx, cs, detail.Namespace, pod.Name, pod.Restarts > 0); len(lines) > 0 {
 			diagnosis.EngineLogErrors[pod.Name] = lines
 		}
 	}
-	events, err := podEvents(ctx, cs, detail.Namespace, pods)
+	var err error
+	diagnosis.Events, diagnosis.WorkloadEvents, err = serviceEvents(ctx, cs, detail)
 	if err != nil {
-		return fmt.Sprintf("Error listing events of inference service %s/%s: %v", detail.Namespace, detail.Name, err), true
+		klog.Warningf("Reading the events of inference service %s/%s: %v", detail.Namespace, detail.Name, err)
+		diagnosis.EventsError = "events could not be read: " + err.Error()
 	}
-	diagnosis.Events = events
 	return toolJSON(diagnosis)
 }
 
-// podEvents returns the latest events of each of pods, newest first.
-func podEvents(ctx context.Context, cs *cluster.ClientSet, namespace string, pods map[string]bool) (map[string][]podEvent, error) {
-	list, err := cs.K8sClient.ClientSet.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{FieldSelector: "involvedObject.kind=Pod"})
+// serviceEvents returns the events of a service's pods, keyed by pod name,
+// and of its workload objects, keyed <kind>/<name>, with those read before an
+// error.
+func serviceEvents(ctx context.Context, cs *cluster.ClientSet, detail *modelserving.ServiceDetail) (map[string][]podEvent, map[string][]podEvent, error) {
+	objects, err := modelserving.ServiceObjects(ctx, cs, detail.Namespace, detail.Name)
+	for _, pod := range detail.Pods {
+		objects = append(objects, modelserving.ServiceObject{Kind: "Pod", Name: pod.Name})
+	}
+	found := make([][]podEvent, len(objects))
+	var group errgroup.Group
+	group.SetLimit(maxConcurrentReads)
+	for i, object := range objects {
+		group.Go(func() error {
+			var readErr error
+			found[i], readErr = objectEvents(ctx, cs, detail.Namespace, object)
+			return readErr
+		})
+	}
+	err = errors.Join(err, group.Wait())
+	pods, workload := map[string][]podEvent{}, map[string][]podEvent{}
+	for i, object := range objects {
+		switch {
+		case len(found[i]) == 0:
+		case object.Kind == "Pod":
+			pods[object.Name] = found[i]
+		default:
+			workload[object.Kind+"/"+object.Name] = found[i]
+		}
+	}
+	return pods, workload, err
+}
+
+// objectEvents returns the latest events of one object, newest first.
+func objectEvents(ctx context.Context, cs *cluster.ClientSet, namespace string, object modelserving.ServiceObject) ([]podEvent, error) {
+	selector := fields.Set{"involvedObject.kind": object.Kind, "involvedObject.name": object.Name}.AsSelector().String()
+	list, err := cs.K8sClient.ClientSet.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{FieldSelector: selector})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s %s: %w", object.Kind, object.Name, err)
 	}
 	items := list.Items
 	sort.SliceStable(items, func(i, j int) bool { return eventTime(&items[i]).After(eventTime(&items[j])) })
-	events := map[string][]podEvent{}
+	items = items[:min(len(items), maxObjectEvents)]
+	events := make([]podEvent, 0, len(items))
 	for i := range items {
 		event := &items[i]
-		pod := event.InvolvedObject.Name
-		if !pods[pod] || len(events[pod]) == maxPodEvents {
-			continue
-		}
 		item := podEvent{Type: event.Type, Reason: event.Reason, Message: event.Message, Count: event.Count}
 		if seen := eventTime(event); !seen.IsZero() {
 			item.LastSeen = seen.UTC().Format(time.RFC3339)
 		}
-		events[pod] = append(events[pod], item)
+		events = append(events, item)
 	}
 	return events, nil
 }
@@ -178,13 +215,55 @@ func eventTime(event *corev1.Event) time.Time {
 	}
 }
 
-// engineLogErrors returns the last error lines of a pod's Engine log, of the
-// container that ran before the last restart when previous is set. A log that
-// cannot be read, as of a pod still pending, is reported as its only line.
-func engineLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, pod string, previous bool) []string {
+// podLogErrors returns the error lines of the log that explains a pod that
+// is not ready: of its init container that has not finished, such as the
+// model downloader, while it initializes, and otherwise of its Engine.
+func podLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, name string, restarted bool) []string {
+	var pod corev1.Pod
+	if err := cs.K8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &pod); err != nil {
+		klog.Warningf("Reading pod %s/%s for its init containers: %v", namespace, name, err)
+	}
+	for _, status := range pod.Status.InitContainerStatuses {
+		// An init container is ready once it exited 0.
+		if status.Ready {
+			continue
+		}
+		lines := engineLogErrors(ctx, cs, namespace, name, status.Name, status.RestartCount > 0)
+		if len(lines) == 0 {
+			lines = []string{initContainerState(status) + ", no error lines in its log"}
+		}
+		for i, line := range lines {
+			lines[i] = "init container " + status.Name + ": " + line
+		}
+		return lines
+	}
+	return engineLogErrors(ctx, cs, namespace, name, "", restarted)
+}
+
+// initContainerState says what an unfinished init container is doing, as in
+// "waiting (CrashLoopBackOff), 3 restarts, last exit code 1".
+func initContainerState(status corev1.ContainerStatus) string {
+	state := "running"
+	if waiting := status.State.Waiting; waiting != nil {
+		state = "waiting (" + waiting.Reason + ")"
+	} else if terminated := status.State.Terminated; terminated != nil {
+		state = fmt.Sprintf("terminated (%s, exit code %d)", terminated.Reason, terminated.ExitCode)
+	}
+	state += fmt.Sprintf(", %d restarts", status.RestartCount)
+	if last := status.LastTerminationState.Terminated; last != nil {
+		state += fmt.Sprintf(", last exit code %d", last.ExitCode)
+	}
+	return state
+}
+
+// engineLogErrors returns the last error lines of a pod's log, of container
+// or else its Engine, and of the run before the last restart when previous
+// is set. A log that cannot be read, as of a pod still pending, is reported
+// as its only line.
+func engineLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, pod, container string, previous bool) []string {
 	tailLines := int64(engineLogTailLines)
 	stream, err := cs.K8sClient.ClientSet.CoreV1().Pods(namespace).
-		GetLogs(pod, &corev1.PodLogOptions{TailLines: &tailLines, Previous: previous}).Stream(ctx)
+		GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &tailLines, Previous: previous}).Stream(ctx)
 	if err != nil {
 		return []string{"logs unavailable: " + err.Error()}
 	}

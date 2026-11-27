@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
@@ -53,14 +55,18 @@ func toolContext(user model.User) *gin.Context {
 }
 
 // inferenceServiceCluster is a fake cluster with the LeaderWorkerSet and
-// DisaggregatedSet CRDs installed. Its API server serves events and the pod
-// logs in logs, keyed <pod> or <pod>/previous, and reads counts every
-// request to either client.
+// DisaggregatedSet CRDs installed. Its API server serves the events matching
+// a request's field selector, recorded in eventSelectors, or fails with
+// eventsStatus when set, and the pod logs in logs, keyed
+// <pod>[/<container>][/previous]. reads counts every request to either client.
 type inferenceServiceCluster struct {
-	cs     *cluster.ClientSet
-	reads  int
-	events []corev1.Event
-	logs   map[string]string
+	cs             *cluster.ClientSet
+	mu             sync.Mutex
+	reads          int
+	events         []corev1.Event
+	eventsStatus   int
+	eventSelectors []string
+	logs           map[string]string
 }
 
 func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferenceServiceCluster {
@@ -79,7 +85,9 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 	}
 	mapper.Add(corev1.SchemeGroupVersion.WithKind("Pod"), meta.RESTScopeNamespace)
 	mapper.Add(corev1.SchemeGroupVersion.WithKind("Node"), meta.RESTScopeRoot)
-	mapper.Add(appsv1.SchemeGroupVersion.WithKind("Deployment"), meta.RESTScopeNamespace)
+	for _, kind := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
+		mapper.Add(appsv1.SchemeGroupVersion.WithKind(kind), meta.RESTScopeNamespace)
+	}
 	mapper.Add(apiextensionsv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"), meta.RESTScopeRoot)
 	objects = append(objects,
 		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "leaderworkersets.leaderworkerset.x-k8s.io"}},
@@ -87,7 +95,11 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 	)
 
 	fc := &inferenceServiceCluster{logs: map[string]string{}}
-	count := func() { fc.reads++ }
+	count := func() {
+		fc.mu.Lock()
+		defer fc.mu.Unlock()
+		fc.reads++
+	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithRESTMapper(mapper).
@@ -107,6 +119,9 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count()
 		if pod, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/namespaces/default/pods/"), "/log"); ok {
+			if container := r.URL.Query().Get("container"); container != "" {
+				pod += "/" + container
+			}
 			if r.URL.Query().Get("previous") == "true" {
 				pod += "/previous"
 			}
@@ -119,8 +134,7 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 			return
 		}
 		if r.URL.Path == "/api/v1/namespaces/default/events" {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(corev1.EventList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "EventList"}, Items: fc.events})
+			fc.serveEvents(t, w, r)
 			return
 		}
 		http.NotFound(w, r)
@@ -132,6 +146,31 @@ func newInferenceServiceCluster(t *testing.T, objects ...client.Object) *inferen
 	}
 	fc.cs = &cluster.ClientSet{Name: "test", K8sClient: &kube.K8sClient{Client: fakeClient, ClientSet: clientSet}}
 	return fc
+}
+
+func (fc *inferenceServiceCluster) serveEvents(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("fieldSelector")
+	selector, err := fields.ParseSelector(query)
+	if err != nil {
+		t.Errorf("events field selector %q: %v", query, err)
+	}
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.eventSelectors = append(fc.eventSelectors, query)
+	if fc.eventsStatus != 0 {
+		http.Error(w, `events is forbidden: User "mplatform" cannot list resource "events"`, fc.eventsStatus)
+		return
+	}
+	items := []corev1.Event{}
+	for _, event := range fc.events {
+		if selector.Matches(fields.Set{"involvedObject.kind": event.InvolvedObject.Kind, "involvedObject.name": event.InvolvedObject.Name}) {
+			items = append(items, event)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(corev1.EventList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "EventList"}, Items: items}); err != nil {
+		t.Errorf("encoding events: %v", err)
+	}
 }
 
 func TestInferenceServiceToolsAreAdminOnly(t *testing.T) {

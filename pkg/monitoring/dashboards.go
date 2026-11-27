@@ -30,7 +30,10 @@ import (
 // dashboardLabel marks the ConfigMaps the chart writes for Grafana's sidecar.
 const dashboardLabel = "grafana_dashboard"
 
-const inferenceDashboardUID = "mplatform-inference-services"
+const (
+	inferenceDashboardUID  = "mplatform-inference-services"
+	inferenceDashboardFile = "dashboards/inference-services.json"
+)
 
 // builtinDashboardFiles are the dashboards of the platform's own features,
 // such as inference services, listed with the chart's.
@@ -160,11 +163,7 @@ func builtinDashboards() ([]dashboardSummary, map[string]json.RawMessage, error)
 // InferenceServiceDashboard returns the definition of the built-in
 // dashboard of inference services.
 func InferenceServiceDashboard() (json.RawMessage, error) {
-	_, definitions, err := builtinDashboards()
-	if err != nil {
-		return nil, err
-	}
-	return definitions[inferenceDashboardUID], nil
+	return builtinDashboardFiles.ReadFile(inferenceDashboardFile)
 }
 
 // clusterDashboards reads the dashboards that charts installed in the cluster
