@@ -229,12 +229,31 @@ func podLogErrors(ctx context.Context, cs *cluster.ClientSet, namespace, name st
 			continue
 		}
 		lines := engineLogErrors(ctx, cs, namespace, name, status.Name, status.RestartCount > 0)
+		if len(lines) == 0 {
+			lines = []string{initContainerState(status) + ", no error lines in its log"}
+		}
 		for i, line := range lines {
 			lines[i] = "init container " + status.Name + ": " + line
 		}
 		return lines
 	}
 	return engineLogErrors(ctx, cs, namespace, name, "", restarted)
+}
+
+// initContainerState says what an unfinished init container is doing, as in
+// "waiting (CrashLoopBackOff), 3 restarts, last exit code 1".
+func initContainerState(status corev1.ContainerStatus) string {
+	state := "running"
+	if waiting := status.State.Waiting; waiting != nil {
+		state = "waiting (" + waiting.Reason + ")"
+	} else if terminated := status.State.Terminated; terminated != nil {
+		state = fmt.Sprintf("terminated (%s, exit code %d)", terminated.Reason, terminated.ExitCode)
+	}
+	state += fmt.Sprintf(", %d restarts", status.RestartCount)
+	if last := status.LastTerminationState.Terminated; last != nil {
+		state += fmt.Sprintf(", last exit code %d", last.ExitCode)
+	}
+	return state
 }
 
 // engineLogErrors returns the last error lines of a pod's log, of container

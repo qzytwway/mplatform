@@ -12,6 +12,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func TestDescribeReportsAnInitContainerWithoutErrorLines(t *testing.T) {
+	pod := servicePod("qwen-0", "qwen", "0", "0", false, 0)
+	pod.Status.Phase = corev1.PodPending
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name:  "model-downloader",
+		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+	}}
+	fc := newInferenceServiceCluster(t, lwsService("qwen", "single", 1, 1, 0), pod)
+	fc.logs["qwen-0/model-downloader"] = "download: s3://models/qwen3-8b/model-00001-of-00004.safetensors\n"
+
+	got := describeInferenceService(t, fc, "qwen")
+
+	assertJSON(t, got, "engineLogErrors", map[string]any{"qwen-0": []any{
+		"init container model-downloader: running, 0 restarts, no error lines in its log",
+	}})
+}
+
 func TestDescribeKeepsTheDiagnosisWhenEventsCannotBeRead(t *testing.T) {
 	fc := newInferenceServiceCluster(t,
 		lwsService("qwen", "single", 1, 1, 0),
