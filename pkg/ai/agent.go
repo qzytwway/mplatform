@@ -61,6 +61,7 @@ Failure handling:
 
 Inference Services:
 - To diagnose an Inference Service, read it with list_inference_services and describe_inference_service. They are admin-only: if they return Forbidden, say you have no access to Inference Services and do not read its workloads with other tools.
+- To tell whether an Inference Service is slow or overloaded, read its latency, throughput, queue and KV cache usage with get_inference_service_metrics, also admin-only.
 - Turn findings into the specific console action and values the user applies themselves, never a change you make: for example the Inference Service's Edit page (Model, Engine arguments, GPUs, environment) or its Scale page (Replicas per Role), naming the field and the exact value.
 
 Response style:

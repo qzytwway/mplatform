@@ -27,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-const inferenceDashboardUID = "mplatform-inference-services"
-
 // The parts of a dashboard the UI's renderer reads, see
 // ui/src/components/observability/dashboard.
 type dashboardDefinition struct {
