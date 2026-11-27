@@ -155,7 +155,7 @@ func installErrorStatus(err error) int {
 func (h *Handler) UninstallLWS(c *gin.Context) {
 	h.uninstallComponent(c, platformComponent{"LeaderWorkerSet", lwsReleaseName, lwsNamespace, lwsActionTimeout},
 		func(ctx context.Context, cs *cluster.ClientSet) (string, error) {
-			services, err := listServices(ctx, cs)
+			services, err := ListInferenceServices(ctx, cs)
 			if err != nil || len(services) == 0 {
 				return "", err
 			}

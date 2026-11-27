@@ -27,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-const inferenceDashboardUID = "mplatform-inference-services"
-
 // The parts of a dashboard the UI's renderer reads, see
 // ui/src/components/observability/dashboard.
 type dashboardDefinition struct {
@@ -220,6 +218,20 @@ func TestInferenceDashboardMetrics(t *testing.T) {
 		if !regexp.MustCompile(`[\s"|]` + regexp.QuoteMeta(metric) + `[|"]`).MatchString(all) {
 			t.Errorf("no panel shows %s", metric)
 		}
+	}
+}
+
+func TestInferenceServiceDashboardIsTheBuiltinOne(t *testing.T) {
+	definition, err := InferenceServiceDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, builtins, err := builtinDashboards()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(definition) != string(builtins[inferenceDashboardUID]) {
+		t.Fatalf("InferenceServiceDashboard() is not the built-in dashboard %s", inferenceDashboardUID)
 	}
 }
 

@@ -18,7 +18,7 @@ func toolDefinitions(cs *cluster.ClientSet) []agentToolDefinition {
 	tools := []agentToolDefinition{
 		{
 			Name:        requestChoiceTool,
-			Description: "Pause the conversation and ask the user to pick one option by clicking. Use this instead of a free-form follow-up question when the next step is a short list of known choices. Do not use this for the final confirmation of create/update/patch/delete actions; mutation tools already trigger their own confirmation UI.",
+			Description: "Pause the conversation and ask the user to pick one option by clicking. Use this instead of a free-form follow-up question when the next step is a short list of known choices. Do not use this to confirm a Pod command; exec_in_pod already asks the user for confirmation.",
 			Properties: map[string]any{
 				"name": map[string]any{
 					"type":        "string",
@@ -38,7 +38,7 @@ func toolDefinitions(cs *cluster.ClientSet) []agentToolDefinition {
 		},
 		{
 			Name:        requestFormTool,
-			Description: "Pause the conversation and ask the user to fill a small structured form. Use this for resource creation or updates when a few predictable inputs are needed. Do not use this as a final confirmation step before create/update/patch/delete; collect inputs, then call the mutation tool directly.",
+			Description: "Pause the conversation and ask the user to fill a small structured form. Use this when a few predictable inputs are needed to narrow a diagnosis or tailor advice. Do not use this to confirm a Pod command; exec_in_pod already asks the user for confirmation.",
 			Properties: map[string]any{
 				"title": map[string]any{
 					"type":        "string",
@@ -212,64 +212,6 @@ func toolDefinitions(cs *cluster.ClientSet) []agentToolDefinition {
 			Description: "Get a compact overview of cluster nodes, pods, namespaces, and services. Use this as the first step for a broad cluster health check.",
 			Properties:  map[string]any{},
 		},
-		{
-			Name:        "apply_resource",
-			Description: "Create or update one Kubernetes resource with Server-Side Apply. Pass one complete YAML document. This is a mutation and requires user confirmation.",
-			Properties: map[string]any{
-				"yaml": map[string]any{
-					"type":        "string",
-					"description": "One complete Kubernetes YAML document containing apiVersion, kind, metadata.name, and metadata.namespace when namespaced.",
-				},
-			},
-			Required: []string{"yaml"},
-		},
-		{
-			Name:        "patch_resource",
-			Description: "Patch one Kubernetes resource. Use this for focused changes such as scaling, restarting a workload, or changing an image. This is a mutation and requires user confirmation.",
-			Properties: map[string]any{
-				"kind": map[string]any{
-					"type":        "string",
-					"description": "Resource kind, such as Deployment, StatefulSet, or Service.",
-				},
-				"name": map[string]any{
-					"type":        "string",
-					"description": "Resource name without a namespace prefix.",
-				},
-				"namespace": map[string]any{
-					"type":        "string",
-					"description": "Namespace for a namespaced resource. Omit for cluster-scoped resources.",
-				},
-				"patch": map[string]any{
-					"type":        "string",
-					"description": "JSON-encoded patch document.",
-				},
-				"patch_type": map[string]any{
-					"type":        "string",
-					"description": "Patch format. Defaults to strategic.",
-					"enum":        []string{"strategic", "merge", "json"},
-				},
-			},
-			Required: []string{"kind", "name", "patch"},
-		},
-		{
-			Name:        "delete_resource",
-			Description: "Delete one Kubernetes resource. This is a mutation and requires user confirmation.",
-			Properties: map[string]any{
-				"kind": map[string]any{
-					"type":        "string",
-					"description": "Resource kind.",
-				},
-				"name": map[string]any{
-					"type":        "string",
-					"description": "Resource name without a namespace prefix.",
-				},
-				"namespace": map[string]any{
-					"type":        "string",
-					"description": "Namespace for a namespaced resource. Omit for cluster-scoped resources.",
-				},
-			},
-			Required: []string{"kind", "name"},
-		},
 	}
 
 	// Only add Prometheus tool if Prometheus client is available
@@ -296,6 +238,7 @@ func toolDefinitions(cs *cluster.ClientSet) []agentToolDefinition {
 		})
 	}
 
+	tools = append(tools, inferenceServiceToolDefinitions()...)
 	return tools
 }
 

@@ -10,8 +10,6 @@ import (
 	"github.com/qzytwway/mplatform/pkg/common"
 	pkgmodel "github.com/qzytwway/mplatform/pkg/model"
 	"github.com/qzytwway/mplatform/pkg/rbac"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 type toolPermission struct {
@@ -87,80 +85,6 @@ func requiredToolPermissions(ctx context.Context, cs *cluster.ClientSet, toolNam
 			{Resource: string(common.Namespaces), Verb: string(common.VerbGet), Namespace: ""},
 			{Resource: string(common.Services), Verb: string(common.VerbGet), Namespace: common.AllNamespaces},
 		}, nil
-	case "create_resource":
-		obj, err := parseResourceYAML(args)
-		if err != nil {
-			return nil, err
-		}
-		resource := resolveResourceInfoForObject(ctx, cs, obj)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbCreate),
-			Namespace: permissionNamespace(resource, obj.GetNamespace()),
-		}}, nil
-	case "apply_resource":
-		obj, err := parseResourceYAML(args)
-		if err != nil {
-			return nil, err
-		}
-		resource := resolveResourceInfoForObject(ctx, cs, obj)
-		existing := buildObjectForResource(resource)
-		err = cs.K8sClient.Get(ctx, k8stypes.NamespacedName{
-			Name:      obj.GetName(),
-			Namespace: normalizeNamespace(resource, obj.GetNamespace()),
-		}, existing)
-		verb := common.VerbUpdate
-		if apierrors.IsNotFound(err) {
-			verb = common.VerbCreate
-		} else if err != nil {
-			return nil, err
-		}
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(verb),
-			Namespace: permissionNamespace(resource, obj.GetNamespace()),
-		}}, nil
-	case "update_resource":
-		obj, err := parseResourceYAML(args)
-		if err != nil {
-			return nil, err
-		}
-		resource := resolveResourceInfoForObject(ctx, cs, obj)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbUpdate),
-			Namespace: permissionNamespace(resource, obj.GetNamespace()),
-		}}, nil
-	case "patch_resource":
-		kind, err := getRequiredString(args, "kind")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := getRequiredString(args, "name"); err != nil {
-			return nil, err
-		}
-		namespace, _ := args["namespace"].(string)
-		resource := resolveResourceInfo(ctx, cs, kind)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbUpdate),
-			Namespace: permissionNamespace(resource, namespace),
-		}}, nil
-	case "delete_resource":
-		kind, err := getRequiredString(args, "kind")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := getRequiredString(args, "name"); err != nil {
-			return nil, err
-		}
-		namespace, _ := args["namespace"].(string)
-		resource := resolveResourceInfo(ctx, cs, kind)
-		return []toolPermission{{
-			Resource:  common.HistoryResourceType(resource.Resource, resource.Group),
-			Verb:      string(common.VerbDelete),
-			Namespace: permissionNamespace(resource, namespace),
-		}}, nil
 	case "query_prometheus":
 		// Prometheus queries can read metrics from any namespace, so require
 		// the same permission as the HTTP query endpoint (pkg/metrics/query.go).
@@ -193,6 +117,9 @@ func AuthorizeTool(c *gin.Context, cs *cluster.ClientSet, toolName string, args 
 	user, ok := currentUserFromGin(c)
 	if !ok {
 		return "Error: authenticated user not found in context", true
+	}
+	if result, isError := authorizeAdminOnlyTool(user, toolName); isError {
+		return result, true
 	}
 
 	permissions, err := requiredToolPermissions(c.Request.Context(), cs, toolName, args)
@@ -236,16 +163,14 @@ func ExecuteTool(ctx context.Context, c *gin.Context, cs *cluster.ClientSet, too
 		return executeExecInPod(ctx, cs, user, args)
 	case "get_cluster_overview":
 		return executeGetClusterOverview(ctx, cs)
-	case "create_resource":
-		return executeCreateResource(ctx, cs, user, args)
-	case "apply_resource":
-		return executeApplyResource(ctx, cs, user, args)
-	case "update_resource":
-		return executeUpdateResource(ctx, cs, user, args)
-	case "patch_resource":
-		return executePatchResource(ctx, cs, user, args)
-	case "delete_resource":
-		return executeDeleteResource(ctx, cs, user, args)
+	case listInferenceServicesTool:
+		return executeListInferenceServices(ctx, cs)
+	case describeInferenceServiceTool:
+		return executeDescribeInferenceService(ctx, cs, args)
+	case inferenceServiceGPUsTool:
+		return executeInferenceServiceGPUs(ctx, cs, args)
+	case inferenceServiceMetricsTool:
+		return executeInferenceServiceMetrics(ctx, cs, args)
 	case "query_prometheus":
 		return executeQueryPrometheus(ctx, cs, args)
 	default:

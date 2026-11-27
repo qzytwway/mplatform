@@ -77,7 +77,7 @@ func (h *Handler) UninstallGPUOperator(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "uninstall HAMi first"})
 		return
 	}
-	services, err := listServices(c.Request.Context(), cs)
+	services, err := ListInferenceServices(c.Request.Context(), cs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
