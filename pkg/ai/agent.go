@@ -239,6 +239,11 @@ func buildContextualSystemPrompt(pageCtx *PageContext, runtimeCtx runtimePromptC
 		case "node-detail":
 			prompt += "\n- Focus on this node's status, resource pressure, and pods running on it."
 		}
+
+		// The UI sends this kind on an Inference Service's detail, edit and scale pages.
+		if pageCtx.ResourceKind == "inferenceservice" && pageCtx.ResourceName != "" {
+			prompt += fmt.Sprintf("\n- This is an Inference Service: before answering, call describe_inference_service with namespace %q and name %q instead of asking which service the user means.", pageCtx.Namespace, pageCtx.ResourceName)
+		}
 	}
 
 	if language == "zh" {
