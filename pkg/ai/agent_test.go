@@ -136,6 +136,20 @@ func TestBuildContextualSystemPrompt(t *testing.T) {
 	}
 }
 
+func TestBuildContextualSystemPromptInferenceServicePage(t *testing.T) {
+	for _, page := range []string{"inferenceservice-detail", "inferenceservice-edit", "inferenceservice-scale"} {
+		prompt := buildContextualSystemPrompt(
+			&PageContext{Page: page, Namespace: "llm", ResourceKind: "inferenceservice", ResourceName: "qwen"},
+			runtimePromptContext{},
+			"en",
+		)
+		want := "call describe_inference_service with namespace \"llm\" and name \"qwen\""
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("%s: prompt missing %q", page, want)
+		}
+	}
+}
+
 func TestParseToolCallArguments(t *testing.T) {
 	args, err := parseToolCallArguments(`{"name":"nginx","replicas":3}`)
 	if err != nil {
