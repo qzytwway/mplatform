@@ -62,6 +62,7 @@ MPlatform 是一个轻量的 Kubernetes 管理平台，后端用 Go，前端用 
 ### AI 助手
 
 - 内置 AI 助手，可以查看资源、日志和 Prometheus 指标来协助排障；写操作需要人工确认，并遵守当前用户的 RBAC 权限。
+- 也可以让 AI 助手使用平台自己发布的推理服务作为模型，见[用自己发布的推理服务作为 AI 助手的模型](docs/ai-assistant-own-model.md)。
 
 ## 部署
 
